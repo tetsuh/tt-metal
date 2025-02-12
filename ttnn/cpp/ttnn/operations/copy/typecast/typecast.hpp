@@ -31,15 +31,6 @@ struct Typecast {
 }  // namespace copy
 }  // namespace operations
 
-<<<<<<< HEAD
-<<<<<<< HEAD
 constexpr auto typecast = ttnn::register_operation<"ttnn::typecast", ttnn::operations::copy::Typecast>();
-=======
-constexpr auto typecast =
-    ttnn::register_operation_with_auto_launch_op<"ttnn::typecast", ttnn::operations::copy::Typecast>();
->>>>>>> 555dc22387 (21127: typecast device op with sub_core_grids)
-=======
-constexpr auto typecast = ttnn::register_operation<"ttnn::typecast", ttnn::operations::copy::Typecast>();
->>>>>>> 87c8fe6fa5 (#21127: rebased)
 
 }  // namespace ttnn
