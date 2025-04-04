@@ -25,6 +25,9 @@ from tests.ttnn.unit_tests.operations.ccl.test_ccl_async_TG_llama import (
 )
 from ttnn import ShardTensorToMesh, ConcatMeshToTensor
 
+USE_NON_FUSED = False
+USE_LEGACY_ALLGATHER = True
+
 
 def run_all_gather_impl(
     t3k_mesh_device,
@@ -65,41 +68,43 @@ def run_all_gather_impl(
 
     devices = t3k_mesh_device.get_devices()
 
-    enable_persistent_fabric = True
-    if num_iters < 1:
-        pytest.fail("num_iters must be >= 1")
-    # Use Async mode based on test input config
-    t3k_mesh_device.enable_async(enable_async)
-    if enable_async:
-        logger.info(f"Using Async Mode for All Gather Op Dispatch")
+    if not USE_LEGACY_ALLGATHER:
+        enable_persistent_fabric = True
+        if num_iters < 1:
+            pytest.fail("num_iters must be >= 1")
+        # Use Async mode based on test input config
+        t3k_mesh_device.enable_async(enable_async)
+        if enable_async:
+            logger.info(f"Using Async Mode for All Gather Op Dispatch")
 
-    ##### All gather setup #####
-    compute_grid_size = t3k_mesh_device.compute_with_storage_grid_size()
-    ccl_sub_device_crs = ttnn.CoreRangeSet(
-        {ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(compute_grid_size.x - 1, compute_grid_size.y - 1))}
-    )
-    worker_sub_device = ttnn.SubDevice(
-        [
-            ccl_sub_device_crs,
-        ]
-    )
-    worker_sub_device_id = ttnn.SubDeviceId(0)
-    sub_device_stall_group = [worker_sub_device_id]
-    if create_persistent_fabric:
-        mesh_sub_device_manager_id = create_and_load_sub_device_manager_with_fabric_interface(
-            t3k_mesh_device,
-            [worker_sub_device],
-            0,
-            0,
-            enable_persistent_fabric,
-            wrap_fabric_around_mesh=wrap_fabric_around_mesh,
+        ##### All gather setup #####
+        compute_grid_size = t3k_mesh_device.compute_with_storage_grid_size()
+        if USE_NON_FUSED:
+            ccl_sub_device_crs = ttnn.CoreRangeSet(
+                {ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(compute_grid_size.x - 1, compute_grid_size.y - 1))}
+            )
+        worker_sub_device = ttnn.SubDevice(
+            [
+                ccl_sub_device_crs,
+            ]
         )
-        t3k_mesh_device.set_sub_device_stall_group(sub_device_stall_group)
+        worker_sub_device_id = ttnn.SubDeviceId(0)
+        sub_device_stall_group = [worker_sub_device_id]
+        if create_persistent_fabric:
+            mesh_sub_device_manager_id = create_and_load_sub_device_manager_with_fabric_interface(
+                t3k_mesh_device,
+                [worker_sub_device],
+                0,
+                0,
+                enable_persistent_fabric,
+                wrap_fabric_around_mesh=wrap_fabric_around_mesh,
+            )
+            t3k_mesh_device.set_sub_device_stall_group(sub_device_stall_group)
 
-    # create global semaphore handles
-    ccl_semaphore_handles = [
-        create_global_semaphore_with_same_address(t3k_mesh_device, ccl_sub_device_crs, 0) for _ in range(num_iters)
-    ]
+        # create global semaphore handles
+        ccl_semaphore_handles = [
+            create_global_semaphore_with_same_address(t3k_mesh_device, ccl_sub_device_crs, 0) for _ in range(num_iters)
+        ]
 
     ##### All gather input setup #####
     logger.info(f"All gather output shape: {ag_output_shape}")
@@ -152,7 +157,10 @@ def run_all_gather_impl(
         bias_tt = None
 
     ##### Configs for ttnn.matmul #####
-    core_grid = (8, 4)
+    if USE_NON_FUSED:
+        core_grid = (8, 8)
+    else:
+        core_grid = (8, 4)
     program_config = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=core_grid,
         in0_block_w=min(max_in0_block_w, hidden_dim // 32 // core_grid[0]),  # how much inner dim you take each time
@@ -185,30 +193,57 @@ def run_all_gather_impl(
     ##### Perform the TT ops #####
     tt_matmul_out_tensor_list = []
     for i in range(num_iters):
-        tt_all_gather_out_tensor = ttnn.experimental.all_gather_async(
-            input_tensor_mesh_list[i],
-            dim,
-            multi_device_global_semaphore=ccl_semaphore_handles[i],
-            num_links=num_links,
-            memory_config=mem_config_ag,
-            topology=all_gather_topology,
-            subdevice_id=worker_sub_device_id,
-            enable_persistent_fabric_mode=enable_persistent_fabric,
-        )
+        if USE_NON_FUSED:
+            if USE_LEGACY_ALLGATHER:
+                tt_all_gather_out_tensor = ttnn.all_gather(
+                    input_tensor_mesh_list[i],
+                    dim,
+                    num_links=num_links,
+                    memory_config=mem_config_ag,
+                )
+            else:
+                tt_all_gather_out_tensor = ttnn.experimental.all_gather_async(
+                    input_tensor_mesh_list[i],
+                    dim,
+                    multi_device_global_semaphore=ccl_semaphore_handles[i],
+                    num_links=num_links,
+                    memory_config=mem_config_ag,
+                    topology=all_gather_topology,
+                    subdevice_id=worker_sub_device_id,
+                    enable_persistent_fabric_mode=enable_persistent_fabric,
+                )
 
-        tt_matmul_out_tensor = ttnn.linear(
-            tt_all_gather_out_tensor,
-            weight_tt,
-            bias=bias_tt,
-            memory_config=mem_config_mm,
-            program_config=program_config,
-            compute_kernel_config=compute_kernel_config,
-        )
+            tt_matmul_out_tensor = ttnn.linear(
+                tt_all_gather_out_tensor,
+                weight_tt,
+                bias=bias_tt,
+                memory_config=mem_config_mm,
+                program_config=program_config,
+                compute_kernel_config=compute_kernel_config,
+            )
+        else:
+            if USE_LEGACY_ALLGATHER:
+                _, tt_matmul_out_tensor, _ = ttnn.experimental.all_gather_matmul(
+                    input_tensor_mesh,
+                    weight_tt,
+                    dim,
+                    (0, 4),
+                    bias=bias_tt,
+                    num_links=num_links,
+                    memory_config_ag=mem_config_ag,
+                    memory_config_mm=mem_config_mm,
+                    program_config=program_config,
+                    compute_kernel_config=compute_kernel_config,
+                )
+            else:
+                assert True, "FUSED w/ FABRIC ALLGATHER not implemented"
+
         tt_matmul_out_tensor_list.append(tt_matmul_out_tensor)
 
-    logger.info(f"Waiting for op")
-    ttnn.synchronize_devices(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
-    logger.info(f"Done op")
+    if not USE_LEGACY_ALLGATHER:
+        logger.info(f"Waiting for op")
+        ttnn.synchronize_devices(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
+        logger.info(f"Done op")
 
     passed = True
     for i in range(num_iters):
@@ -217,15 +252,14 @@ def run_all_gather_impl(
 
         tt_mm_out = ttnn.from_device(tt_out_tensor)
         tt_mm_out = ttnn.to_torch(tt_mm_out, mesh_composer=ConcatMeshToTensor(t3k_mesh_device, dim=3))
-        print(f"TT output {tt_mm_out}")
-        print(f"Torch output {torch_out_tensor}")
         eq, output = comp_pcc(tt_mm_out, torch_out_tensor)
         logger.info(f"{output}, iteration {i}")
         assert eq, f"{i} FAILED: {output}"
 
-    if enable_persistent_fabric and teardown_persistent_fabric:
-        t3k_mesh_device.reset_sub_device_stall_group()
-        teardown_fabric_interface(t3k_mesh_device)
+    if not USE_LEGACY_ALLGATHER:
+        if enable_persistent_fabric and teardown_persistent_fabric:
+            t3k_mesh_device.reset_sub_device_stall_group()
+            teardown_fabric_interface(t3k_mesh_device)
 
 
 # Enumerate the post-commit cases explicitly
@@ -236,7 +270,7 @@ def run_all_gather_impl(
         (
             8,
             1,
-            [1, 1, 32, 1280],
+            [1, 1, 4096, 2560],
             3,
             ttnn.TILE_LAYOUT,
             960,
