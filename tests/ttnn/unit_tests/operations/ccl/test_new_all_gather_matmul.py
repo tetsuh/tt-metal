@@ -26,7 +26,14 @@ from tests.ttnn.unit_tests.operations.ccl.test_ccl_async_TG_llama import (
 from ttnn import ShardTensorToMesh, ConcatMeshToTensor
 
 USE_NON_FUSED = False
-USE_LEGACY_ALLGATHER = True
+USE_LEGACY_ALLGATHER = False
+
+
+def create_global_semaphores(mesh_device, num_devices, cores, initial_value):
+    ccl_semaphore_handles = [
+        create_global_semaphore_with_same_address(mesh_device, cores, initial_value) for _ in range(num_devices)
+    ]
+    return ccl_semaphore_handles
 
 
 def run_all_gather_impl(
@@ -47,12 +54,14 @@ def run_all_gather_impl(
     all_gather_topology,
     mem_config_weights=None,
     num_iters=1,
-    trace_mode=False,
+    enable_trace=False,
     create_persistent_fabric=True,
     teardown_persistent_fabric=True,
     wrap_fabric_around_mesh=False,
     enable_async=False,
 ):
+    torch.manual_seed(0)
+
     tile = (32, 32)
 
     # Set the default config
@@ -79,10 +88,9 @@ def run_all_gather_impl(
 
         ##### All gather setup #####
         compute_grid_size = t3k_mesh_device.compute_with_storage_grid_size()
-        if USE_NON_FUSED:
-            ccl_sub_device_crs = ttnn.CoreRangeSet(
-                {ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(compute_grid_size.x - 1, compute_grid_size.y - 1))}
-            )
+        ccl_sub_device_crs = ttnn.CoreRangeSet(
+            {ttnn.CoreRange(ttnn.CoreCoord(0, 0), ttnn.CoreCoord(compute_grid_size.x - 1, compute_grid_size.y - 1))}
+        )
         worker_sub_device = ttnn.SubDevice(
             [
                 ccl_sub_device_crs,
@@ -90,6 +98,7 @@ def run_all_gather_impl(
         )
         worker_sub_device_id = ttnn.SubDeviceId(0)
         sub_device_stall_group = [worker_sub_device_id]
+
         if create_persistent_fabric:
             mesh_sub_device_manager_id = create_and_load_sub_device_manager_with_fabric_interface(
                 t3k_mesh_device,
@@ -103,7 +112,7 @@ def run_all_gather_impl(
 
         # create global semaphore handles
         ccl_semaphore_handles = [
-            create_global_semaphore_with_same_address(t3k_mesh_device, ccl_sub_device_crs, 0) for _ in range(num_iters)
+            create_global_semaphores(t3k_mesh_device, num_devices, ccl_sub_device_crs, 0) for _ in range(num_iters)
         ]
 
     ##### All gather input setup #####
@@ -157,10 +166,7 @@ def run_all_gather_impl(
         bias_tt = None
 
     ##### Configs for ttnn.matmul #####
-    if USE_NON_FUSED:
-        core_grid = (8, 8)
-    else:
-        core_grid = (8, 4)
+    core_grid = (8, 6)
     program_config = ttnn.MatmulMultiCoreReuseMultiCastProgramConfig(
         compute_with_storage_grid_size=core_grid,
         in0_block_w=min(max_in0_block_w, hidden_dim // 32 // core_grid[0]),  # how much inner dim you take each time
@@ -192,7 +198,9 @@ def run_all_gather_impl(
 
     ##### Perform the TT ops #####
     tt_matmul_out_tensor_list = []
-    for i in range(num_iters):
+    tt_all_gather_out_tensor_list = []
+
+    def run_op(i):
         if USE_NON_FUSED:
             if USE_LEGACY_ALLGATHER:
                 tt_all_gather_out_tensor = ttnn.all_gather(
@@ -224,10 +232,10 @@ def run_all_gather_impl(
         else:
             if USE_LEGACY_ALLGATHER:
                 _, tt_matmul_out_tensor, _ = ttnn.experimental.all_gather_matmul(
-                    input_tensor_mesh,
+                    input_tensor_mesh_list[i],
                     weight_tt,
                     dim,
-                    (0, 4),
+                    (0, 6),
                     bias=bias_tt,
                     num_links=num_links,
                     memory_config_ag=mem_config_ag,
@@ -236,9 +244,57 @@ def run_all_gather_impl(
                     compute_kernel_config=compute_kernel_config,
                 )
             else:
-                assert True, "FUSED w/ FABRIC ALLGATHER not implemented"
+                _, tt_matmul_out_tensor = ttnn.experimental.all_gather_matmul_async(
+                    input_tensor_mesh_list[i],
+                    weight_tt,
+                    dim,
+                    ccl_semaphore_handles[i],
+                    (0, 6),
+                    bias=bias_tt,
+                    num_links=num_links,
+                    memory_config_ag=mem_config_ag,
+                    topology=all_gather_topology,
+                    subdevice_id=worker_sub_device_id,
+                    enable_persistent_fabric_mode=enable_persistent_fabric,
+                    memory_config_mm=mem_config_mm,
+                    program_config=program_config,
+                    compute_kernel_config=compute_kernel_config,
+                )
+
+        return tt_matmul_out_tensor
+
+    if enable_trace:
+        assert num_iters == 1, "When running in trace, use num_iters = 1"
+
+        # Compile the op
+        tt_matmul_out_tensor = run_op(0)
+        logger.info(f"Done compiling Op")
+
+        # Capture the trace
+        trace_id = ttnn.begin_trace_capture(t3k_mesh_device, cq_id=0)
+        tt_matmul_out_tensor = run_op(0)
+        ttnn.end_trace_capture(t3k_mesh_device, trace_id, cq_id=0)
+        logger.info(f"Done capturing trace")
+
+        # Execute trace
+        ttnn.execute_trace(t3k_mesh_device, trace_id, cq_id=0, blocking=False)
+        logger.info(f"Done executing trace")
+
+        # Synchronize the devices
+        for d in devices:
+            ttnn.synchronize_device(d)
 
         tt_matmul_out_tensor_list.append(tt_matmul_out_tensor)
+    else:
+        for i in range(num_iters):
+            tt_matmul_out_tensor = run_op(i)
+            tt_matmul_out_tensor_list.append(tt_matmul_out_tensor)
+
+            # Synchronize the devices
+            for d in devices:
+                ttnn.synchronize_device(d)
+
+            logger.info(f"Done iteration {i}")
 
     if not USE_LEGACY_ALLGATHER:
         logger.info(f"Waiting for op")
@@ -255,6 +311,20 @@ def run_all_gather_impl(
         eq, output = comp_pcc(tt_mm_out, torch_out_tensor)
         logger.info(f"{output}, iteration {i}")
         assert eq, f"{i} FAILED: {output}"
+
+        # tt_ag_out_tensor = tt_all_gather_out_tensor_list[i]
+        # torch_ag_out_tensor = ag_output_tensor_goldens_list[i]
+
+        # tt_ag_out = ttnn.from_device(tt_ag_out_tensor)
+        # tt_ag_out = ttnn.to_torch(tt_ag_out, mesh_composer=ConcatMeshToTensor(t3k_mesh_device, dim=3))[:,:,:,0:256]
+
+        # eq, output = comp_pcc(tt_ag_out, torch_ag_out_tensor)
+        # print(f"TORCH TENSOR SHAPE {torch_ag_out_tensor.shape}")
+        # print(f"TT TENSOR SHAPE {tt_ag_out.shape}")
+        # print(f"TORCH TENSOR {torch_ag_out_tensor}")
+        # print(f"TT TENSOR {tt_ag_out}")
+        # logger.info(f"{output}, iteration {i}")
+        # assert eq, f"{i} FAILED: {output}"
 
     if not USE_LEGACY_ALLGATHER:
         if enable_persistent_fabric and teardown_persistent_fabric:
@@ -305,7 +375,14 @@ def run_all_gather_impl(
 @pytest.mark.parametrize(
     "enable_async",
     [
-        #        True,
+        True,
+        # False,
+    ],
+)
+@pytest.mark.parametrize(
+    "enable_trace",
+    [
+        # True,
         False,
     ],
 )
@@ -325,6 +402,7 @@ def test_all_gather(
     mem_config_ag,
     mem_config_mm,
     enable_async,
+    enable_trace,
 ):
     run_all_gather_impl(
         t3k_mesh_device,
@@ -344,4 +422,6 @@ def test_all_gather(
         all_gather_topology=ttnn.Topology.Linear,
         create_persistent_fabric=True,
         teardown_persistent_fabric=True,
+        enable_async=enable_async,
+        enable_trace=enable_trace,
     )
