@@ -424,7 +424,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     static constexpr auto packet_header_size_bytes = sizeof(tt::tt_fabric::PacketHeader);
     tt::tt_metal::CircularBufferConfig cb_reserved_packet_header_config =
         tt::tt_metal::CircularBufferConfig(
-            (num_packet_headers_storable + 2) * packet_header_size_bytes,
+            num_packet_headers_storable * packet_header_size_bytes * 2,
             {{reserved_packet_header_CB_index, tt::DataFormat::RawUInt32}})
             .set_page_size(reserved_packet_header_CB_index, packet_header_size_bytes);
     auto reserved_packet_header_CB_handle =
@@ -467,7 +467,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     writer_kernel_config.compile_args = {
         ring_index,                                        // my_chip_id
         reserved_packet_header_CB_index,                   // reserved_packet_header_cb_id
-        num_packet_headers_storable + 2,                   // num_packet_headers_storable
+        num_packet_headers_storable,                       // num_packet_headers_storable
         static_cast<uint32_t>(output_tensor_buffer_type),  // buffer0_type
         src0_cb_index,                                     // cb0_id
         num_pages_per_packet,                              // packet_size_in_pages
