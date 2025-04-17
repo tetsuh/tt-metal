@@ -18,7 +18,7 @@ std::vector<ttnn::Tensor> ExecuteAllGatherMatmulAsync::invoke(
     const uint32_t num_links,
     const std::optional<ttnn::MemoryConfig>& memory_config_ag,
     const ttnn::ccl::Topology topology,
-    std::optional<SubDeviceId> subdevice_id,
+    std::optional<tt::tt_metal::SubDeviceId> subdevice_id,
     bool enable_persistent_fabric_mode,
     const std::optional<ttnn::MemoryConfig>& memory_config_mm,
     const bool transpose_a,

@@ -23,7 +23,7 @@ struct ExecuteAllGatherMatmulAsync {
         const uint32_t num_links = 1,
         const std::optional<ttnn::MemoryConfig>& memory_config_ag = std::nullopt,
         const ttnn::ccl::Topology topology = ttnn::ccl::Topology::Ring,
-        std::optional<SubDeviceId> subdevice_id = std::nullopt,
+        std::optional<tt::tt_metal::SubDeviceId> subdevice_id = std::nullopt,
         bool enable_persistent_fabric_mode = false,
         const std::optional<ttnn::MemoryConfig>& memory_config_mm = std::nullopt,
         const bool transpose_a = false,

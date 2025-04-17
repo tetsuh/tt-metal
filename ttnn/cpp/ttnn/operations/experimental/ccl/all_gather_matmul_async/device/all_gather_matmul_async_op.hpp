@@ -45,7 +45,7 @@ struct AllGatherMatmulAsync {
         const std::vector<std::optional<Tensor>>& optional_output_tensors = {std::nullopt}) const;
     std::vector<ttnn::TensorSpec> compute_output_specs(const std::vector<Tensor>& input_tensors) const;
     std::vector<Tensor> create_output_tensors(const std::vector<Tensor>& input_tensors) const;
-    operation::ProgramWithCallbacks create_program(
+    tt::tt_metal::operation::ProgramWithCallbacks create_program(
         const std::vector<Tensor>& input_tensors,
         const std::vector<std::optional<const Tensor>>& optional_input_tensors,
         std::vector<Tensor>& output_tensors) const;
@@ -65,7 +65,7 @@ AllGatherMatmulAsync create_all_gather_matmul_async_struct(
 }  // namespace all_gather_matmul_async_detail
 }  // namespace ccl
 
-operation::ProgramWithCallbacks all_gather_matmul_async_multi_core_with_workers(
+tt::tt_metal::operation::ProgramWithCallbacks all_gather_matmul_async_multi_core_with_workers(
 
     /* General Params */
     const Tensor& input_tensor,
@@ -80,7 +80,7 @@ operation::ProgramWithCallbacks all_gather_matmul_async_multi_core_with_workers(
     const uint32_t ring_index,
     ttnn::ccl::Topology topology,
     const std::vector<GlobalSemaphore>& semaphore,
-    const std::optional<SubDeviceId>& sub_device_id,
+    const std::optional<tt::tt_metal::SubDeviceId>& sub_device_id,
     bool enable_persistent_fabric_mode,
     const CoreCoord core_grid_offset,
 
@@ -105,7 +105,7 @@ std::vector<Tensor> all_gather_matmul_async(
     const uint32_t num_links = 1,
     const std::optional<MemoryConfig>& memory_config_ag = std::nullopt,
     const ttnn::ccl::Topology topology = ttnn::ccl::Topology::Ring,
-    std::optional<SubDeviceId> sub_device_id = std::nullopt,
+    std::optional<tt::tt_metal::SubDeviceId> sub_device_id = std::nullopt,
     bool enable_persistent_fabric_mode = false,
     const std::optional<MemoryConfig>& memory_config_mm = std::nullopt,
     const bool transpose_a = false,

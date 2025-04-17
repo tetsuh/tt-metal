@@ -387,7 +387,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             backward_device.value_or(nullptr),
             &program,
             enable_persistent_fabric_mode,
-            num_links);
+            num_links,
+            topology);
 
     LineTopology line_topology(ring_size, ring_index);
 
@@ -496,15 +497,15 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             // drain sync core is the first worker core
             drain_sync_core = device->worker_core_from_logical_core(core);
         }
-        std::optional<ttnn::ccl::SenderWorkerAdapterSpec> forward_fabric_connection =
-            line_topology.is_first_device_in_line(ttnn::ccl::EdmLineFabricOpInterface::Direction::BACKWARD)
+        std::optional<tt::tt_fabric::SenderWorkerAdapterSpec> forward_fabric_connection =
+            !forward_device.has_value()
                 ? std::nullopt
-                : std::optional<ttnn::ccl::SenderWorkerAdapterSpec>(local_fabric_handle->uniquely_connect_worker(
+                : std::optional<tt::tt_fabric::SenderWorkerAdapterSpec>(local_fabric_handle->uniquely_connect_worker(
                       device, ttnn::ccl::EdmLineFabricOpInterface::FORWARD));
-        std::optional<ttnn::ccl::SenderWorkerAdapterSpec> backward_fabric_connection =
-            line_topology.is_last_device_in_line(ttnn::ccl::EdmLineFabricOpInterface::Direction::BACKWARD)
+        std::optional<tt::tt_fabric::SenderWorkerAdapterSpec> backward_fabric_connection =
+            !backward_device.has_value()
                 ? std::nullopt
-                : std::optional<ttnn::ccl::SenderWorkerAdapterSpec>(local_fabric_handle->uniquely_connect_worker(
+                : std::optional<tt::tt_fabric::SenderWorkerAdapterSpec>(local_fabric_handle->uniquely_connect_worker(
                       device, ttnn::ccl::EdmLineFabricOpInterface::BACKWARD));
 
         /* All gather fusion */

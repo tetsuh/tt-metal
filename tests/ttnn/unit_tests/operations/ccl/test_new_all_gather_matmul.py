@@ -16,13 +16,6 @@ from tests.ttnn.unit_tests.operations.ccl.test_ccl_common import (
 )
 from tests.ttnn.unit_tests.operations.ccl.test_all_gather import is_unsupported_case
 
-from tests.ttnn.unit_tests.operations.ccl.test_all_gather_TG_post_commit import (
-    run_line_all_gather_on_TG_with_mesh_tensor_along_rows,
-)
-from tests.ttnn.unit_tests.operations.ccl.test_ccl_async_TG_llama import (
-    PREFETCHER_NOC1_RING,
-    get_core_range_set,
-)
 from ttnn import ShardTensorToMesh, ConcatMeshToTensor
 
 USE_NON_FUSED = False
@@ -298,7 +291,7 @@ def run_all_gather_impl(
 
     if not USE_LEGACY_ALLGATHER:
         logger.info(f"Waiting for op")
-        ttnn.synchronize_devices(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
+        ttnn.synchronize_device(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
         logger.info(f"Done op")
 
     passed = True

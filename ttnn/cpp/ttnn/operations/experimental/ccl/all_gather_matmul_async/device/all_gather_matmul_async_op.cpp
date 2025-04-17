@@ -39,7 +39,7 @@ void AllGatherMatmulAsync::validate(
     auto& weight_tensor = input_tensors[2];
 
     // All Gather validate
-    this->all_gather_async_struct.validate({input_tensor});
+    // this->all_gather_async_struct.validate_with_output_tensors({input_tensor});
 
     // Matmul validate.
     this->matmul_struct.validate({all_gather_output_tensor, weight_tensor}, optional_input_tensors, {});
@@ -103,12 +103,11 @@ std::vector<Tensor> AllGatherMatmulAsync::create_output_tensors(const std::vecto
     return {all_gather_output_tensor, matmul_output_tensor};
 }
 
-operation::ProgramWithCallbacks AllGatherMatmulAsync::create_program(
+tt::tt_metal::operation::ProgramWithCallbacks AllGatherMatmulAsync::create_program(
     const std::vector<Tensor>& input_tensors,
     const std::vector<std::optional<const ttnn::Tensor>>& optional_input_tensors,
     std::vector<Tensor>& output_tensors) const {
     // Return the AllGatherMatmulAsync program with callbacks
-    //  printf("1111111111111111111111 MATMUL ASYNC CREATE_PROGRAM %d\n",this->all_gather_async_struct.ring_index);
     return all_gather_matmul_async_multi_core_with_workers(
         input_tensors[0],   // input_tensor
         output_tensors[0],  // all_gather_output_tensor
@@ -150,7 +149,7 @@ std::vector<ttnn::Tensor> all_gather_matmul_async(
     const uint32_t num_links,
     const std::optional<MemoryConfig>& memory_config_ag,
     const ttnn::ccl::Topology topology,
-    std::optional<SubDeviceId> sub_device_id,
+    std::optional<tt::tt_metal::SubDeviceId> sub_device_id,
     bool enable_persistent_fabric_mode,
     const std::optional<MemoryConfig>& memory_config_mm,
     const bool transpose_a,
@@ -170,16 +169,18 @@ std::vector<ttnn::Tensor> all_gather_matmul_async(
     if (bias.has_value()) {
         optional_input_tensors.push_back(bias.value());
         output_tensors = {
-            ttnn::Tensor(operation::get_workers_for_op_output({input_tensor, weight_tensor}, {bias.value()})),
-            ttnn::Tensor(operation::get_workers_for_op_output({input_tensor, weight_tensor}, {bias.value()}))};
+            ttnn::Tensor(
+                tt::tt_metal::operation::get_workers_for_op_output({input_tensor, weight_tensor}, {bias.value()})),
+            ttnn::Tensor(
+                tt::tt_metal::operation::get_workers_for_op_output({input_tensor, weight_tensor}, {bias.value()}))};
     } else {
         optional_input_tensors.push_back(std::nullopt);
         output_tensors = {
-            ttnn::Tensor(operation::get_workers_for_op_output({input_tensor, weight_tensor})),
-            ttnn::Tensor(operation::get_workers_for_op_output({input_tensor, weight_tensor}))};
+            ttnn::Tensor(tt::tt_metal::operation::get_workers_for_op_output({input_tensor, weight_tensor})),
+            ttnn::Tensor(tt::tt_metal::operation::get_workers_for_op_output({input_tensor, weight_tensor}))};
     }
 
-    operation::launch_op(
+    tt::tt_metal::operation::launch_op(
         [dim,
          all_gather_core_grid_offset,
          num_links,
@@ -246,7 +247,7 @@ std::vector<ttnn::Tensor> all_gather_matmul_async(
                     /*output_tile=*/std::nullopt,
                     /*global_cb=*/std::nullopt});
 
-            return operation::run(
+            return tt::tt_metal::operation::run(
                 ttnn::ccl::all_gather_matmul_async_detail::create_all_gather_matmul_async_struct(
                     /* All Gather Params */
                     all_gather_async_struct,

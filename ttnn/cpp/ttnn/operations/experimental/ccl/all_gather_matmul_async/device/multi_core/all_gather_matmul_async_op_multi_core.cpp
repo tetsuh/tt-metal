@@ -33,7 +33,7 @@ using Tensors = std::vector<Tensor>;
 // For ring all-gather, we can send sub-sections of input tensor in opposite directions
 // For linear all-gather though, we must ensure we send full tensors in BOTH directions
 //   (in other words, disable the "bidirectional" send flag)
-operation::ProgramWithCallbacks all_gather_matmul_async_multi_core_with_workers(
+tt::tt_metal::operation::ProgramWithCallbacks all_gather_matmul_async_multi_core_with_workers(
     const Tensor& input_tensor,
     Tensor& all_gather_output_tensor,
     const Tensor& weight_tensor,
@@ -48,7 +48,7 @@ operation::ProgramWithCallbacks all_gather_matmul_async_multi_core_with_workers(
     const uint32_t ring_index,
     ttnn::ccl::Topology topology,
     const std::vector<GlobalSemaphore>& semaphore,
-    const std::optional<SubDeviceId>& sub_device_id,
+    const std::optional<tt::tt_metal::SubDeviceId>& sub_device_id,
     bool enable_persistent_fabric_mode,
     const CoreCoord core_grid_offset,
 
@@ -86,8 +86,9 @@ operation::ProgramWithCallbacks all_gather_matmul_async_multi_core_with_workers(
     );
 
     // Matmul
-    std::optional<operation::ProgramWithCallbacks> matmul_program_with_callbacks;
-    std::optional<operation::OverrideRuntimeArgumentsCallback<Tensors>> matmul_override_runtime_arguments_callback;
+    std::optional<tt::tt_metal::operation::ProgramWithCallbacks> matmul_program_with_callbacks;
+    std::optional<tt::tt_metal::operation::OverrideRuntimeArgumentsCallback<Tensors>>
+        matmul_override_runtime_arguments_callback;
 
     std::visit(
         [&](const auto& config) {
@@ -115,8 +116,7 @@ operation::ProgramWithCallbacks all_gather_matmul_async_multi_core_with_workers(
     if (!matmul_program_with_callbacks.has_value()) {
         TT_THROW("Matmul program with callbacks not created");
     }
-    //    printf("BEFORE ALL GATHER FSUED OP after %zu\n",
-    //    matmul_fused_op_signaler->fused_op_receiver_cores_noc.size());
+
     // Create the all gather fused op signaler
     std::optional<AllGatherFusedOpSignaler> all_gather_fused_op_signaler = AllGatherFusedOpSignaler();
     all_gather_fused_op_signaler->init_fused_op(
@@ -125,7 +125,7 @@ operation::ProgramWithCallbacks all_gather_matmul_async_multi_core_with_workers(
         matmul_fused_op_signaler->fused_op_signaler_mode);
 
     // All Gather
-    operation::ProgramWithCallbacks program_with_callbacks =
+    tt::tt_metal::operation::ProgramWithCallbacks program_with_callbacks =
         ttnn::all_gather_async_minimal_interleaved_dim3_1_1_any_any_helper(
             matmul_program_with_callbacks->program,
             input_tensor,
