@@ -379,7 +379,7 @@ def run_all_gather_impl(
         False,
     ],
 )
-def test_all_gather(
+def test_all_gather_matmul(
     t3k_mesh_device,
     num_devices,
     ag_output_shape,

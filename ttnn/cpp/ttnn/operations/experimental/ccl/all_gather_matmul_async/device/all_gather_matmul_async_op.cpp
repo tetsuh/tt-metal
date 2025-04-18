@@ -39,7 +39,7 @@ void AllGatherMatmulAsync::validate(
     auto& weight_tensor = input_tensors[2];
 
     // All Gather validate
-    // this->all_gather_async_struct.validate_with_output_tensors({input_tensor});
+    this->all_gather_async_struct.validate_with_output_tensors({input_tensor}, {all_gather_output_tensor});
 
     // Matmul validate.
     this->matmul_struct.validate({all_gather_output_tensor, weight_tensor}, optional_input_tensors, {});
