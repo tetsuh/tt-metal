@@ -27,7 +27,11 @@ constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(5);
 constexpr uint32_t tensor0_page_size = get_compile_time_arg_val(6);
 constexpr uint32_t num_targets_forward_direction = get_compile_time_arg_val(7);
 constexpr uint32_t num_targets_backward_direction = get_compile_time_arg_val(8);
-constexpr bool fuse_op = get_compile_time_arg_val(9);
+constexpr bool dynamic_alternate = get_compile_time_arg_val(9);
+constexpr bool fuse_op = get_compile_time_arg_val(10);
+constexpr uint32_t num_max_targets = std::max(num_targets_forward_direction, num_targets_backward_direction);
+constexpr uint32_t num_sync_targets_forward = dynamic_alternate ? num_max_targets : num_targets_forward_direction;
+constexpr uint32_t num_sync_targets_backward = dynamic_alternate ? num_max_targets : num_targets_backward_direction;
 
 /*
  * CCL Send will present various operating modes. Although there is only a single send kernel, it may (compile time)
@@ -44,14 +48,15 @@ void kernel_main() {
     uint32_t input_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
     uint32_t output_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
     uint32_t tile_id_start = get_arg_val<uint32_t>(arg_idx++);
-    uint32_t tiles_to_read = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t tile_id_end = get_arg_val<uint32_t>(arg_idx++);
     bool wait_output_semaphore = get_arg_val<uint32_t>(arg_idx++);
     bool reset_global_semaphore = get_arg_val<uint32_t>(arg_idx++);
     const uint8_t out_ready_sem_noc0_x = get_arg_val<uint32_t>(arg_idx++);
     const uint8_t out_ready_sem_noc0_y = get_arg_val<uint32_t>(arg_idx++);
     uint32_t out_ready_sem_wait_value = get_arg_val<uint32_t>(arg_idx++);
-    size_t out_ready_sem_bank_addrs[out_ready_sem_wait_value];
-    for (uint32_t device_id = 0; device_id < out_ready_sem_wait_value; device_id++) {
+    uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
+    size_t out_ready_sem_bank_addrs[ring_size];
+    for (uint32_t device_id = 0; device_id < ring_size; device_id++) {
         out_ready_sem_bank_addrs[device_id] = get_arg_val<uint32_t>(arg_idx++);
     }
     size_t arg_for_fab = arg_idx;
@@ -83,7 +88,7 @@ void kernel_main() {
     // DPRINT << "rt args: \n";
     // DPRINT << "tensor_address0: " << (uint32_t)tensor_address0 << "\n";
     // DPRINT << "tile_id_start: " << (uint32_t)tile_id_start << "\n";
-    // DPRINT << "tiles_to_read: " << (uint32_t)tiles_to_read << "\n";
+    // DPRINT << "tile_id_end: " << (uint32_t)tile_id_end << "\n";
     // DPRINT << "wait_output_semaphore: " << (uint32_t)wait_output_semaphore << "\n";
     // DPRINT << "reset_global_semaphore: " << (uint32_t)reset_global_semaphore << "\n";
     // DPRINT << "out_ready_sem_bank_addr: " << (uint32_t)out_ready_sem_bank_addr << "\n";
@@ -135,11 +140,11 @@ void kernel_main() {
     uint32_t pages_read_in_row = 0;
     uint32_t row_offset = 0;
     uint32_t tiles_read = 0;
-    while (tiles_read < tiles_to_read) {
+    while (tiles_read < tile_id_end) {
         // DPRINT << "tile_id: " << tiles_read << "\n";
         cb_wait_front(cb0_id, packet_size_in_pages);
         size_t l1_read_addr = get_read_ptr(cb0_id);
-        uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
+        uint32_t num_pages_to_read = std::min(tile_id_end - tiles_read, packet_size_in_pages);
         uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
         for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
             uint64_t noc0_dest_noc_addr = get_noc_addr(
@@ -158,7 +163,12 @@ void kernel_main() {
                 fabric_connection,
                 l1_read_addr,
                 contig_pages_advanced * tensor0_page_size);
-
+            if constexpr (dynamic_alternate) {
+                std::swap(
+                    pkt_hdr_forward->routing_fields.value,
+                    pkt_hdr_backward->routing_fields
+                        .value);  // alternate the packet header distance for better balancing
+            }
             tiles_read++;
             pages_read_in_row++;
             if (pages_read_in_row >= input_tensor_Wt) {
@@ -182,16 +192,16 @@ void kernel_main() {
     if (fabric_connection.has_forward_connection()) {
         fabric_connection.get_forward_connection().wait_for_empty_write_slot();
         pkt_hdr->to_chip_multicast(
-            tt::tt_fabric::MulticastRoutingCommandHeader{1, static_cast<uint8_t>(num_targets_forward_direction)});
-        fabric_connection.get_forward_connection().send_payload_flush_non_blocking_from_address(
+            tt::tt_fabric::MulticastRoutingCommandHeader{1, static_cast<uint8_t>(num_sync_targets_forward)});
+        fabric_connection.get_forward_connection().send_payload_flush_blocking_from_address(
             packet_header_buffer_seminc, sizeof(PACKET_HEADER_TYPE));
     }
     // Write the mcast packet (backward)
     if (fabric_connection.has_backward_connection()) {
         pkt_hdr->to_chip_multicast(
-            tt::tt_fabric::MulticastRoutingCommandHeader{1, static_cast<uint8_t>(num_targets_backward_direction)});
+            tt::tt_fabric::MulticastRoutingCommandHeader{1, static_cast<uint8_t>(num_sync_targets_backward)});
         fabric_connection.get_backward_connection().wait_for_empty_write_slot();
-        fabric_connection.get_backward_connection().send_payload_non_blocking_from_address(
+        fabric_connection.get_backward_connection().send_payload_blocking_from_address(
             packet_header_buffer_seminc, sizeof(PACKET_HEADER_TYPE));
     }
     // increment locally
@@ -205,8 +215,6 @@ void kernel_main() {
     }
 
     // 3. wait for mcast output ready semaphore
-    // uint32_t num_parts_received=0;
-    // bool part_received[out_ready_sem_wait_value] = {false};
     uint32_t forward_chip_id = my_chip_id + 1;
     int backward_chip_id = my_chip_id - 1;
 
@@ -216,24 +224,21 @@ void kernel_main() {
     int last_backward_chip;
     if (fuse_op) {
         // match the ring configuration of matmul
-        num_transfers_forward = (out_ready_sem_wait_value - 1) / 2;
-        num_transfers_backward = (((out_ready_sem_wait_value - 1) - 1) / 2) + 1;
+        num_transfers_forward = (ring_size - 1) / 2;
+        num_transfers_backward = (((ring_size - 1) - 1) / 2) + 1;
         last_forward_chip = my_chip_id + num_transfers_forward + 1;
         last_backward_chip = my_chip_id - num_transfers_backward;
-        DPRINT << "num transfers forward " << num_transfers_forward << " " << num_transfers_backward << " "
-               << last_forward_chip << " " << last_backward_chip << ENDL();
     } else {
         // linear topology
-        last_forward_chip = out_ready_sem_wait_value;
+        last_forward_chip = ring_size;
         last_backward_chip = 0;
     }
     if (wait_output_semaphore) {
         while ((forward_chip_id < last_forward_chip) || (backward_chip_id >= last_backward_chip)) {
             // Check forward
             if (forward_chip_id < last_forward_chip) {
-                uint32_t actual_forward_chip_id = (forward_chip_id >= out_ready_sem_wait_value)
-                                                      ? forward_chip_id - out_ready_sem_wait_value
-                                                      : forward_chip_id;
+                uint32_t actual_forward_chip_id =
+                    (forward_chip_id >= ring_size) ? forward_chip_id - ring_size : forward_chip_id;
                 if (*reinterpret_cast<volatile uint32_t*>(out_ready_sem_bank_addrs[actual_forward_chip_id])) {
                     if (fuse_op) {
                         op_signaler_forward.synchronize_workers_and_signal_op(actual_forward_chip_id);
@@ -244,7 +249,7 @@ void kernel_main() {
             // Check backward
             if (backward_chip_id >= last_backward_chip) {
                 uint32_t actual_backward_chip_id =
-                    (backward_chip_id < 0) ? out_ready_sem_wait_value + backward_chip_id : backward_chip_id;
+                    (backward_chip_id < 0) ? ring_size + backward_chip_id : backward_chip_id;
                 if (*reinterpret_cast<volatile uint32_t*>(out_ready_sem_bank_addrs[actual_backward_chip_id])) {
                     if (fuse_op) {
                         op_signaler_backward.synchronize_workers_and_signal_op(actual_backward_chip_id);
@@ -258,7 +263,7 @@ void kernel_main() {
 
     // 4. global semaphore reset
     if (reset_global_semaphore) {
-        for (uint32_t device_id = 0; device_id < out_ready_sem_wait_value; device_id++) {
+        for (uint32_t device_id = 0; device_id < ring_size; device_id++) {
             const uint64_t dest_noc_addr = get_noc_addr(my_x[0], my_y[0], out_ready_sem_bank_addrs[device_id]);
             noc_inline_dw_write(dest_noc_addr, 0);
         }

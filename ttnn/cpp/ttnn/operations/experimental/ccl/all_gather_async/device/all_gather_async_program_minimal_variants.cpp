@@ -35,52 +35,6 @@ namespace ttnn {
 
 using namespace ccl;
 
-static std::vector<std::vector<uint32_t>> compute_worker_num_transfers(
-    uint32_t num_workers_per_link,
-    uint32_t num_links,
-    uint32_t ring_size,
-    uint32_t ring_index,
-    ccl::Topology topology,
-    uint32_t direction) {
-    std::vector<std::vector<uint32_t>> per_link_worker_num_transfers;
-    per_link_worker_num_transfers.reserve(num_links);
-    LineTopology line_topology(ring_size, ring_index);
-    for (uint32_t l = 0; l < num_links; ++l) {
-        per_link_worker_num_transfers.emplace_back(num_workers_per_link);
-        for (uint32_t b = 0; b < num_workers_per_link; ++b) {
-            uint32_t& worker_num_transfers = per_link_worker_num_transfers.at(l).at(b);
-            switch (topology) {
-                case ccl::Topology::Linear:
-                    worker_num_transfers = direction == 0
-                                               ? line_topology.get_distance_to_end_of_line(
-                                                     ttnn::ccl::EdmLineFabricOpInterface::Direction::BACKWARD)
-                                               : line_topology.get_distance_to_end_of_line(
-                                                     ttnn::ccl::EdmLineFabricOpInterface::Direction::FORWARD);
-                    break;
-                case ccl::Topology::Ring:
-                    worker_num_transfers = direction == 0
-                                               ? line_topology.get_distance_to_end_of_line(
-                                                     ttnn::ccl::EdmLineFabricOpInterface::Direction::BACKWARD)
-                                               : line_topology.get_distance_to_end_of_line(
-                                                     ttnn::ccl::EdmLineFabricOpInterface::Direction::FORWARD);
-                    // change the below when Ring is implemented
-                    // worker_num_transfers =
-                    // 	direction == 0 /*all_gather_config.is_buffer_in_clockwise_ring(b)*/ ? ((((ring_size -
-                    //                                                                                     1) -
-                    //                                                                                    1) /
-                    //                                                                                   2) +
-                    //                                                                                  1)
-                    //                                                                               : (ring_size - 1) /
-                    //                                                                                     2;
-                    break;
-                default: TT_THROW("Unsupported topology {}. Please change.", topology);
-            };
-        }
-    }
-
-    return per_link_worker_num_transfers;
-}
-
 void append_fabric_connection_rt_args(
     const std::optional<tt::tt_fabric::SenderWorkerAdapterSpec>& connection,
     const CoreCoord& core,
@@ -390,23 +344,17 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             num_links,
             topology);
 
-    LineTopology line_topology(ring_size, ring_index);
-
     // Get OP Config, topology config
     std::vector<Tensor> input_tensors = {input_tensor};
     std::vector<Tensor> output_tensors = {output_tensor};
     const auto& op_config = ttnn::ccl::CCLOpConfig(input_tensors, output_tensors, topology);
+    auto [num_targets_forward, num_targets_backward, dynamic_alternate] =
+        ccl::get_forward_backward_configuration(ring_size, ring_index, topology);
 
     // Get worker cores, assuming 1 worker per link
     uint32_t num_workers_per_link = 1;
     const auto [sender_worker_core_range, sender_worker_cores] = choose_worker_cores(
         num_links, num_workers_per_link, enable_persistent_fabric_mode, device, sub_device_id, core_grid_offset);
-
-    // Currently assumes 1 link, and 1 worker
-    const size_t num_targets_forward =
-        compute_worker_num_transfers(num_workers_per_link, num_links, ring_size, ring_index, topology, 1).at(0).at(0);
-    const size_t num_targets_backward =
-        compute_worker_num_transfers(num_workers_per_link, num_links, ring_size, ring_index, topology, 0).at(0).at(0);
 
     // L1 Scratch CB Creation
     const size_t packet_size_bytes = local_fabric_handle->get_edm_buffer_size_bytes();
@@ -475,9 +423,9 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         op_config.get_page_size(),                         // tensor0_page_size
         num_targets_forward,                               // num_targets_forward_direction
         num_targets_backward,                              // num_targets_backward_direction
+        dynamic_alternate,                                 // alternate
         fuse_op,                                           // fused op
     };
-    log_trace(tt::LogOp, "Writer Compile Args:");
     for (const auto& arg : writer_kernel_config.compile_args) {
         log_trace(tt::LogOp, "\t{}", arg);
     }
@@ -536,7 +484,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         // Set writer runtime args
         bool wait_output_semaphore = (link == 0) && !enable_async_output_tensor;
         bool reset_global_semaphore = (link == 0) && !enable_async_output_tensor;
-        uint32_t out_ready_sem_wait_value = ring_size * num_links;
+        uint32_t out_ready_sem_wait_value = (dynamic_alternate ? (ring_size + 1) : ring_size) * num_links;
 
         uint32_t TILE_WIDTH = 32;
         TT_ASSERT(!(input_tensor_shape[3] % TILE_WIDTH));
@@ -555,6 +503,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             drain_sync_core.x,                  // out_ready_sem_noc0_x
             drain_sync_core.y,                  // out_ready_sem_noc0_y
             out_ready_sem_wait_value,           // out_ready_sem_wait_value
+            ring_size,                          // ring_size
         };
         for (int device_id = 0; device_id < out_ready_sem_wait_value; device_id++) {
             writer_rt_args.push_back(semaphore.at(device_id).address());
@@ -597,7 +546,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
                 // writer
                 auto& worker_writer_sender_runtime_args = worker_writer_sender_runtime_args_by_core[core.x][core.y];
                 worker_writer_sender_runtime_args[0] = output.buffer()->address();
-                uint32_t num_semaphores_index = 9;
+                uint32_t num_semaphores_index = 10;
                 auto num_semaphores = worker_writer_sender_runtime_args[num_semaphores_index];
                 for (uint32_t semaphore_index = 0; semaphore_index < num_semaphores; semaphore_index++) {
                     worker_writer_sender_runtime_args[num_semaphores_index + semaphore_index] =

@@ -224,7 +224,7 @@ def run_all_gather_impl(
             )
         else:
             if USE_LEGACY_ALLGATHER:
-                _, tt_matmul_out_tensor, _ = ttnn.experimental.all_gather_matmul(
+                tt_all_gather_out_tensor, tt_matmul_out_tensor, _ = ttnn.experimental.all_gather_matmul(
                     input_tensor_mesh_list[i],
                     weight_tt,
                     dim,
@@ -237,7 +237,7 @@ def run_all_gather_impl(
                     compute_kernel_config=compute_kernel_config,
                 )
             else:
-                _, tt_matmul_out_tensor = ttnn.experimental.all_gather_matmul_async(
+                tt_all_gather_out_tensor, tt_matmul_out_tensor = ttnn.experimental.all_gather_matmul_async(
                     input_tensor_mesh_list[i],
                     weight_tt,
                     dim,
@@ -254,18 +254,18 @@ def run_all_gather_impl(
                     compute_kernel_config=compute_kernel_config,
                 )
 
-        return tt_matmul_out_tensor
+        return tt_all_gather_out_tensor, tt_matmul_out_tensor
 
     if enable_trace:
         assert num_iters == 1, "When running in trace, use num_iters = 1"
 
         # Compile the op
-        tt_matmul_out_tensor = run_op(0)
+        tt_all_gather_out_tensor, tt_matmul_out_tensor = run_op(0)
         logger.info(f"Done compiling Op")
 
         # Capture the trace
         trace_id = ttnn.begin_trace_capture(t3k_mesh_device, cq_id=0)
-        tt_matmul_out_tensor = run_op(0)
+        tt_all_gather_out_tensor, tt_matmul_out_tensor = run_op(0)
         ttnn.end_trace_capture(t3k_mesh_device, trace_id, cq_id=0)
         logger.info(f"Done capturing trace")
 
@@ -277,10 +277,12 @@ def run_all_gather_impl(
         for d in devices:
             ttnn.synchronize_device(d)
 
+        tt_all_gather_out_tensor_list.append(tt_all_gather_out_tensor)
         tt_matmul_out_tensor_list.append(tt_matmul_out_tensor)
     else:
         for i in range(num_iters):
-            tt_matmul_out_tensor = run_op(i)
+            tt_all_gather_out_tensor, tt_matmul_out_tensor = run_op(i)
+            tt_all_gather_out_tensor_list.append(tt_all_gather_out_tensor)
             tt_matmul_out_tensor_list.append(tt_matmul_out_tensor)
 
             # Synchronize the devices
@@ -294,30 +296,31 @@ def run_all_gather_impl(
         ttnn.synchronize_device(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
         logger.info(f"Done op")
 
-    passed = True
     for i in range(num_iters):
-        tt_out_tensor = tt_matmul_out_tensor_list[i]
-        torch_out_tensor = torch_matmul_output_list[i]
+        tt_mm_out_tensor = tt_matmul_out_tensor_list[i]
+        torch_mm_out_tensor = torch_matmul_output_list[i]
 
-        tt_mm_out = ttnn.from_device(tt_out_tensor)
+        tt_mm_out = ttnn.from_device(tt_mm_out_tensor)
         tt_mm_out = ttnn.to_torch(tt_mm_out, mesh_composer=ConcatMeshToTensor(t3k_mesh_device, dim=3))
-        eq, output = comp_pcc(tt_mm_out, torch_out_tensor)
+        eq, output = comp_pcc(tt_mm_out, torch_mm_out_tensor)
         logger.info(f"{output}, iteration {i}")
-        assert eq, f"{i} FAILED: {output}"
+        assert eq, f"{i} FAILED mm: {output}"
 
-        # tt_ag_out_tensor = tt_all_gather_out_tensor_list[i]
-        # torch_ag_out_tensor = ag_output_tensor_goldens_list[i]
+        tt_ag_out_tensor = tt_all_gather_out_tensor_list[i]
+        torch_ag_out_tensor = ag_output_tensor_goldens_list[i]
 
-        # tt_ag_out = ttnn.from_device(tt_ag_out_tensor)
-        # tt_ag_out = ttnn.to_torch(tt_ag_out, mesh_composer=ConcatMeshToTensor(t3k_mesh_device, dim=3))[:,:,:,0:256]
+        tt_ag_out = ttnn.from_device(tt_ag_out_tensor)
+        tt_ag_out = ttnn.to_torch(tt_ag_out, mesh_composer=ConcatMeshToTensor(t3k_mesh_device, dim=3))[
+            :, :, :, 0 : torch_ag_out_tensor.shape[3]
+        ]
+        eq, output = comp_pcc(tt_ag_out, torch_ag_out_tensor)
+        logger.info(f"{output}, iteration {i}")
+        assert eq, f"{i} FAILED ag: {output}"
 
-        # eq, output = comp_pcc(tt_ag_out, torch_ag_out_tensor)
-        # print(f"TORCH TENSOR SHAPE {torch_ag_out_tensor.shape}")
-        # print(f"TT TENSOR SHAPE {tt_ag_out.shape}")
-        # print(f"TORCH TENSOR {torch_ag_out_tensor}")
-        # print(f"TT TENSOR {tt_ag_out}")
-        # logger.info(f"{output}, iteration {i}")
-        # assert eq, f"{i} FAILED: {output}"
+        # print(f"AG TORCH TENSOR {torch_ag_out_tensor}")
+        # print(f"AG TT TENSOR {tt_ag_out}")
+        # print(f"MM TORCH TENSOR {torch_mm_out_tensor}")
+        # print(f"MM TT TENSOR {tt_mm_out}")
 
     if not USE_LEGACY_ALLGATHER:
         if enable_persistent_fabric and teardown_persistent_fabric:
