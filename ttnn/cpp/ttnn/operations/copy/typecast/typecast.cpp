@@ -6,6 +6,7 @@
 #include "ttnn/decorators.hpp"
 #include "ttnn/operations/copy/typecast/device/typecast_device_op.hpp"
 
+
 namespace ttnn {
 namespace operations {
 namespace copy {
@@ -60,7 +61,7 @@ Tensor Typecast::invoke(
         queue_id, input, output_dtype, memory_config_arg, optional_output_tensor, sub_core_grids);
 }
 
-// eltwise_typecast is not currently supported on Grayskull
+
 Tensor Typecast::invoke(
     const QueueId queue_id,
     const Tensor& input_tensor,
@@ -69,6 +70,7 @@ Tensor Typecast::invoke(
     const std::optional<MemoryConfig>& memory_config,
     const std::optional<Tensor>& optional_output_tensor,
     const std::optional<CoreRangeSet>& sub_core_grids) {
+
     TT_FATAL(tt_input_dtype == input_tensor.get_dtype(), "input dtype and input tensor's dtype provided should match");
     if (optional_output_tensor.has_value()) {
         TT_FATAL(

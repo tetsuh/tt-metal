@@ -302,6 +302,7 @@ Tensor ExecuteDiv::invoke(
         (round_mode == std::nullopt || round_mode == "trunc" || round_mode == "floor"),
         "Incorrect rounding mode (expected None, 'trunc', or 'floor')");
 
+<<<<<<< HEAD
     output_tensor = output_tensor.value_or(ttnn::empty_like(input_a));
     DataType input_dtype = input_a.get_dtype();
     const bool is_fp32 = input_dtype == DataType::FLOAT32 && input_b.get_dtype() == DataType::FLOAT32;
@@ -311,6 +312,18 @@ Tensor ExecuteDiv::invoke(
     if (is_fp32) {
         result = ttnn::divide(queue_id, input_a, input_b, std::nullopt, output_mem_config, output_tensor);
     } else {
+=======
+        // No accurate_mode for FP32 div as inf/nan are handled at kernel level
+        if (input_dtype == DataType::FLOAT32 && input_b.get_dtype() == DataType::FLOAT32) {
+            Tensor result = ttnn::divide(queue_id, input_a, input_b, std::nullopt, output_mem_config, output_tensor);
+            if (round_mode == "trunc") {
+                result = ttnn::trunc(queue_id, result, output_mem_config, output_tensor);
+            } else if (round_mode == "floor") {
+                result = ttnn::floor(queue_id, result, output_mem_config, output_tensor);
+            }
+            return result;
+        }
+>>>>>>> 87c8fe6fa5 (#21127: rebased)
         Tensor a = typecast(queue_id, input_a, DataType::FLOAT32);
         Tensor b = typecast(queue_id, input_b, DataType::FLOAT32);
 
