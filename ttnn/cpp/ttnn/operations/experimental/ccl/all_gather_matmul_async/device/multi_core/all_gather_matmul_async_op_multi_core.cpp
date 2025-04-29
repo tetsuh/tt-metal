@@ -40,6 +40,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_matmul_async_multi_core
     Tensor& matmul_output_tensor,
 
     /* All Gather Params */
+    IDevice* target_device,
     std::optional<IDevice*> forward_device,
     std::optional<IDevice*> backward_device,
     const uint32_t dim,
@@ -49,7 +50,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_matmul_async_multi_core
     ttnn::ccl::Topology topology,
     const std::vector<GlobalSemaphore>& semaphore,
     const std::optional<tt::tt_metal::SubDeviceId>& sub_device_id,
-    bool enable_persistent_fabric_mode,
     const CoreCoord core_grid_offset,
 
     /* Matmul Params */
@@ -129,6 +129,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_matmul_async_multi_core
         ttnn::all_gather_async_minimal_interleaved_dim3_1_1_any_any_helper(
             matmul_program_with_callbacks->program,
             input_tensor,
+            target_device,
             forward_device,
             backward_device,
             all_gather_output_tensor,
@@ -139,7 +140,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_matmul_async_multi_core
             topology,
             semaphore,
             sub_device_id,
-            enable_persistent_fabric_mode,
             all_gather_fused_op_signaler,
             core_grid_offset);
     const auto all_gather_override_runtime_arguments_callback =

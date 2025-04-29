@@ -280,6 +280,7 @@ tt::tt_metal::operation::ProgramWithCallbacks AllGatherAsync::create_program_at(
                 "called");
             return all_gather_async_minimal_interleaved_dim3_1_1_any_any(
                 input_tensors[0],
+                target_device,
                 forward_device,
                 backward_device,
                 output_tensors[0],

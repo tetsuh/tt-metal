@@ -172,23 +172,10 @@ std::vector<ttnn::Tensor> all_gather_matmul_impl(
         std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr, "AllGatherMatmul is only supported for Fast Dispatch");
 
     std::vector<std::optional<const Tensor>> optional_input_tensors = {};
-    std::vector<Tensor> output_tensors;
-    auto devices = input_tensor.get_workers();
     if (bias.has_value()) {
         optional_input_tensors.push_back(bias.value());
-        output_tensors = {
-            ttnn::Tensor(
-                tt::tt_metal::operation::get_workers_for_op_output({input_tensor, weight_tensor}, {bias.value()})),
-            ttnn::Tensor(
-                tt::tt_metal::operation::get_workers_for_op_output({input_tensor, weight_tensor}, {bias.value()})),
-            ttnn::Tensor(
-                tt::tt_metal::operation::get_workers_for_op_output({input_tensor, weight_tensor}, {bias.value()}))};
     } else {
         optional_input_tensors.push_back(std::nullopt);
-        output_tensors = {
-            ttnn::Tensor(tt::tt_metal::operation::get_workers_for_op_output({input_tensor, weight_tensor})),
-            ttnn::Tensor(tt::tt_metal::operation::get_workers_for_op_output({input_tensor, weight_tensor})),
-            ttnn::Tensor(tt::tt_metal::operation::get_workers_for_op_output({input_tensor, weight_tensor}))};
     }
 
     /* AllGather setup */
@@ -251,6 +238,7 @@ std::vector<ttnn::Tensor> all_gather_matmul(
     const ttnn::Tensor& weight_tensor,
     const uint32_t dim,
     const CoreCoord all_gather_core_grid_offset,
+    const std::optional<const Tensor>& bias,
     const uint32_t num_links,
     const std::optional<MemoryConfig>& memory_config_ag,
     std::optional<size_t> user_defined_num_workers,
@@ -269,6 +257,7 @@ std::vector<ttnn::Tensor> all_gather_matmul(
         weight_tensor,
         dim,
         all_gather_core_grid_offset,
+        bias,
         num_links,
         memory_config_ag,
         user_defined_num_workers,
@@ -289,6 +278,7 @@ std::vector<ttnn::Tensor> all_gather_matmul(
     const std::vector<ttnn::Tensor>& weight_tensors,
     const uint32_t dim,
     const CoreCoord all_gather_core_grid_offset,
+    const std::optional<const Tensor>& bias,
     const uint32_t num_links,
     const std::optional<MemoryConfig>& memory_config_ag,
     std::optional<size_t> user_defined_num_workers,
@@ -313,6 +303,7 @@ std::vector<ttnn::Tensor> all_gather_matmul(
             weight_tensors.at(i),
             dim,
             all_gather_core_grid_offset,
+            bias,
             num_links,
             memory_config_ag,
             user_defined_num_workers,

@@ -38,6 +38,9 @@ struct AllGatherMatmulAsync {
     /* Fusion Params */
     const CoreCoord all_gather_core_grid_offset;
 
+    /* Physical Devices this op runs on*/
+    std::vector<IDevice*> devices;
+
     /* General */
     void validate(
         const std::vector<Tensor>& input_tensors,
@@ -45,11 +48,16 @@ struct AllGatherMatmulAsync {
         const std::vector<std::optional<Tensor>>& optional_output_tensors = {std::nullopt}) const;
     std::vector<ttnn::TensorSpec> compute_output_specs(const std::vector<Tensor>& input_tensors) const;
     std::vector<Tensor> create_output_tensors(const std::vector<Tensor>& input_tensors) const;
-    tt::tt_metal::operation::ProgramWithCallbacks create_program(
+    tt::tt_metal::operation::MeshWorkloadWithCallbacks create_mesh_workload(
+        const ttnn::MeshCoordinateRangeSet& tensor_coords,
         const std::vector<Tensor>& input_tensors,
         const std::vector<std::optional<const Tensor>>& optional_input_tensors,
         std::vector<Tensor>& output_tensors) const;
-
+    tt::tt_metal::operation::ProgramWithCallbacks create_program_at(
+        const ttnn::MeshCoordinate& mesh_coordinate,
+        const std::vector<Tensor>& input_tensors,
+        const std::vector<std::optional<const Tensor>>& optional_input_tensors,
+        std::vector<Tensor>& output_tensors) const;
     static constexpr auto attribute_names = std::forward_as_tuple("matmul_struct", "all_gather_core_grid_offset");
     const auto attribute_values() const {
         return std::forward_as_tuple(this->matmul_struct, this->all_gather_core_grid_offset);
@@ -61,7 +69,8 @@ namespace all_gather_matmul_async_detail {
 AllGatherMatmulAsync create_all_gather_matmul_async_struct(
     const ttnn::AllGatherAsync& all_gather_struct_input,
     const operations::matmul::Matmul& matmul_struct_input,
-    const CoreCoord all_gather_core_grid_offset);
+    const CoreCoord all_gather_core_grid_offset,
+    const std::vector<IDevice*>& devices);
 }  // namespace all_gather_matmul_async_detail
 }  // namespace ccl
 
@@ -72,6 +81,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_matmul_async_multi_core
     Tensor& all_gather_output_tensor,
     const Tensor& weight_tensor,
     Tensor& matmul_output_tensor,
+    IDevice* target_device,
     std::optional<IDevice*> forward_device,
     std::optional<IDevice*> backward_device,
     const uint32_t dim,
@@ -81,7 +91,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_matmul_async_multi_core
     ttnn::ccl::Topology topology,
     const std::vector<GlobalSemaphore>& semaphore,
     const std::optional<tt::tt_metal::SubDeviceId>& sub_device_id,
-    bool enable_persistent_fabric_mode,
     const CoreCoord core_grid_offset,
 
     /* Matmul Params */
@@ -99,14 +108,13 @@ std::vector<Tensor> all_gather_matmul_async(
     const Tensor& input_tensor,
     const Tensor& weight_tensor,
     const uint32_t dim,
-    const std::vector<global_semaphore::MultiDeviceGlobalSemaphore>& multi_device_global_semaphore,
+    const std::vector<GlobalSemaphore>& multi_device_global_semaphore,
     const CoreCoord all_gather_core_grid_offset,
     const std::optional<const Tensor>& bias = std::nullopt,
     const uint32_t num_links = 1,
     const std::optional<MemoryConfig>& memory_config_ag = std::nullopt,
     const ttnn::ccl::Topology topology = ttnn::ccl::Topology::Ring,
     std::optional<tt::tt_metal::SubDeviceId> sub_device_id = std::nullopt,
-    bool enable_persistent_fabric_mode = false,
     const std::optional<MemoryConfig>& memory_config_mm = std::nullopt,
     const bool transpose_a = false,
     const bool transpose_b = false,

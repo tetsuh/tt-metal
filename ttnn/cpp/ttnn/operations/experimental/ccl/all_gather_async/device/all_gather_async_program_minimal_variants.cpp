@@ -262,6 +262,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
 
 tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleaved_dim3_1_1_any_any(
     const Tensor& input_tensor,
+    IDevice* sender_device,
     std::optional<IDevice*> forward_device,
     std::optional<IDevice*> backward_device,
     Tensor& output_tensor,
@@ -277,6 +278,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     return all_gather_async_minimal_interleaved_dim3_1_1_any_any_helper(
         program,
         input_tensor,
+        sender_device,
         forward_device,
         backward_device,
         output_tensor,
@@ -293,6 +295,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
 tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleaved_dim3_1_1_any_any_helper(
     tt::tt_metal::Program& program,
     const Tensor& input_tensor,
+    IDevice* sender_device,
     std::optional<IDevice*> forward_device,
     std::optional<IDevice*> backward_device,
     Tensor& output_tensor,
@@ -305,13 +308,9 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     const std::optional<tt::tt_metal::SubDeviceId>& sub_device_id,
     std::optional<experimental::ccl::AllGatherFusedOpSignaler>& fused_op_signaler,
     const CoreCoord core_grid_offset) {
+    auto mesh_device = input_tensor.mesh_device();
     const bool enable_async_output_tensor = false;
     const bool enable_persistent_fabric_mode = true;
-    TT_FATAL(
-        enable_persistent_fabric_mode,
-        "only persistent fabric mode is supported for all_gather_async_minimal_interleaved_dim3_1_1_32_any");
-
-    IDevice* device = input_tensor.device();
     bool is_first_chip = ring_index == 0;
     bool is_last_chip = ring_index == ring_size - 1;
     log_trace(
@@ -334,16 +333,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         fused_op_signaler_backward = fused_op_signaler.value();
     }
 
-    std::optional<ttnn::ccl::EdmLineFabricOpInterface> local_fabric_handle =
-        ttnn::ccl::EdmLineFabricOpInterface::build_program_builder_worker_connection_fabric(
-            device,
-            forward_device.value_or(nullptr),
-            backward_device.value_or(nullptr),
-            &program,
-            enable_persistent_fabric_mode,
-            num_links,
-            topology);
-
     // Get OP Config, topology config
     std::vector<Tensor> input_tensors = {input_tensor};
     std::vector<Tensor> output_tensors = {output_tensor};
@@ -354,13 +343,13 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     // Get worker cores, assuming 1 worker per link
     uint32_t num_workers_per_link = 1;
     const auto [sender_worker_core_range, sender_worker_cores] = choose_worker_cores(
-        num_links, num_workers_per_link, enable_persistent_fabric_mode, device, sub_device_id, core_grid_offset);
+        num_links, num_workers_per_link, enable_persistent_fabric_mode, mesh_device, sub_device_id, core_grid_offset);
 
     // L1 Scratch CB Creation
-    const size_t packet_size_bytes = local_fabric_handle->get_edm_buffer_size_bytes();
+    const size_t packet_size_bytes = tt::tt_fabric::get_1d_fabric_config().channel_buffer_size_bytes;
     uint32_t l1_scratch_cb_page_size_bytes = op_config.get_page_size();
     uint32_t num_pages_per_packet = packet_size_bytes / l1_scratch_cb_page_size_bytes;
-    uint32_t cb_num_pages = 3 * num_pages_per_packet;  // tripple buffering
+    uint32_t cb_num_pages = 3 * num_pages_per_packet;  // triple buffering
     uint32_t src0_cb_index = tt::CB::c_in0;
     tt::DataFormat df = tt::tt_metal::datatype_to_dataformat_converter(input_tensor.get_dtype());
     tt::tt_metal::CircularBufferConfig cb_src0_config =
@@ -443,26 +432,16 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         CoreCoord core = sender_worker_cores[link];
         if (link == 0) {
             // drain sync core is the first worker core
-            drain_sync_core = device->worker_core_from_logical_core(core);
+            drain_sync_core = mesh_device->worker_core_from_logical_core(core);
         }
-        std::optional<tt::tt_fabric::SenderWorkerAdapterSpec> forward_fabric_connection =
-            !forward_device.has_value()
-                ? std::nullopt
-                : std::optional<tt::tt_fabric::SenderWorkerAdapterSpec>(local_fabric_handle->uniquely_connect_worker(
-                      device, ttnn::ccl::EdmLineFabricOpInterface::FORWARD));
-        std::optional<tt::tt_fabric::SenderWorkerAdapterSpec> backward_fabric_connection =
-            !backward_device.has_value()
-                ? std::nullopt
-                : std::optional<tt::tt_fabric::SenderWorkerAdapterSpec>(local_fabric_handle->uniquely_connect_worker(
-                      device, ttnn::ccl::EdmLineFabricOpInterface::BACKWARD));
 
         /* All gather fusion */
         if (fuse_op) {
             auto sender_workers = corerange_to_cores(sender_worker_core_range, std::nullopt, true);
-            fused_op_signaler_forward->init_all_gather(program, device, sender_worker_core_range, sender_workers);
-            fused_op_signaler_backward->init_all_gather(program, device, sender_worker_core_range, sender_workers);
+            fused_op_signaler_forward->init_all_gather(program, mesh_device, sender_worker_core_range, sender_workers);
+            fused_op_signaler_backward->init_all_gather(program, mesh_device, sender_worker_core_range, sender_workers);
             fused_op_signaler_sender_workers->init_all_gather(
-                program, device, sender_worker_core_range, sender_workers);
+                program, mesh_device, sender_worker_core_range, sender_workers);
         }
 
         // Set reader runtime args
@@ -512,8 +491,16 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         for (const auto& arg : writer_rt_args) {
             log_trace(tt::LogOp, "\t{}", arg);
         }
-        append_fabric_connection_rt_args(forward_fabric_connection, core, program, writer_rt_args);
-        append_fabric_connection_rt_args(backward_fabric_connection, core, program, writer_rt_args);
+        writer_rt_args.push_back(forward_device.has_value());
+        if (forward_device.has_value()) {
+            tt::tt_fabric::append_fabric_connection_rt_args(
+                sender_device->id(), forward_device.value()->id(), link, program, {core}, writer_rt_args);
+        }
+        writer_rt_args.push_back(backward_device.has_value());
+        if (backward_device.has_value()) {
+            tt::tt_fabric::append_fabric_connection_rt_args(
+                sender_device->id(), backward_device.value()->id(), link, program, {core}, writer_rt_args);
+        }
         if (fuse_op) {
             fused_op_signaler_forward->push_all_gather_fused_op_rt_args(writer_rt_args, 1, 0, 1);
             fused_op_signaler_backward->push_all_gather_fused_op_rt_args(writer_rt_args, 1, 0, 0);
@@ -805,7 +792,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_llama_sharded(
     }
 
     auto override_runtime_arguments_callback =
-        [worker_sender_reader_kernel_id, worker_sender_writer_kernel_id, semaphore, sender_worker_cores](
+        [worker_sender_reader_kernel_id, worker_sender_writer_kernel_id, semaphore, sender_worker_cores, ring_index](
             const void* operation,
             Program& program,
             const std::vector<Tensor>& input_tensors,
@@ -814,8 +801,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_llama_sharded(
             const auto& input = input_tensors[0];
             const auto& output = output_tensors[0];
 
-            auto device_index = static_cast<const ttnn::AllGatherAsync*>(operation)->ring_index;
-            auto semaphore = static_cast<const ttnn::AllGatherAsync*>(operation)->semaphore.at(device_index);
+            auto semaphore = static_cast<const ttnn::AllGatherAsync*>(operation)->semaphore.at(ring_index);
 
             log_trace(tt::LogOp, "DEBUG: semaphore: {}", semaphore.address());
 
