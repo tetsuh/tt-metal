@@ -40,6 +40,7 @@ def run_all_gather_impl(
     all_gather_topology,
     use_non_fused,
     use_legacy_allgather,
+    use_program_cache,
     mem_config_weights=None,
     num_iters=1,
     enable_trace=True,
@@ -60,7 +61,6 @@ def run_all_gather_impl(
         pytest.skip(f"Skipping unsupported case {message}.")
 
     devices = t3k_mesh_device.get_devices()
-    t3k_mesh_device.enable_program_cache()
 
     if not use_legacy_allgather:
         if num_iters < 1:
@@ -244,7 +244,6 @@ def run_all_gather_impl(
         logger.info(f"Done compiling Op")
 
         # Capture the trace
-
         trace_id = ttnn.begin_trace_capture(t3k_mesh_device, cq_id=0)
         tt_all_gather_out_tensor, tt_matmul_out_tensor = run_op(0)
         ttnn.end_trace_capture(t3k_mesh_device, trace_id, cq_id=0)
@@ -255,8 +254,7 @@ def run_all_gather_impl(
         logger.info(f"Done executing trace")
 
         # Synchronize the devices
-        for d in devices:
-            ttnn.synchronize_device(d)
+        ttnn.synchronize_device(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
 
         tt_all_gather_out_tensor_list.append(tt_all_gather_out_tensor)
         tt_matmul_out_tensor_list.append(tt_matmul_out_tensor)
@@ -266,18 +264,11 @@ def run_all_gather_impl(
             tt_all_gather_out_tensor_list.append(tt_all_gather_out_tensor)
             tt_matmul_out_tensor_list.append(tt_matmul_out_tensor)
 
-            # Synchronize the devices
-            for d in devices:
-                ttnn.synchronize_device(d)
-
             logger.info(f"Done iteration {i}")
 
     if not use_legacy_allgather:
         logger.info(f"Waiting for op")
-        for d in devices:
-            ttnn.synchronize_device(d)
-
-        # ttnn.synchronize_device(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
+        ttnn.synchronize_device(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
         logger.info(f"Done op")
 
     for i in range(num_iters):
@@ -372,6 +363,7 @@ def test_all_gather_matmul_async(
     enable_trace,
     use_non_fused,
     use_legacy_allgather,
+    use_program_cache,
 ):
     run_all_gather_impl(
         t3k_mesh_device,
@@ -388,6 +380,7 @@ def test_all_gather_matmul_async(
         mem_config_input,
         mem_config_ag,
         mem_config_mm,
+        use_program_cache=use_program_cache,
         all_gather_topology=ttnn.Topology.Linear,
         enable_trace=enable_trace,
         use_non_fused=use_non_fused,
