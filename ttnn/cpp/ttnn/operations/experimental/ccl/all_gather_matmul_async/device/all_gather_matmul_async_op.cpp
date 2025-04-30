@@ -180,6 +180,31 @@ tt::tt_metal::operation::ProgramWithCallbacks AllGatherMatmulAsync::create_progr
         this->matmul_struct.untilize_out);
 }
 
+tt::tt_metal::operation::Hash AllGatherMatmulAsync::compute_program_hash(
+    const std::vector<Tensor>& input_tensors,
+    const std::vector<std::optional<const ttnn::Tensor>>& optional_input_tensors) const {
+    log_trace(tt::LogOp, "compute_program_hash is called");
+    auto input_shape = input_tensors[0].get_padded_shape();
+    auto input_memory_layout = input_tensors[0].get_layout();
+    auto input_dtype = input_tensors[0].get_dtype();
+    auto input_memory_config = input_tensors[0].memory_config();
+    uint32_t semaphore_address = this->all_gather_async_struct.semaphore.at(0).address();
+
+    return tt::tt_metal::operation::hash_operation<AllGatherMatmulAsync>(
+        this->all_gather_async_struct.dim,
+        this->all_gather_async_struct.num_links,
+        this->all_gather_async_struct.ring_size,
+        this->all_gather_async_struct.output_mem_config,
+        this->all_gather_async_struct.topology,
+        this->all_gather_async_struct.sub_device_id,
+        this->all_gather_core_grid_offset,
+        input_shape,
+        input_memory_layout,
+        input_dtype,
+        input_memory_config,
+        semaphore_address);
+}
+
 namespace operations {
 namespace experimental {
 namespace ccl {
