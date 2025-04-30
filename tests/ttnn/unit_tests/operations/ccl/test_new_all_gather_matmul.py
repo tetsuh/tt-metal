@@ -42,7 +42,7 @@ def run_all_gather_impl(
     use_legacy_allgather,
     mem_config_weights=None,
     num_iters=1,
-    enable_trace=False,
+    enable_trace=True,
 ):
     torch.manual_seed(0)
 
@@ -60,6 +60,7 @@ def run_all_gather_impl(
         pytest.skip(f"Skipping unsupported case {message}.")
 
     devices = t3k_mesh_device.get_devices()
+    t3k_mesh_device.enable_program_cache()
 
     if not use_legacy_allgather:
         if num_iters < 1:
@@ -243,6 +244,7 @@ def run_all_gather_impl(
         logger.info(f"Done compiling Op")
 
         # Capture the trace
+
         trace_id = ttnn.begin_trace_capture(t3k_mesh_device, cq_id=0)
         tt_all_gather_out_tensor, tt_matmul_out_tensor = run_op(0)
         ttnn.end_trace_capture(t3k_mesh_device, trace_id, cq_id=0)
@@ -272,7 +274,10 @@ def run_all_gather_impl(
 
     if not use_legacy_allgather:
         logger.info(f"Waiting for op")
-        ttnn.synchronize_device(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
+        for d in devices:
+            ttnn.synchronize_device(d)
+
+        # ttnn.synchronize_device(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
         logger.info(f"Done op")
 
     for i in range(num_iters):
@@ -334,17 +339,17 @@ def run_all_gather_impl(
 @pytest.mark.parametrize(
     "use_non_fused",
     [
-        # True,
-        False,
+        True,
+        # False,
     ],
 )
 @pytest.mark.parametrize(
     "device_params, use_legacy_allgather",
     [
-        ({"fabric_config": ttnn.FabricConfig.FABRIC_1D}, False),
+        ({"fabric_config": ttnn.FabricConfig.FABRIC_1D, "trace_region_size": 90112}, False),
         # (
-        #     {},
-        #     True
+        #    {"trace_region_size": 90112},
+        #    True
         # ),
     ],
     indirect=["device_params"],
