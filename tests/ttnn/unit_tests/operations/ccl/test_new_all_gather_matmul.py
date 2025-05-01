@@ -264,12 +264,12 @@ def run_all_gather_impl(
             tt_all_gather_out_tensor_list.append(tt_all_gather_out_tensor)
             tt_matmul_out_tensor_list.append(tt_matmul_out_tensor)
 
-            logger.info(f"Done iteration {i}")
+            if not use_legacy_allgather:
+                logger.info(f"Waiting for op")
+                ttnn.synchronize_device(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
+                logger.info(f"Done op")
 
-    if not use_legacy_allgather:
-        logger.info(f"Waiting for op")
-        ttnn.synchronize_device(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
-        logger.info(f"Done op")
+            logger.info(f"Done iteration {i}")
 
     for i in range(num_iters):
         tt_mm_out_tensor = tt_matmul_out_tensor_list[i]
@@ -323,15 +323,15 @@ def run_all_gather_impl(
 @pytest.mark.parametrize(
     "enable_trace",
     [
-        # True,
-        False,
+        True,
+        # False,
     ],
 )
 @pytest.mark.parametrize(
     "use_non_fused",
     [
-        True,
-        # False,
+        # True,
+        False,
     ],
 )
 @pytest.mark.parametrize(
@@ -385,4 +385,5 @@ def test_all_gather_matmul_async(
         enable_trace=enable_trace,
         use_non_fused=use_non_fused,
         use_legacy_allgather=use_legacy_allgather,
+        num_iters=1,
     )

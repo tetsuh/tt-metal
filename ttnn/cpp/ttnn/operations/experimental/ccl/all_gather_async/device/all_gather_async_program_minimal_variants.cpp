@@ -484,7 +484,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             out_ready_sem_wait_value,           // out_ready_sem_wait_value
             ring_size,                          // ring_size
         };
-        for (int device_id = 0; device_id < out_ready_sem_wait_value; device_id++) {
+        for (int device_id = 0; device_id < ring_size; device_id++) {
             writer_rt_args.push_back(semaphore.at(device_id).address());
         }
         log_trace(tt::LogOp, "Writer Runtime Args:");
@@ -521,7 +521,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
 
             auto semaphore = static_cast<const ttnn::AllGatherAsync*>(operation)->semaphore;
 
-            // log_trace(tt::LogOp, "DEBUG: semaphore: {}", semaphore.address());
+            // log_trace(tt::LogOp, "DEBUG: semaphore: {}", semaphore.at(0).address());
 
             // update senders
             auto& worker_reader_sender_runtime_args_by_core = GetRuntimeArgs(program, worker_sender_reader_kernel_id);
@@ -533,12 +533,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
                 // writer
                 auto& worker_writer_sender_runtime_args = worker_writer_sender_runtime_args_by_core[core.x][core.y];
                 worker_writer_sender_runtime_args[0] = output.buffer()->address();
-                uint32_t num_semaphores_index = 10;
-                auto num_semaphores = worker_writer_sender_runtime_args[num_semaphores_index];
-                for (uint32_t semaphore_index = 0; semaphore_index < num_semaphores; semaphore_index++) {
-                    worker_writer_sender_runtime_args[num_semaphores_index + semaphore_index] =
-                        semaphore.at(semaphore_index).address();
-                }
             }
         };
 
