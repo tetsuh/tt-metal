@@ -383,11 +383,15 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     // Reader
     auto reader_kernel_config = tt::tt_metal::ReaderDataMovementConfig{};
     reader_kernel_config.compile_args = {
-        ring_index,                                       // my_chip_id
-        static_cast<uint32_t>(input_tensor_buffer_type),  // buffer0_type
-        src0_cb_index,                                    // cb0_id
-        num_pages_per_packet,                             // packet_size_in_pages
-        op_config.get_page_size(),                        // tensor0_page_size
+        ring_index,                                        // my_chip_id
+        static_cast<uint32_t>(input_tensor_buffer_type),   // input_buffer_type
+        static_cast<uint32_t>(output_tensor_buffer_type),  // output_buffer_type
+        src0_cb_index,                                     // cb0_id
+        num_pages_per_packet,                              // packet_size_in_pages
+        op_config.get_page_size(),                         // tensor0_page_size
+        num_targets_forward,                               // num_slices_forward_direction
+        num_targets_backward,                              // num_slices_backward_direction
+        fuse_op                                            // fused op
     };
     log_trace(tt::LogOp, "Reader Compile Args:");
     for (const auto& arg : reader_kernel_config.compile_args) {
@@ -396,7 +400,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     auto worker_sender_reader_kernel_id = tt::tt_metal::CreateKernel(
         program,
         "ttnn/cpp/ttnn/operations/experimental/ccl/all_gather_async/device/kernels/"
-        "interleaved_dim3_1_1_32_any_reader.cpp",
+        "interleaved_dim3_1_1_any_any_reader.cpp",
         sender_worker_core_range,
         reader_kernel_config);
 
@@ -413,7 +417,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         num_targets_forward,                               // num_targets_forward_direction
         num_targets_backward,                              // num_targets_backward_direction
         dynamic_alternate,                                 // alternate
-        fuse_op,                                           // fused op
+        fuse_op                                            // fused op
     };
     for (const auto& arg : writer_kernel_config.compile_args) {
         log_trace(tt::LogOp, "\t{}", arg);
@@ -449,14 +453,30 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         uint32_t remainder = input_tensor_num_pages % num_links;
         uint32_t input_tile_id_start = link * base_pages_per_worker + std::min(link, remainder);
         uint32_t input_tile_id_end = (link + 1) * base_pages_per_worker + std::min(link + 1, remainder);
+
+        TT_ASSERT(!(input_tensor_shape[3] % TILE_WIDTH));
+        TT_ASSERT(!(output_tensor_shape[3] % TILE_WIDTH));
+        uint32_t TILE_WIDTH = 32;
+        uint32_t input_tensor_Wt = input_tensor_shape[3] / TILE_WIDTH;
+        uint32_t output_tensor_Wt = output_tensor_shape[3] / TILE_WIDTH;
+
         std::vector<uint32_t> reader_rt_args = {
-            input_tensor.buffer()->address(),  // tensor_address0
-            input_tile_id_start,               // tile_id_start
-            input_tile_id_end,                 // tile_id_end
+            input_tensor.buffer()->address(),   // input_tensor_address
+            output_tensor.buffer()->address(),  // output_tensor_address
+            input_tensor_Wt,                    // width in tiles of the output shard
+            output_tensor_Wt,                   // width in tiles of entire output
+            input_tile_id_start,                // input_tile_id_start
+            input_tile_id_end,                  // slice_num_pages
+            semaphore.at(0).address(),          // out_ready_semaphore_forward
+            semaphore.at(1).address()           // out_ready_semaphore_backward
         };
         log_trace(tt::LogOp, "Reader Runtime Args:");
         for (const auto& arg : reader_rt_args) {
             log_trace(tt::LogOp, "\t{}", arg);
+        }
+        if (fuse_op) {
+            fused_op_signaler_forward->push_all_gather_fused_op_rt_args(reader_rt_args, 1, 0, 1);
+            fused_op_signaler_backward->push_all_gather_fused_op_rt_args(reader_rt_args, 1, 0, 0);
         }
         tt::tt_metal::SetRuntimeArgs(program, worker_sender_reader_kernel_id, {core}, reader_rt_args);
 
@@ -465,28 +485,17 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         bool reset_global_semaphore = (link == 0) && !enable_async_output_tensor;
         uint32_t out_ready_sem_wait_value = (dynamic_alternate ? (ring_size + 1) : ring_size) * num_links;
 
-        uint32_t TILE_WIDTH = 32;
-        TT_ASSERT(!(input_tensor_shape[3] % TILE_WIDTH));
-        TT_ASSERT(!(output_tensor_shape[3] % TILE_WIDTH));
-        uint32_t input_tensor_Wt = input_tensor_shape[3] / TILE_WIDTH;
-        uint32_t output_tensor_Wt = output_tensor_shape[3] / TILE_WIDTH;
-        uint32_t output_tile_id_start = ring_index * input_tensor_Wt + input_tile_id_start;
         std::vector<uint32_t> writer_rt_args = {
             output_tensor.buffer()->address(),  // tensor_address0
             input_tensor_Wt,                    // width in tiles of the output shard
             output_tensor_Wt,                   // width in tiles of entire output
-            output_tile_id_start,               // tile_id_start
-            input_tensor_num_pages,             // tiles_to_read
-            wait_output_semaphore,              // wait_output_semaphore
-            reset_global_semaphore,             // reset_global_semaphore
+            input_tensor_num_pages,             // slice_num_pages
             drain_sync_core.x,                  // out_ready_sem_noc0_x
             drain_sync_core.y,                  // out_ready_sem_noc0_y
-            out_ready_sem_wait_value,           // out_ready_sem_wait_value
             ring_size,                          // ring_size
+            semaphore.at(0).address(),          // out_ready_semaphore_forward
+            semaphore.at(1).address()           // out_ready_semaphore_backward
         };
-        for (int device_id = 0; device_id < ring_size; device_id++) {
-            writer_rt_args.push_back(semaphore.at(device_id).address());
-        }
         log_trace(tt::LogOp, "Writer Runtime Args:");
         for (const auto& arg : writer_rt_args) {
             log_trace(tt::LogOp, "\t{}", arg);
@@ -502,8 +511,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
                 sender_device->id(), backward_device.value()->id(), link, program, {core}, writer_rt_args);
         }
         if (fuse_op) {
-            fused_op_signaler_forward->push_all_gather_fused_op_rt_args(writer_rt_args, 1, 0, 1);
-            fused_op_signaler_backward->push_all_gather_fused_op_rt_args(writer_rt_args, 1, 0, 0);
             fused_op_signaler_sender_workers->push_all_gather_fused_op_rt_args(writer_rt_args, 1, 0, 1);
         }
         tt::tt_metal::SetRuntimeArgs(program, worker_sender_writer_kernel_id, {core}, writer_rt_args);
@@ -519,10 +526,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             const auto& input = input_tensors[0];
             const auto& output = output_tensors[0];
 
-            auto semaphore = static_cast<const ttnn::AllGatherAsync*>(operation)->semaphore;
-
-            // log_trace(tt::LogOp, "DEBUG: semaphore: {}", semaphore.at(0).address());
-
             // update senders
             auto& worker_reader_sender_runtime_args_by_core = GetRuntimeArgs(program, worker_sender_reader_kernel_id);
             auto& worker_writer_sender_runtime_args_by_core = GetRuntimeArgs(program, worker_sender_writer_kernel_id);
@@ -530,6 +533,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
                 // reader
                 auto& worker_reader_sender_runtime_args = worker_reader_sender_runtime_args_by_core[core.x][core.y];
                 worker_reader_sender_runtime_args[0] = input.buffer()->address();
+                worker_reader_sender_runtime_args[1] = output.buffer()->address();
                 // writer
                 auto& worker_writer_sender_runtime_args = worker_writer_sender_runtime_args_by_core[core.x][core.y];
                 worker_writer_sender_runtime_args[0] = output.buffer()->address();
