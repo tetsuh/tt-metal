@@ -7,6 +7,7 @@
 #include "tt_metal/fabric/hw/inc/edm_fabric/fabric_connection_manager.hpp"
 #include "cpp/ttnn/operations/ccl/common/interpreter_backends/kernel_common/noc_addr.hpp"
 #include "cpp/ttnn/operations/ccl/kernel_common/worker_sync_utils.hpp"
+#include "cpp/ttnn/operations/ccl/ccl_host_types.hpp"
 #include "minimal_ccl_common.hpp"
 #include <cstdint>
 #include <utility>
@@ -14,6 +15,7 @@
 
 using address_t = uint32_t;
 using tt::tt_metal::BufferType;
+using ttnn::ccl::Topology;
 
 // inline void print_full_tile(uint32_t cb_id, uint32_t tile_id = 0, bool untilize = false) {
 //      DPRINT << "======" << ENDL();
@@ -42,6 +44,7 @@ constexpr uint32_t num_targets_forward_direction = get_compile_time_arg_val(8);
 constexpr uint32_t num_targets_backward_direction = get_compile_time_arg_val(9);
 constexpr bool dynamic_alternate = get_compile_time_arg_val(10);
 constexpr bool fuse_op = get_compile_time_arg_val(11);
+constexpr Topology topology = static_cast<Topology>(get_compile_time_arg_val(12));
 
 /*
  * CCL Send will present various operating modes. Although there is only a single send kernel, it may (compile time)
@@ -189,20 +192,33 @@ void kernel_main() {
         op_signaler_sender.synchronize_workers_and_signal_op(my_chip_id);
     }
 
-    while (((backward_writes < num_targets_forward_direction) && fabric_connection.has_backward_connection()) ||
-           ((forward_writes < num_targets_backward_direction) && fabric_connection.has_forward_connection())) {
+    uint32_t forward_writes_expected, backward_writes_expected;
+    if (topology == Topology::Linear) {
+        DPRINT << "READER TOPOLOGY LINEAR" << ENDL();
+        forward_writes_expected = num_targets_backward_direction;
+        backward_writes_expected = num_targets_forward_direction;
+    } else if (topology == Topology::Ring) {
+        DPRINT << "READER TOPOLOGY RING" << ENDL();
+        forward_writes_expected = num_targets_forward_direction;
+        backward_writes_expected = num_targets_backward_direction;
+    }
+
+    while (((backward_writes < backward_writes_expected) && fabric_connection.has_backward_connection()) ||
+           ((forward_writes < forward_writes_expected) && fabric_connection.has_forward_connection())) {
         // DPRINT << "WRITER WHILE LOOP ITERATION \n" << ENDL();
         // unicast backward
         // Did I get something from my right to send to my left?
         // In the linear case, I expect num_targets_forward_direction slices from the right, and check if I have a
-        // neighbor to the left In the ring case, TODO
-        if ((backward_writes < num_targets_forward_direction) && fabric_connection.has_backward_connection()) {
+        // neighbor to the left
+        // In the ring case, I expect to write to the left num_backward_target times
+        if ((backward_writes < backward_writes_expected) && fabric_connection.has_backward_connection()) {
             // DPRINT << "WRITER FORWARD THE " << backward_writes + 1 << " slice from the right to the left" << ENDL();
             pages_read_in_row = 0;
             row_offset = 0;
             tiles_read = 0;
             uint32_t slice_chip_id = my_chip_id + backward_writes + 1;
-            tile_id_start = slice_chip_id * input_tensor_Wt;
+            uint32_t actual_slice_chip_id = (slice_chip_id >= ring_size) ? slice_chip_id - ring_size : slice_chip_id;
+            tile_id_start = actual_slice_chip_id * input_tensor_Wt;
             tiles_to_read = slice_num_pages;
             while (tiles_read < tiles_to_read) {
                 cb_wait_front(cb_backward_id, packet_size_in_pages);
@@ -242,14 +258,16 @@ void kernel_main() {
         // unicast forward
         // Did I get something from my left to send to my right?
         // In the linear case, I expect num_targets_backward_direction slices from the left, and check if I have a
-        // neighbor to the right In the ring case, TODO
-        if ((forward_writes < num_targets_backward_direction) && fabric_connection.has_forward_connection()) {
+        // neighbor to the right
+        // In the ring case, I expect to write to the right num_forward_target times
+        if ((forward_writes < forward_writes_expected) && fabric_connection.has_forward_connection()) {
             // DPRINT << "WRITER FORWARD THE " << forward_writes + 1 << " slice from the left to the right" << ENDL();
             pages_read_in_row = 0;
             row_offset = 0;
             tiles_read = 0;
             uint32_t slice_chip_id = my_chip_id - forward_writes - 1;
-            tile_id_start = slice_chip_id * input_tensor_Wt;
+            uint32_t actual_slice_chip_id = (slice_chip_id < 0) ? ring_size + slice_chip_id : slice_chip_id;
+            tile_id_start = actual_slice_chip_id * input_tensor_Wt;
             tiles_to_read = slice_num_pages;
             while (tiles_read < tiles_to_read) {
                 cb_wait_front(cb_forward_id, packet_size_in_pages);

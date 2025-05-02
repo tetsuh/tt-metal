@@ -400,7 +400,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         op_config.get_page_size(),                         // tensor0_page_size
         num_targets_forward,                               // num_slices_forward_direction
         num_targets_backward,                              // num_slices_backward_direction
-        fuse_op                                            // fused op
+        fuse_op,                                           // fused op
+        static_cast<uint32_t>(topology)                    // topology
     };
     log_trace(tt::LogOp, "Reader Compile Args:");
     for (const auto& arg : reader_kernel_config.compile_args) {
@@ -427,7 +428,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         num_targets_forward,                               // num_targets_forward_direction
         num_targets_backward,                              // num_targets_backward_direction
         dynamic_alternate,                                 // alternate
-        fuse_op                                            // fused op
+        fuse_op,                                           // fused op
+        static_cast<uint32_t>(topology)                    // topology
     };
     for (const auto& arg : writer_kernel_config.compile_args) {
         log_trace(tt::LogOp, "\t{}", arg);
@@ -477,6 +479,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             output_tensor_Wt,                   // width in tiles of entire output
             input_tile_id_start,                // input_tile_id_start
             input_tile_id_end,                  // slice_num_pages
+            ring_size,                          // ring_size
             semaphore.at(0).address(),          // out_ready_semaphore_forward
             semaphore.at(1).address()           // out_ready_semaphore_backward
         };
