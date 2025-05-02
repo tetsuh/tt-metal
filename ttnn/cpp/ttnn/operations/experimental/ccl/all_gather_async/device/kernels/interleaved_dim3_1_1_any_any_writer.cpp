@@ -23,13 +23,14 @@ constexpr uint32_t my_chip_id = get_compile_time_arg_val(0);
 constexpr uint32_t reserved_packet_header_cb_id = get_compile_time_arg_val(1);
 constexpr uint32_t num_packet_headers_storable = get_compile_time_arg_val(2);
 constexpr BufferType buffer0_type = static_cast<BufferType>(get_compile_time_arg_val(3));
-constexpr uint32_t cb0_id = get_compile_time_arg_val(4);
-constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(5);
-constexpr uint32_t tensor0_page_size = get_compile_time_arg_val(6);
-constexpr uint32_t num_targets_forward_direction = get_compile_time_arg_val(7);
-constexpr uint32_t num_targets_backward_direction = get_compile_time_arg_val(8);
-constexpr bool dynamic_alternate = get_compile_time_arg_val(9);
-constexpr bool fuse_op = get_compile_time_arg_val(10);
+constexpr uint32_t cb_forward_id = get_compile_time_arg_val(4);
+constexpr uint32_t cb_backward_id = get_compile_time_arg_val(5);
+constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(6);
+constexpr uint32_t tensor0_page_size = get_compile_time_arg_val(7);
+constexpr uint32_t num_targets_forward_direction = get_compile_time_arg_val(8);
+constexpr uint32_t num_targets_backward_direction = get_compile_time_arg_val(9);
+constexpr bool dynamic_alternate = get_compile_time_arg_val(10);
+constexpr bool fuse_op = get_compile_time_arg_val(11);
 
 /*
  * CCL Send will present various operating modes. Although there is only a single send kernel, it may (compile time)
@@ -87,7 +88,9 @@ void kernel_main() {
     // interleaved addrgen
     constexpr bool is_dram = buffer0_type == tt::tt_metal::BufferType::DRAM;
     auto tensor0_addrgen = InterleavedAddrGenFast<is_dram>{
-        .bank_base_address = tensor_address0, .page_size = tensor0_page_size, .data_format = get_dataformat(cb0_id)};
+        .bank_base_address = tensor_address0,
+        .page_size = tensor0_page_size,
+        .data_format = get_dataformat(cb_forward_id)};
 
     if (fabric_connection.is_logically_connected()) {
         fabric_connection.open();
@@ -103,8 +106,8 @@ void kernel_main() {
     uint32_t tiles_to_read = slice_num_pages;
     uint32_t tile_id_start = my_chip_id * input_tensor_Wt;
     while (tiles_read < tiles_to_read) {
-        cb_wait_front(cb0_id, packet_size_in_pages);
-        size_t l1_read_addr = get_read_ptr(cb0_id);
+        cb_wait_front(cb_forward_id, packet_size_in_pages);
+        size_t l1_read_addr = get_read_ptr(cb_forward_id);
         uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
         uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
         for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
@@ -125,9 +128,10 @@ void kernel_main() {
             }
         }
 
-        cb_pop_front(cb0_id, packet_size_in_pages);
+        cb_pop_front(cb_forward_id, packet_size_in_pages);
     }
 
+    DPRINT << "WRITER PAST WRITE LOCAL BEFORE SEMAPHORE INC WRITE \n" << ENDL();
     // 2. unicast output ready semaphore forward
     uint64_t out_ready_sem_noc_addr_in_pkt_forward =
         safe_get_noc_addr(out_ready_sem_noc0_x, out_ready_sem_noc0_y, out_ready_sem_backward, 0);
@@ -136,12 +140,13 @@ void kernel_main() {
         out_ready_sem_noc_addr_in_pkt_forward,
         static_cast<uint16_t>(1),  // increment 1
         32});
-    // Write the mcast packet (forward)
-    fabric_connection.get_forward_connection().wait_for_empty_write_slot();
-    pkt_hdr_fwd->to_chip_unicast(1);
-    fabric_connection.get_forward_connection().send_payload_flush_blocking_from_address(
-        packet_header_buffer_seminc_forward, sizeof(PACKET_HEADER_TYPE));
-    forward_writes++;
+    // Write the unicast packet (forward)
+    if (fabric_connection.has_forward_connection()) {
+        fabric_connection.get_forward_connection().wait_for_empty_write_slot();
+        pkt_hdr_fwd->to_chip_unicast(1);
+        fabric_connection.get_forward_connection().send_payload_flush_blocking_from_address(
+            packet_header_buffer_seminc_forward, sizeof(PACKET_HEADER_TYPE));
+    }
     // 2. unicast output ready semaphore backward
     uint64_t out_ready_sem_noc_addr_in_pkt_backward =
         safe_get_noc_addr(out_ready_sem_noc0_x, out_ready_sem_noc0_y, out_ready_sem_forward, 0);
@@ -151,21 +156,32 @@ void kernel_main() {
         static_cast<uint16_t>(1),  // increment 1
         32});
     // Write the mcast packet (backward)
-    fabric_connection.get_backward_connection().wait_for_empty_write_slot();
-    pkt_hdr_bwd->to_chip_unicast(1);
-    fabric_connection.get_backward_connection().send_payload_flush_blocking_from_address(
-        packet_header_buffer_seminc_backward, sizeof(PACKET_HEADER_TYPE));
-    backward_writes++;
+    if (fabric_connection.has_backward_connection()) {
+        fabric_connection.get_backward_connection().wait_for_empty_write_slot();
+        pkt_hdr_bwd->to_chip_unicast(1);
+        fabric_connection.get_backward_connection().send_payload_flush_blocking_from_address(
+            packet_header_buffer_seminc_backward, sizeof(PACKET_HEADER_TYPE));
+    }
 
+    DPRINT << "WRITER PAST WRITE LOCAL SEMAPHORE\n" << ENDL();
+    DPRINT << "MY CHIP ID " << my_chip_id << ENDL();
+    DPRINT << "num targets forward " << num_targets_forward_direction << ENDL();
+    DPRINT << "num targets backward " << num_targets_backward_direction << ENDL();
     // increment locally
     if (fuse_op) {
         // Synchronize and signal that the local tensor slice is available
         op_signaler_sender.synchronize_workers_and_signal_op(my_chip_id);
     }
 
-    while (forward_writes < num_targets_forward_direction || backward_writes < num_targets_backward_direction) {
+    while (((backward_writes < num_targets_forward_direction) && fabric_connection.has_backward_connection()) ||
+           ((forward_writes < num_targets_backward_direction) && fabric_connection.has_forward_connection())) {
+        DPRINT << "WRITER WHILE LOOP ITERATION \n" << ENDL();
         // unicast backward
-        if (backward_writes < num_targets_backward_direction) {
+        // Did I get something from my right to send to my left?
+        // In the linear case, I expect num_targets_forward_direction slices from the right, and check if I have a
+        // neighbor to the left In the ring case, TODO
+        if ((backward_writes < num_targets_forward_direction) && fabric_connection.has_backward_connection()) {
+            DPRINT << "WRITER FORWARD THE " << backward_writes + 1 << " slice from the right to the left" << ENDL();
             pages_read_in_row = 0;
             row_offset = 0;
             tiles_read = 0;
@@ -173,8 +189,8 @@ void kernel_main() {
             tile_id_start = slice_chip_id * input_tensor_Wt;
             tiles_to_read = slice_num_pages;
             while (tiles_read < tiles_to_read) {
-                cb_wait_front(cb0_id, packet_size_in_pages);
-                size_t l1_read_addr = get_read_ptr(cb0_id);
+                cb_wait_front(cb_backward_id, packet_size_in_pages);
+                size_t l1_read_addr = get_read_ptr(cb_backward_id);
                 uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
                 uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
                 for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
@@ -195,7 +211,7 @@ void kernel_main() {
                     }
                 }
 
-                cb_pop_front(cb0_id, packet_size_in_pages);
+                cb_pop_front(cb_backward_id, packet_size_in_pages);
             }
 
             // 2. unicast output ready semaphore backward
@@ -208,7 +224,11 @@ void kernel_main() {
         }
 
         // unicast forward
-        if (forward_writes < num_targets_forward_direction) {
+        // Did I get something from my left to send to my right?
+        // In the linear case, I expect num_targets_backward_direction slices from the left, and check if I have a
+        // neighbor to the right In the ring case, TODO
+        if ((forward_writes < num_targets_backward_direction) && fabric_connection.has_forward_connection()) {
+            DPRINT << "WRITER FORWARD THE " << forward_writes + 1 << " slice from the left to the right" << ENDL();
             pages_read_in_row = 0;
             row_offset = 0;
             tiles_read = 0;
@@ -216,8 +236,8 @@ void kernel_main() {
             tile_id_start = slice_chip_id * input_tensor_Wt;
             tiles_to_read = slice_num_pages;
             while (tiles_read < tiles_to_read) {
-                cb_wait_front(cb0_id, packet_size_in_pages);
-                size_t l1_read_addr = get_read_ptr(cb0_id);
+                cb_wait_front(cb_forward_id, packet_size_in_pages);
+                size_t l1_read_addr = get_read_ptr(cb_forward_id);
                 uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
                 uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
                 for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
@@ -239,7 +259,7 @@ void kernel_main() {
                     }
                 }
 
-                cb_pop_front(cb0_id, packet_size_in_pages);
+                cb_pop_front(cb_forward_id, packet_size_in_pages);
             }
 
             // 2. unicast output ready semaphore forward

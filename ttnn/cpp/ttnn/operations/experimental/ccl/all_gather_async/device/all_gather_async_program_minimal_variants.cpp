@@ -350,12 +350,20 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     uint32_t l1_scratch_cb_page_size_bytes = op_config.get_page_size();
     uint32_t num_pages_per_packet = packet_size_bytes / l1_scratch_cb_page_size_bytes;
     uint32_t cb_num_pages = 3 * num_pages_per_packet;  // triple buffering
-    uint32_t src0_cb_index = tt::CB::c_in0;
     tt::DataFormat df = tt::tt_metal::datatype_to_dataformat_converter(input_tensor.get_dtype());
-    tt::tt_metal::CircularBufferConfig cb_src0_config =
-        tt::tt_metal::CircularBufferConfig(cb_num_pages * l1_scratch_cb_page_size_bytes, {{src0_cb_index, df}})
-            .set_page_size(src0_cb_index, l1_scratch_cb_page_size_bytes);
-    tt::tt_metal::CBHandle cb_src0_workers = CreateCircularBuffer(program, sender_worker_core_range, cb_src0_config);
+    uint32_t forward_cb_index = tt::CB::c_in0;
+    tt::tt_metal::CircularBufferConfig cb_forward_config =
+        tt::tt_metal::CircularBufferConfig(cb_num_pages * l1_scratch_cb_page_size_bytes, {{forward_cb_index, df}})
+            .set_page_size(forward_cb_index, l1_scratch_cb_page_size_bytes);
+    tt::tt_metal::CBHandle cb_forward_workers =
+        CreateCircularBuffer(program, sender_worker_core_range, cb_forward_config);
+    uint32_t backward_cb_index = tt::CB::c_in2;
+    tt::tt_metal::CircularBufferConfig cb_backward_config =
+        tt::tt_metal::CircularBufferConfig(cb_num_pages * l1_scratch_cb_page_size_bytes, {{backward_cb_index, df}})
+            .set_page_size(backward_cb_index, l1_scratch_cb_page_size_bytes);
+    tt::tt_metal::CBHandle cb_backward_workers =
+        CreateCircularBuffer(program, sender_worker_core_range, cb_backward_config);
+
     // Set aside a buffer we can use for storing packet headers in (particularly for atomic incs)
     const auto reserved_packet_header_CB_index = tt::CB::c_in1;
     static constexpr auto num_packet_headers_storable = 8;
@@ -386,7 +394,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         ring_index,                                        // my_chip_id
         static_cast<uint32_t>(input_tensor_buffer_type),   // input_buffer_type
         static_cast<uint32_t>(output_tensor_buffer_type),  // output_buffer_type
-        src0_cb_index,                                     // cb0_id
+        forward_cb_index,                                  // cb_forward_id
+        backward_cb_index,                                 // cb_backward_id
         num_pages_per_packet,                              // packet_size_in_pages
         op_config.get_page_size(),                         // tensor0_page_size
         num_targets_forward,                               // num_slices_forward_direction
@@ -411,7 +420,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         reserved_packet_header_CB_index,                   // reserved_packet_header_cb_id
         num_packet_headers_storable,                       // num_packet_headers_storable
         static_cast<uint32_t>(output_tensor_buffer_type),  // buffer0_type
-        src0_cb_index,                                     // cb0_id
+        forward_cb_index,                                  // cb_forward_id
+        backward_cb_index,                                 // cb_backward_id
         num_pages_per_packet,                              // packet_size_in_pages
         op_config.get_page_size(),                         // tensor0_page_size
         num_targets_forward,                               // num_targets_forward_direction
