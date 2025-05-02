@@ -133,10 +133,8 @@ tt::tt_metal::operation::ProgramWithCallbacks AllGatherMatmulAsync::create_progr
 
     std::optional<IDevice*> forward_device = std::nullopt;
     std::optional<IDevice*> backward_device = std::nullopt;
-    std::vector<GlobalSemaphore> semaphore;
     uint32_t device_index = 0;  // Initialize device index
     for (uint32_t i = 0; i < this->all_gather_async_struct.ring_size; ++i) {
-        semaphore.push_back(this->all_gather_async_struct.semaphore.at(i));  // Get raw pointer
         if (devices_to_use.at(i) == target_device) {
             device_index = i;
             if (i != 0) {

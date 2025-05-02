@@ -16,9 +16,7 @@ from ttnn import ShardTensorToMesh, ConcatMeshToTensor
 
 def create_global_semaphores(mesh_device, num_devices, cores, initial_value):
     # create global semaphore handles
-    ccl_semaphore_handles = [
-        ttnn.create_global_semaphore(mesh_device, cores, initial_value) for _ in range(num_devices)
-    ]
+    ccl_semaphore_handles = [ttnn.create_global_semaphore(mesh_device, cores, initial_value) for _ in range(2)]
     return ccl_semaphore_handles
 
 
@@ -323,24 +321,26 @@ def run_all_gather_impl(
 @pytest.mark.parametrize(
     "enable_trace",
     [
-        True,
-        # False,
-    ],
-)
-@pytest.mark.parametrize(
-    "use_non_fused",
-    [
         # True,
         False,
     ],
 )
 @pytest.mark.parametrize(
-    "device_params, use_legacy_allgather",
+    "use_non_fused",
     [
-        ({"fabric_config": ttnn.FabricConfig.FABRIC_1D, "trace_region_size": 90112}, False),
+        True,
+        # False,
+    ],
+)
+@pytest.mark.parametrize(
+    "device_params, use_legacy_allgather, all_gather_topology",
+    [
+        ({"fabric_config": ttnn.FabricConfig.FABRIC_1D_RING, "trace_region_size": 90112}, False, ttnn.Topology.Ring),
+        # ({"fabric_config": ttnn.FabricConfig.FABRIC_1D, "trace_region_size": 90112}, False, ttnn.Topology.Linear),
         # (
         #    {"trace_region_size": 90112},
-        #    True
+        #    True,
+        #    ttnn.Topology.Linear,
         # ),
     ],
     indirect=["device_params"],
@@ -364,6 +364,7 @@ def test_all_gather_matmul_async(
     use_non_fused,
     use_legacy_allgather,
     use_program_cache,
+    all_gather_topology,
 ):
     run_all_gather_impl(
         t3k_mesh_device,
@@ -381,7 +382,7 @@ def test_all_gather_matmul_async(
         mem_config_ag,
         mem_config_mm,
         use_program_cache=use_program_cache,
-        all_gather_topology=ttnn.Topology.Linear,
+        all_gather_topology=all_gather_topology,
         enable_trace=enable_trace,
         use_non_fused=use_non_fused,
         use_legacy_allgather=use_legacy_allgather,
