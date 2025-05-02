@@ -147,7 +147,7 @@ void kernel_main() {
             // In the linear case, if I have any targets to my left, always forward
             // In the ring case, if I have received on the right less than my targets on the left, forward
             if ((topology == Topology::Linear && num_targets_backward_direction > 0) ||
-                (topology == Topology::Ring && forward_slices_received < num_targets_backward_direction + 1)) {
+                (topology == Topology::Ring && (forward_slices_received < (num_targets_backward_direction + 1)))) {
                 DPRINT << "READER SEND WHAT I GOT FROM THE RIGHT TO THE LEFT " << ENDL();
                 // read the next forward slice out of memory, and put it in CB
                 uint32_t output_tile_id_start = actual_forward_chip_id * input_tensor_Wt;
@@ -204,7 +204,7 @@ void kernel_main() {
             // In the linear case, if I have any targets to my right, always forward
             // In the ring case, if I have received on the left less than my targets on the right, forward
             if ((topology == Topology::Linear && num_targets_forward_direction > 0) ||
-                (topology == Topology::Ring && backward_slices_received < num_targets_forward_direction + 1)) {
+                (topology == Topology::Ring && (backward_slices_received < (num_targets_forward_direction + 1)))) {
                 DPRINT << "READER SEND WHAT I GOT FROM THE LEFT TO THE RIGHT " << ENDL();
                 // read the next backward slice out of memory, and put it in CB
                 uint32_t output_tile_id_start = actual_backward_chip_id * input_tensor_Wt;

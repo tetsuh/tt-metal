@@ -265,7 +265,7 @@ void kernel_main() {
             pages_read_in_row = 0;
             row_offset = 0;
             tiles_read = 0;
-            uint32_t slice_chip_id = my_chip_id - forward_writes - 1;
+            int slice_chip_id = my_chip_id - forward_writes - 1;
             uint32_t actual_slice_chip_id = (slice_chip_id < 0) ? ring_size + slice_chip_id : slice_chip_id;
             tile_id_start = actual_slice_chip_id * input_tensor_Wt;
             tiles_to_read = slice_num_pages;
