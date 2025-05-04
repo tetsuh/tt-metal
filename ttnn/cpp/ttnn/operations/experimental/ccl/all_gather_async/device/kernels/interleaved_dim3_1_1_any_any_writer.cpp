@@ -177,60 +177,17 @@ void kernel_main() {
         forward_writes_expected = num_targets_backward_direction;
         backward_writes_expected = num_targets_forward_direction;
     } else if (topology == Topology::Ring) {
-        forward_writes_expected = num_targets_forward_direction;
-        backward_writes_expected = num_targets_backward_direction;
+        if (my_chip_id % 2) {
+            forward_writes_expected = num_targets_forward_direction - 2;
+            backward_writes_expected = num_targets_backward_direction;
+        } else {
+            forward_writes_expected = num_targets_forward_direction;
+            backward_writes_expected = num_targets_backward_direction - 2;
+        }
     }
 
     while (((backward_writes < backward_writes_expected) && fabric_connection.has_backward_connection()) ||
            ((forward_writes < forward_writes_expected) && fabric_connection.has_forward_connection())) {
-        // unicast backward
-        // Did I get something from my right to send to my left?
-        // In the linear case, I expect num_targets_forward_direction slices from the right, and check if I have a
-        // neighbor to the left
-        // In the ring case, I expect to write to the left num_backward_target times
-        if ((backward_writes < backward_writes_expected) && fabric_connection.has_backward_connection()) {
-            pages_read_in_row = 0;
-            row_offset = 0;
-            tiles_read = 0;
-            uint32_t slice_chip_id = my_chip_id + backward_writes + 1;
-            uint32_t actual_slice_chip_id = (slice_chip_id >= ring_size) ? slice_chip_id - ring_size : slice_chip_id;
-            tile_id_start = actual_slice_chip_id * input_tensor_Wt;
-            tiles_to_read = slice_num_pages;
-            while (tiles_read < tiles_to_read) {
-                cb_wait_front(cb_backward_id, packet_size_in_pages);
-                size_t l1_read_addr = get_read_ptr(cb_backward_id);
-                uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
-                uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
-                for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
-                    uint64_t noc0_dest_noc_addr = get_noc_addr(
-                        tile_id_start + row_offset + pages_read_in_row, tensor0_addrgen, 0 /*offset*/, 0 /*noc_id*/);
-
-                    write_and_advance_local_read_address_for_fabric_write_backward(
-                        noc0_dest_noc_addr,
-                        pkt_hdr_backward,
-                        fabric_connection,
-                        l1_read_addr,
-                        contig_pages_advanced * tensor0_page_size);
-                    tiles_read++;
-                    pages_read_in_row++;
-                    if (pages_read_in_row >= input_tensor_Wt) {
-                        row_offset += output_tensor_Wt;
-                        pages_read_in_row = 0;
-                    }
-                }
-
-                cb_pop_front(cb_backward_id, packet_size_in_pages);
-            }
-
-            // 2. unicast output ready semaphore backward
-            fabric_connection.get_backward_connection().wait_for_empty_write_slot();
-            pkt_hdr_bwd->to_chip_unicast(1);
-            fabric_connection.get_backward_connection().send_payload_flush_blocking_from_address(
-                packet_header_buffer_seminc_backward, sizeof(PACKET_HEADER_TYPE));
-
-            backward_writes++;
-        }
-
         // unicast forward
         // Did I get something from my left to send to my right?
         // In the linear case, I expect num_targets_backward_direction slices from the left, and check if I have a
@@ -278,6 +235,54 @@ void kernel_main() {
                 packet_header_buffer_seminc_forward, sizeof(PACKET_HEADER_TYPE));
 
             forward_writes++;
+        }
+
+        // unicast backward
+        // Did I get something from my right to send to my left?
+        // In the linear case, I expect num_targets_forward_direction slices from the right, and check if I have a
+        // neighbor to the left
+        // In the ring case, I expect to write to the left num_backward_target times
+        if ((backward_writes < backward_writes_expected) && fabric_connection.has_backward_connection()) {
+            pages_read_in_row = 0;
+            row_offset = 0;
+            tiles_read = 0;
+            uint32_t slice_chip_id = my_chip_id + backward_writes + 1;
+            uint32_t actual_slice_chip_id = (slice_chip_id >= ring_size) ? slice_chip_id - ring_size : slice_chip_id;
+            tile_id_start = actual_slice_chip_id * input_tensor_Wt;
+            tiles_to_read = slice_num_pages;
+            while (tiles_read < tiles_to_read) {
+                cb_wait_front(cb_backward_id, packet_size_in_pages);
+                size_t l1_read_addr = get_read_ptr(cb_backward_id);
+                uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
+                uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
+                for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
+                    uint64_t noc0_dest_noc_addr = get_noc_addr(
+                        tile_id_start + row_offset + pages_read_in_row, tensor0_addrgen, 0 /*offset*/, 0 /*noc_id*/);
+
+                    write_and_advance_local_read_address_for_fabric_write_backward(
+                        noc0_dest_noc_addr,
+                        pkt_hdr_backward,
+                        fabric_connection,
+                        l1_read_addr,
+                        contig_pages_advanced * tensor0_page_size);
+                    tiles_read++;
+                    pages_read_in_row++;
+                    if (pages_read_in_row >= input_tensor_Wt) {
+                        row_offset += output_tensor_Wt;
+                        pages_read_in_row = 0;
+                    }
+                }
+
+                cb_pop_front(cb_backward_id, packet_size_in_pages);
+            }
+
+            // 2. unicast output ready semaphore backward
+            fabric_connection.get_backward_connection().wait_for_empty_write_slot();
+            pkt_hdr_bwd->to_chip_unicast(1);
+            fabric_connection.get_backward_connection().send_payload_flush_blocking_from_address(
+                packet_header_buffer_seminc_backward, sizeof(PACKET_HEADER_TYPE));
+
+            backward_writes++;
         }
     }
 

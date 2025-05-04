@@ -328,8 +328,8 @@ def run_all_gather_impl(
 @pytest.mark.parametrize(
     "use_non_fused",
     [
-        True,
-        # False,
+        # True,
+        False,
     ],
 )
 @pytest.mark.parametrize(
@@ -340,7 +340,7 @@ def run_all_gather_impl(
         # (
         #    {"trace_region_size": 90112},
         #    True,
-        #    ttnn.Topology.Linear,
+        #    ttnn.Topology.Ring,
         # ),
     ],
     indirect=["device_params"],

@@ -91,71 +91,26 @@ void kernel_main() {
     uint32_t forward_slices_received = 0;
     uint32_t backward_slices_received = 0;
     uint32_t forward_slices_expected, backward_slices_expected;
+    uint32_t forward_writes_expected, backward_writes_expected;
     if (topology == Topology::Linear) {
         forward_slices_expected = num_targets_forward_direction;
         backward_slices_expected = num_targets_backward_direction;
     } else if (topology == Topology::Ring) {
         forward_slices_expected = num_targets_backward_direction;
         backward_slices_expected = num_targets_forward_direction;
+        if (my_chip_id % 2) {
+            forward_writes_expected = num_targets_forward_direction - 2;
+            backward_writes_expected = num_targets_backward_direction;
+        } else {
+            forward_writes_expected = num_targets_forward_direction;
+            backward_writes_expected = num_targets_backward_direction - 2;
+        }
     }
     while (forward_slices_received < forward_slices_expected || backward_slices_received < backward_slices_expected) {
-        // Do i expect more from the right?
-        // In the linear case, I expect num_targets_forward_direction slices from the right
-        // In the ring case, I expect num_targets_backward_direction slices from the right
-        if (forward_slices_received < forward_slices_expected) {
-            while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_forward) <= forward_slices_received);
-            // Got it
-            forward_slices_received++;
-
-            uint32_t forward_chip_id = my_chip_id + forward_slices_received;
-            uint32_t actual_forward_chip_id =
-                (forward_chip_id >= ring_size) ? forward_chip_id - ring_size : forward_chip_id;
-            if (fuse_op) {
-                // Signal matmul to go
-                op_signaler_forward.synchronize_workers_and_signal_op(actual_forward_chip_id);
-            }
-
-            // Should I forward what I got from the right to my left?
-            // In the linear case, if I have any targets to my left, always forward
-            // In the ring case, if I have received on the right less than my targets on the left, forward
-            if ((topology == Topology::Linear && num_targets_backward_direction > 0) ||
-                (topology == Topology::Ring && (forward_slices_received < (num_targets_backward_direction + 1)))) {
-                // read the next forward slice out of memory, and put it in CB
-                uint32_t output_tile_id_start = actual_forward_chip_id * input_tensor_Wt;
-                pages_read_in_row = 0;
-                row_offset = 0;
-                tiles_read = 0;
-                tiles_to_read = slice_num_pages;
-                slice_Wt = input_tensor_Wt;
-                stride_Wt = output_tensor_Wt;
-                while (tiles_read < tiles_to_read) {
-                    cb_reserve_back(cb_backward_id, packet_size_in_pages);
-                    size_t l1_write_addr = get_write_ptr(cb_backward_id);
-                    uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
-                    for (uint32_t j = 0; j < num_pages_to_read; j++) {
-                        noc_async_read_tile(
-                            output_tile_id_start + row_offset + pages_read_in_row,
-                            output_tensor_addrgen,
-                            l1_write_addr);
-                        l1_write_addr += input_tensor_page_size;
-                        tiles_read++;
-
-                        pages_read_in_row++;
-                        if (pages_read_in_row >= slice_Wt) {
-                            row_offset += stride_Wt;
-                            pages_read_in_row = 0;
-                        }
-                    }
-
-                    noc_async_read_barrier();
-                    cb_push_back(cb_backward_id, packet_size_in_pages);
-                }
-            }
-        }
-
         // Do i expect more from the left?
         // In the linear case, I expect num_targets_backward_direction slices from the left
-        // In the ring case, I expect num_targets_forward_direction slices from the right
+        // In the ring case, I expect num_targets_backward_direction slices from the right, (keep in mind this differs
+        // for odd/even chips)
         if (backward_slices_received < backward_slices_expected) {
             while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_backward) <= backward_slices_received);
             // Got it
@@ -172,7 +127,7 @@ void kernel_main() {
             // In the linear case, if I have any targets to my right, always forward
             // In the ring case, if I have received on the left less than my targets on the right, forward
             if ((topology == Topology::Linear && num_targets_forward_direction > 0) ||
-                (topology == Topology::Ring && (backward_slices_received < (num_targets_forward_direction + 1)))) {
+                (topology == Topology::Ring && (backward_slices_received < (forward_writes_expected + 1)))) {
                 // read the next backward slice out of memory, and put it in CB
                 uint32_t output_tile_id_start = actual_backward_chip_id * input_tensor_Wt;
                 pages_read_in_row = 0;
@@ -202,6 +157,65 @@ void kernel_main() {
 
                     noc_async_read_barrier();
                     cb_push_back(cb_forward_id, packet_size_in_pages);
+                }
+            }
+        }
+
+        // Do i expect more from the right?
+        // In the linear case, I expect num_targets_forward_direction slices from the right
+        // In the ring case, I expect num_targets_forward_direction slices from the right (keep in mind this differs for
+        // odd/even chips)
+        if (forward_slices_received < forward_slices_expected) {
+            while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_forward) <= forward_slices_received);
+            // Got it
+            forward_slices_received++;
+            uint32_t forward_chip_id = my_chip_id + forward_slices_received;
+            uint32_t actual_forward_chip_id =
+                (forward_chip_id >= ring_size) ? forward_chip_id - ring_size : forward_chip_id;
+            if (fuse_op) {
+                // Signal matmul to go
+                if (forward_slices_received == forward_slices_expected &&
+                    !(my_chip_id % 2)) {  // num targets/forward backward alternate in all_gather, but not in matmul
+                    op_signaler_backward.synchronize_workers_and_signal_op(actual_forward_chip_id);
+                } else {
+                    op_signaler_forward.synchronize_workers_and_signal_op(actual_forward_chip_id);
+                }
+            }
+
+            // Should I forward what I got from the right to my left?
+            // In the linear case, if I have any targets to my left, always forward
+            // In the ring case, if I have received on the right less than my targets on the left, forward
+            if ((topology == Topology::Linear && num_targets_backward_direction > 0) ||
+                (topology == Topology::Ring && (forward_slices_received < (backward_writes_expected + 1)))) {
+                // read the next forward slice out of memory, and put it in CB
+                uint32_t output_tile_id_start = actual_forward_chip_id * input_tensor_Wt;
+                pages_read_in_row = 0;
+                row_offset = 0;
+                tiles_read = 0;
+                tiles_to_read = slice_num_pages;
+                slice_Wt = input_tensor_Wt;
+                stride_Wt = output_tensor_Wt;
+                while (tiles_read < tiles_to_read) {
+                    cb_reserve_back(cb_backward_id, packet_size_in_pages);
+                    size_t l1_write_addr = get_write_ptr(cb_backward_id);
+                    uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
+                    for (uint32_t j = 0; j < num_pages_to_read; j++) {
+                        noc_async_read_tile(
+                            output_tile_id_start + row_offset + pages_read_in_row,
+                            output_tensor_addrgen,
+                            l1_write_addr);
+                        l1_write_addr += input_tensor_page_size;
+                        tiles_read++;
+
+                        pages_read_in_row++;
+                        if (pages_read_in_row >= slice_Wt) {
+                            row_offset += stride_Wt;
+                            pages_read_in_row = 0;
+                        }
+                    }
+
+                    noc_async_read_barrier();
+                    cb_push_back(cb_backward_id, packet_size_in_pages);
                 }
             }
         }
