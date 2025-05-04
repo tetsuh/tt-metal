@@ -13,17 +13,6 @@ using address_t = uint32_t;
 using tt::tt_metal::BufferType;
 using ttnn::ccl::Topology;
 
-// inline void print_full_tile(uint32_t cb_id, uint32_t tile_id = 0, bool untilize = false) {
-//      DPRINT << "======" << ENDL();
-//      for (uint8_t r = 0; r < 32; ++ r) {
-//          SliceRange sr_left = SliceRange{.h0 = r, .h1 = (uint8_t)(r+1), .hs = 1, .w0 = 0, .w1 = 16, .ws = 1};
-//          SliceRange sr_right = SliceRange{.h0 = r, .h1 = (uint8_t)(r+1), .hs = 1, .w0 = 17, .w1 = 32, .ws = 1};
-//          DPRINT << (uint)r << ": " << TileSlice(cb_id, tile_id, sr_left, false, untilize) << " " << TileSlice(cb_id,
-//          tile_id, sr_right, true, untilize) << ENDL();
-//      }
-//      DPRINT << "++++++" << ENDL();
-// }
-
 ///////////////////////////////////////////////////
 // COMPILE TIME ARGS
 ///////////////////////////////////////////////////
@@ -79,10 +68,6 @@ void kernel_main() {
     uint32_t tiles_to_read = slice_num_pages;
     uint32_t slice_Wt = input_tensor_Wt;
     uint32_t stride_Wt = 0;
-    // DPRINT << "INPUT TILE ID START " << input_tile_id_start << ENDL();
-    // DPRINT << "slice_Wt " << slice_Wt << ENDL();
-    // DPRINT << "stride_Wt " << stride_Wt << ENDL();
-    // DPRINT << "tiles_to_read " << tiles_to_read << ENDL();
     while (tiles_read < tiles_to_read) {
         cb_reserve_back(cb_forward_id, packet_size_in_pages);
         const uint32_t l1_write_addr_base = get_write_ptr(cb_forward_id);
@@ -98,11 +83,6 @@ void kernel_main() {
         cb_push_back(cb_forward_id, packet_size_in_pages);
     }
 
-    // DPRINT << "READER PAST WRITE LOCAL SEMAPHORE\n" << ENDL();
-    // DPRINT << "MY CHIP ID " << my_chip_id << ENDL();
-    // DPRINT << "num targets forward " << num_targets_forward_direction << ENDL();
-    // DPRINT << "num targets backward " << num_targets_backward_direction << ENDL();
-
     constexpr bool output_tensor_is_dram = output_buffer_type == tt::tt_metal::BufferType::DRAM;
     auto output_tensor_addrgen = InterleavedAddrGenFast<output_tensor_is_dram>{
         .bank_base_address = output_tensor_address,
@@ -112,26 +92,18 @@ void kernel_main() {
     uint32_t backward_slices_received = 0;
     uint32_t forward_slices_expected, backward_slices_expected;
     if (topology == Topology::Linear) {
-        DPRINT << "READER TOPOLOGY LINEAR" << ENDL();
         forward_slices_expected = num_targets_forward_direction;
         backward_slices_expected = num_targets_backward_direction;
     } else if (topology == Topology::Ring) {
-        DPRINT << "READER TOPOLOGY RING" << ENDL();
         forward_slices_expected = num_targets_backward_direction;
         backward_slices_expected = num_targets_forward_direction;
     }
-    // DPRINT << "forward slices expected " << forward_slices_expected << ENDL();
-    // DPRINT << "backward slices expected " << backward_slices_expected << ENDL();
     while (forward_slices_received < forward_slices_expected || backward_slices_received < backward_slices_expected) {
-        DPRINT << "READER WHILE LOOP ITERATION\n" << ENDL();
         // Do i expect more from the right?
         // In the linear case, I expect num_targets_forward_direction slices from the right
         // In the ring case, I expect num_targets_backward_direction slices from the right
         if (forward_slices_received < forward_slices_expected) {
-            DPRINT << "READER EXPECT " << forward_slices_expected << " from the right, have gotten "
-                   << forward_slices_received << ENDL();
             while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_forward) <= forward_slices_received);
-            DPRINT << "READER GOT slice " << forward_slices_received + 1 << " from the right" << ENDL();
             // Got it
             forward_slices_received++;
 
@@ -148,7 +120,6 @@ void kernel_main() {
             // In the ring case, if I have received on the right less than my targets on the left, forward
             if ((topology == Topology::Linear && num_targets_backward_direction > 0) ||
                 (topology == Topology::Ring && (forward_slices_received < (num_targets_backward_direction + 1)))) {
-                DPRINT << "READER SEND WHAT I GOT FROM THE RIGHT TO THE LEFT " << ENDL();
                 // read the next forward slice out of memory, and put it in CB
                 uint32_t output_tile_id_start = actual_forward_chip_id * input_tensor_Wt;
                 pages_read_in_row = 0;
@@ -186,10 +157,7 @@ void kernel_main() {
         // In the linear case, I expect num_targets_backward_direction slices from the left
         // In the ring case, I expect num_targets_forward_direction slices from the right
         if (backward_slices_received < backward_slices_expected) {
-            DPRINT << "READER EXPECT " << backward_slices_expected << " from the left, have gotten "
-                   << backward_slices_received << ENDL();
             while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_backward) <= backward_slices_received);
-            DPRINT << "READER GOT slice " << backward_slices_received + 1 << " from the left" << ENDL();
             // Got it
             backward_slices_received++;
 
@@ -197,7 +165,7 @@ void kernel_main() {
             uint32_t actual_backward_chip_id = (backward_chip_id < 0) ? ring_size + backward_chip_id : backward_chip_id;
             if (fuse_op) {
                 // Signal matmul to go
-                op_signaler_forward.synchronize_workers_and_signal_op(actual_backward_chip_id);
+                op_signaler_backward.synchronize_workers_and_signal_op(actual_backward_chip_id);
             }
 
             // Should I forward what I got from the left to my right?
@@ -205,7 +173,6 @@ void kernel_main() {
             // In the ring case, if I have received on the left less than my targets on the right, forward
             if ((topology == Topology::Linear && num_targets_forward_direction > 0) ||
                 (topology == Topology::Ring && (backward_slices_received < (num_targets_forward_direction + 1)))) {
-                DPRINT << "READER SEND WHAT I GOT FROM THE LEFT TO THE RIGHT " << ENDL();
                 // read the next backward slice out of memory, and put it in CB
                 uint32_t output_tile_id_start = actual_backward_chip_id * input_tensor_Wt;
                 pages_read_in_row = 0;
@@ -238,6 +205,10 @@ void kernel_main() {
                 }
             }
         }
-        DPRINT << "END OF WHILE LOOP " << ENDL();
     }
+
+    const uint64_t dest_noc_addr_forward = get_noc_addr(my_x[0], my_y[0], out_ready_sem_forward);
+    noc_inline_dw_write(dest_noc_addr_forward, 0);
+    const uint64_t dest_noc_addr_backward = get_noc_addr(my_x[0], my_y[0], out_ready_sem_backward);
+    noc_inline_dw_write(dest_noc_addr_backward, 0);
 }

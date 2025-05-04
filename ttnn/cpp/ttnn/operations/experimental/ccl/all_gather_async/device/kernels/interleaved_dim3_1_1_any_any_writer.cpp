@@ -17,17 +17,6 @@ using address_t = uint32_t;
 using tt::tt_metal::BufferType;
 using ttnn::ccl::Topology;
 
-// inline void print_full_tile(uint32_t cb_id, uint32_t tile_id = 0, bool untilize = false) {
-//      DPRINT << "======" << ENDL();
-//      for (uint8_t r = 0; r < 32; ++ r) {
-//          SliceRange sr_left = SliceRange{.h0 = r, .h1 = (uint8_t)(r+1), .hs = 1, .w0 = 0, .w1 = 16, .ws = 1};
-//          SliceRange sr_right = SliceRange{.h0 = r, .h1 = (uint8_t)(r+1), .hs = 1, .w0 = 17, .w1 = 32, .ws = 1};
-//          DPRINT << (uint)r << ": " << TileSlice(cb_id, tile_id, sr_left, false, untilize) << " " << TileSlice(cb_id,
-//          tile_id, sr_right, true, untilize) << ENDL();
-//      }
-//      DPRINT << "++++++" << ENDL();
-// }
-
 ///////////////////////////////////////////////////
 // COMPILE TIME ARGS
 ///////////////////////////////////////////////////
@@ -119,10 +108,6 @@ void kernel_main() {
     uint32_t tiles_read = 0;
     uint32_t tiles_to_read = slice_num_pages;
     uint32_t tile_id_start = my_chip_id * input_tensor_Wt;
-    // DPRINT << "writer TILE ID START " << tile_id_start << ENDL();
-    // DPRINT << "writer input_tensor_Wt " << input_tensor_Wt << ENDL();
-    // DPRINT << "writer output_tensor_Wt " << output_tensor_Wt << ENDL();
-    // DPRINT << "writer tiles_to_read " << tiles_to_read << ENDL();
     while (tiles_read < tiles_to_read) {
         cb_wait_front(cb_forward_id, packet_size_in_pages);
         size_t l1_read_addr = get_read_ptr(cb_forward_id);
@@ -150,7 +135,6 @@ void kernel_main() {
         cb_pop_front(cb_forward_id, packet_size_in_pages);
     }
 
-    // DPRINT << "WRITER PAST WRITE LOCAL BEFORE SEMAPHORE INC WRITE \n" << ENDL();
     // 2. unicast output ready semaphore forward
     uint64_t out_ready_sem_noc_addr_in_pkt_forward =
         safe_get_noc_addr(out_ready_sem_noc0_x, out_ready_sem_noc0_y, out_ready_sem_backward, 0);
@@ -182,10 +166,6 @@ void kernel_main() {
             packet_header_buffer_seminc_backward, sizeof(PACKET_HEADER_TYPE));
     }
 
-    // DPRINT << "WRITER PAST WRITE LOCAL SEMAPHORE\n" << ENDL();
-    // DPRINT << "MY CHIP ID " << my_chip_id << ENDL();
-    // DPRINT << "num targets forward " << num_targets_forward_direction << ENDL();
-    // DPRINT << "num targets backward " << num_targets_backward_direction << ENDL();
     // increment locally
     if (fuse_op) {
         // Synchronize and signal that the local tensor slice is available
@@ -194,25 +174,21 @@ void kernel_main() {
 
     uint32_t forward_writes_expected, backward_writes_expected;
     if (topology == Topology::Linear) {
-        DPRINT << "READER TOPOLOGY LINEAR" << ENDL();
         forward_writes_expected = num_targets_backward_direction;
         backward_writes_expected = num_targets_forward_direction;
     } else if (topology == Topology::Ring) {
-        DPRINT << "READER TOPOLOGY RING" << ENDL();
         forward_writes_expected = num_targets_forward_direction;
         backward_writes_expected = num_targets_backward_direction;
     }
 
     while (((backward_writes < backward_writes_expected) && fabric_connection.has_backward_connection()) ||
            ((forward_writes < forward_writes_expected) && fabric_connection.has_forward_connection())) {
-        // DPRINT << "WRITER WHILE LOOP ITERATION \n" << ENDL();
         // unicast backward
         // Did I get something from my right to send to my left?
         // In the linear case, I expect num_targets_forward_direction slices from the right, and check if I have a
         // neighbor to the left
         // In the ring case, I expect to write to the left num_backward_target times
         if ((backward_writes < backward_writes_expected) && fabric_connection.has_backward_connection()) {
-            // DPRINT << "WRITER FORWARD THE " << backward_writes + 1 << " slice from the right to the left" << ENDL();
             pages_read_in_row = 0;
             row_offset = 0;
             tiles_read = 0;
@@ -261,7 +237,6 @@ void kernel_main() {
         // neighbor to the right
         // In the ring case, I expect to write to the right num_forward_target times
         if ((forward_writes < forward_writes_expected) && fabric_connection.has_forward_connection()) {
-            // DPRINT << "WRITER FORWARD THE " << forward_writes + 1 << " slice from the left to the right" << ENDL();
             pages_read_in_row = 0;
             row_offset = 0;
             tiles_read = 0;
