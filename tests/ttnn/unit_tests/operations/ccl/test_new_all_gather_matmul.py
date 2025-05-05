@@ -252,7 +252,8 @@ def run_all_gather_impl(
         logger.info(f"Done executing trace")
 
         # Synchronize the devices
-        ttnn.synchronize_device(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
+        if not use_legacy_allgather:
+            ttnn.synchronize_device(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
 
         tt_all_gather_out_tensor_list.append(tt_all_gather_out_tensor)
         tt_matmul_out_tensor_list.append(tt_matmul_out_tensor)
