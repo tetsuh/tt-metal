@@ -11,7 +11,6 @@
 #include "minimal_ccl_common.hpp"
 #include <cstdint>
 #include <utility>
-#include "ckernel.h"
 
 using address_t = uint32_t;
 using tt::tt_metal::BufferType;
@@ -177,13 +176,8 @@ void kernel_main() {
         forward_writes_expected = num_targets_backward_direction;
         backward_writes_expected = num_targets_forward_direction;
     } else if (topology == Topology::Ring) {
-        if (my_chip_id % 2) {
-            forward_writes_expected = num_targets_forward_direction - 2;
-            backward_writes_expected = num_targets_backward_direction;
-        } else {
-            forward_writes_expected = num_targets_forward_direction;
-            backward_writes_expected = num_targets_backward_direction - 2;
-        }
+        forward_writes_expected = num_targets_forward_direction - 1;
+        backward_writes_expected = num_targets_backward_direction - 1;
     }
 
     while (((backward_writes < backward_writes_expected) && fabric_connection.has_backward_connection()) ||
@@ -227,7 +221,6 @@ void kernel_main() {
 
                 cb_pop_front(cb_forward_id, packet_size_in_pages);
             }
-
             // 2. unicast output ready semaphore forward
             fabric_connection.get_forward_connection().wait_for_empty_write_slot();
             pkt_hdr_fwd->to_chip_unicast(1);

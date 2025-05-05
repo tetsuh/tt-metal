@@ -98,13 +98,8 @@ void kernel_main() {
     } else if (topology == Topology::Ring) {
         forward_slices_expected = num_targets_backward_direction;
         backward_slices_expected = num_targets_forward_direction;
-        if (my_chip_id % 2) {
-            forward_writes_expected = num_targets_forward_direction - 2;
-            backward_writes_expected = num_targets_backward_direction;
-        } else {
-            forward_writes_expected = num_targets_forward_direction;
-            backward_writes_expected = num_targets_backward_direction - 2;
-        }
+        forward_writes_expected = num_targets_forward_direction - 1;
+        backward_writes_expected = num_targets_backward_direction - 1;
     }
     while (forward_slices_received < forward_slices_expected || backward_slices_received < backward_slices_expected) {
         // Do i expect more from the left?
@@ -122,7 +117,6 @@ void kernel_main() {
                 // Signal matmul to go
                 op_signaler_backward.synchronize_workers_and_signal_op(actual_backward_chip_id);
             }
-
             // Should I forward what I got from the left to my right?
             // In the linear case, if I have any targets to my right, always forward
             // In the ring case, if I have received on the left less than my targets on the right, forward
@@ -174,14 +168,8 @@ void kernel_main() {
                 (forward_chip_id >= ring_size) ? forward_chip_id - ring_size : forward_chip_id;
             if (fuse_op) {
                 // Signal matmul to go
-                if (forward_slices_received == forward_slices_expected &&
-                    !(my_chip_id % 2)) {  // num targets/forward backward alternate in all_gather, but not in matmul
-                    op_signaler_backward.synchronize_workers_and_signal_op(actual_forward_chip_id);
-                } else {
-                    op_signaler_forward.synchronize_workers_and_signal_op(actual_forward_chip_id);
-                }
+                op_signaler_forward.synchronize_workers_and_signal_op(actual_forward_chip_id);
             }
-
             // Should I forward what I got from the right to my left?
             // In the linear case, if I have any targets to my left, always forward
             // In the ring case, if I have received on the right less than my targets on the left, forward
