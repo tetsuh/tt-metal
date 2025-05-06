@@ -8,6 +8,7 @@ import math
 from loguru import logger
 import ttnn
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_equal, comp_pcc
+from tests.ttnn.unit_tests.operations.ccl.test_new_all_reduce import check_mesh_tensor_alloc
 from models.utility_functions import skip_for_grayskull
 from tests.ttnn.unit_tests.operations.ccl.test_all_gather import is_unsupported_case
 
@@ -85,6 +86,37 @@ def run_all_gather_impl(
         ccl_semaphore_handles = [
             create_global_semaphores(t3k_mesh_device, num_devices, ccl_sub_device_crs, 0) for _ in range(num_iters)
         ]
+
+    ### Create persistent output buffers
+    logger.info("Creating persistent buffers")
+    persistent_intermediate_buffers = [
+        ttnn.from_torch(
+            torch.zeros(ag_output_shape),
+            device=t3k_mesh_device,
+            layout=ttnn.TILE_LAYOUT,
+            dtype=ag_input_dtype,
+            memory_config=mem_config_ag,
+            mesh_mapper=ttnn.ReplicateTensorToMesh(t3k_mesh_device),
+        )
+        for _ in range(num_iters)
+    ]
+    persistent_output_buffers = [
+        ttnn.from_torch(
+            torch.zeros(ag_output_shape),
+            device=t3k_mesh_device,
+            layout=ttnn.TILE_LAYOUT,
+            dtype=ag_input_dtype,
+            memory_config=mem_config_ag,
+            mesh_mapper=ttnn.ReplicateTensorToMesh(t3k_mesh_device),
+        )
+        for _ in range(num_iters)
+    ]
+
+    for im_buf, out_buf in zip(persistent_intermediate_buffers, persistent_output_buffers):
+        check_mesh_tensor_alloc(im_buf)
+        check_mesh_tensor_alloc(out_buf)
+
+    logger.info("Done creating persistent buffers")
 
     ##### All gather input setup #####
     logger.info(f"All gather output shape: {ag_output_shape}")
@@ -183,7 +215,9 @@ def run_all_gather_impl(
             else:
                 tt_all_gather_out_tensor = ttnn.experimental.all_gather_async(
                     input_tensor_mesh_list[i],
-                    dim,
+                    persistent_intermediate_buffer=persistent_intermediate_buffers[i],
+                    persistent_output_buffer=persistent_output_buffers[i],
+                    dim=dim,
                     multi_device_global_semaphore=ccl_semaphore_handles[i],
                     num_links=num_links,
                     memory_config=mem_config_ag,
@@ -329,8 +363,8 @@ def run_all_gather_impl(
 @pytest.mark.parametrize(
     "use_non_fused",
     [
-        # True,
-        False,
+        True,
+        # False,
     ],
 )
 @pytest.mark.parametrize(

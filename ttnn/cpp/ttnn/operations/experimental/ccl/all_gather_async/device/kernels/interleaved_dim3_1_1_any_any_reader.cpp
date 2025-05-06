@@ -19,7 +19,7 @@ using ttnn::ccl::Topology;
 
 constexpr uint32_t my_chip_id = get_compile_time_arg_val(0);
 constexpr BufferType input_buffer_type = static_cast<BufferType>(get_compile_time_arg_val(1));
-constexpr BufferType output_buffer_type = static_cast<BufferType>(get_compile_time_arg_val(2));
+constexpr BufferType intermediate_buffer_type = static_cast<BufferType>(get_compile_time_arg_val(2));
 constexpr uint32_t cb_forward_id = get_compile_time_arg_val(3);
 constexpr uint32_t cb_backward_id = get_compile_time_arg_val(4);
 constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(5);
@@ -40,7 +40,7 @@ void kernel_main() {
     uint32_t arg_idx = 0;
     // Load the input tensor spec
     address_t input_tensor_address = get_arg_val<address_t>(arg_idx++);
-    address_t output_tensor_address = get_arg_val<address_t>(arg_idx++);
+    address_t intermediate_tensor_address = get_arg_val<address_t>(arg_idx++);
     uint32_t input_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
     uint32_t output_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
     uint32_t input_tile_id_start = get_arg_val<uint32_t>(arg_idx++);
@@ -83,9 +83,9 @@ void kernel_main() {
         cb_push_back(cb_forward_id, packet_size_in_pages);
     }
 
-    constexpr bool output_tensor_is_dram = output_buffer_type == tt::tt_metal::BufferType::DRAM;
-    auto output_tensor_addrgen = InterleavedAddrGenFast<output_tensor_is_dram>{
-        .bank_base_address = output_tensor_address,
+    constexpr bool intermediate_tensor_is_dram = intermediate_buffer_type == tt::tt_metal::BufferType::DRAM;
+    auto intermediate_tensor_addrgen = InterleavedAddrGenFast<intermediate_tensor_is_dram>{
+        .bank_base_address = intermediate_tensor_address,
         .page_size = input_tensor_page_size,
         .data_format = get_dataformat(cb_forward_id)};
     uint32_t forward_slices_received = 0;
@@ -137,7 +137,7 @@ void kernel_main() {
                     for (uint32_t j = 0; j < num_pages_to_read; j++) {
                         noc_async_read_tile(
                             output_tile_id_start + row_offset + pages_read_in_row,
-                            output_tensor_addrgen,
+                            intermediate_tensor_addrgen,
                             l1_write_addr);
                         l1_write_addr += input_tensor_page_size;
                         tiles_read++;
@@ -190,7 +190,7 @@ void kernel_main() {
                     for (uint32_t j = 0; j < num_pages_to_read; j++) {
                         noc_async_read_tile(
                             output_tile_id_start + row_offset + pages_read_in_row,
-                            output_tensor_addrgen,
+                            intermediate_tensor_addrgen,
                             l1_write_addr);
                         l1_write_addr += input_tensor_page_size;
                         tiles_read++;

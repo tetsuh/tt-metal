@@ -89,7 +89,9 @@ struct AllGatherAsync {
         const ttnn::MeshCoordinate& coord,
         const std::vector<Tensor>& input_tensors,
         std::vector<Tensor>& output_tensors) const;
-    std::vector<Tensor> create_output_tensors(const std::vector<Tensor>& input_tensors) const;
+    std::vector<Tensor> create_output_tensors(
+        const std::vector<Tensor>& input_tensors,
+        const std::vector<std::optional<Tensor>>& optional_output_tensors) const;
     tt::tt_metal::operation::Hash compute_program_hash(const std::vector<Tensor>& input_tensors) const;
 
     AllGatherAsyncVersion select_version(const Tensor& input_tensor) const;
@@ -131,6 +133,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     const std::optional<tt::tt_metal::SubDeviceId>& sub_device_id);
 tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleaved_dim3_1_1_any_any(
     const Tensor& input_tensor,
+    Tensor& intermediate_tensor,
     IDevice* target_device,
     std::optional<IDevice*> forward_device,
     std::optional<IDevice*> backward_device,
@@ -145,6 +148,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
 tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleaved_dim3_1_1_any_any_helper(
     tt::tt_metal::Program& program,
     const Tensor& input_tensor,
+    Tensor& intermediate_tensor,
     IDevice* target_device,
     std::optional<IDevice*> forward_device,
     std::optional<IDevice*> backward_device,
@@ -178,6 +182,17 @@ namespace ccl {
 
 Tensor all_gather_async(
     const Tensor& input_tensor,
+    const uint32_t dim,
+    const std::vector<GlobalSemaphore>& multi_device_global_semaphore,
+    const uint32_t num_links = 1,
+    const std::optional<MemoryConfig>& memory_config = std::nullopt,
+    const ttnn::ccl::Topology topology = ttnn::ccl::Topology::Ring,
+    std::optional<tt::tt_metal::SubDeviceId> sub_device_id = std::nullopt);
+
+Tensor all_gather_async(
+    const Tensor& input_tensor,
+    Tensor& persistent_intermediate_buffer,
+    Tensor& persistent_output_buffer,
     const uint32_t dim,
     const std::vector<GlobalSemaphore>& multi_device_global_semaphore,
     const uint32_t num_links = 1,

@@ -23,11 +23,11 @@ using ttnn::ccl::Topology;
 constexpr uint32_t my_chip_id = get_compile_time_arg_val(0);
 constexpr uint32_t reserved_packet_header_cb_id = get_compile_time_arg_val(1);
 constexpr uint32_t num_packet_headers_storable = get_compile_time_arg_val(2);
-constexpr BufferType buffer0_type = static_cast<BufferType>(get_compile_time_arg_val(3));
+constexpr BufferType intermediate_type = static_cast<BufferType>(get_compile_time_arg_val(3));
 constexpr uint32_t cb_forward_id = get_compile_time_arg_val(4);
 constexpr uint32_t cb_backward_id = get_compile_time_arg_val(5);
 constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(6);
-constexpr uint32_t tensor0_page_size = get_compile_time_arg_val(7);
+constexpr uint32_t intermediate_page_size = get_compile_time_arg_val(7);
 constexpr uint32_t num_targets_forward_direction = get_compile_time_arg_val(8);
 constexpr uint32_t num_targets_backward_direction = get_compile_time_arg_val(9);
 constexpr bool dynamic_alternate = get_compile_time_arg_val(10);
@@ -45,7 +45,7 @@ void kernel_main() {
 
     uint32_t arg_idx = 0;
     // Load the input tensor spec
-    address_t tensor_address0 = get_arg_val<address_t>(arg_idx++);
+    address_t intermediate_address = get_arg_val<address_t>(arg_idx++);
     uint32_t input_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
     uint32_t output_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
     uint32_t slice_num_pages = get_arg_val<uint32_t>(arg_idx++);
@@ -88,10 +88,10 @@ void kernel_main() {
     pkt_hdr_backward->to_chip_unicast(1);
 
     // interleaved addrgen
-    constexpr bool is_dram = buffer0_type == tt::tt_metal::BufferType::DRAM;
-    auto tensor0_addrgen = InterleavedAddrGenFast<is_dram>{
-        .bank_base_address = tensor_address0,
-        .page_size = tensor0_page_size,
+    constexpr bool is_dram = intermediate_type == tt::tt_metal::BufferType::DRAM;
+    auto intermediate_addrgen = InterleavedAddrGenFast<is_dram>{
+        .bank_base_address = intermediate_address,
+        .page_size = intermediate_page_size,
         .data_format = get_dataformat(cb_forward_id)};
 
     if (fabric_connection.is_logically_connected()) {
@@ -114,7 +114,7 @@ void kernel_main() {
         uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
         for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
             uint64_t noc0_dest_noc_addr = get_noc_addr(
-                tile_id_start + row_offset + pages_read_in_row, tensor0_addrgen, 0 /*offset*/, 0 /*noc_id*/);
+                tile_id_start + row_offset + pages_read_in_row, intermediate_addrgen, 0 /*offset*/, 0 /*noc_id*/);
 
             write_and_advance_local_read_address_for_fabric_write(
                 noc0_dest_noc_addr,
@@ -122,9 +122,9 @@ void kernel_main() {
                 pkt_hdr_backward,
                 fabric_connection,
                 l1_read_addr,
-                contig_pages_advanced * tensor0_page_size);
-            tiles_read++;
-            pages_read_in_row++;
+                contig_pages_advanced * intermediate_page_size);
+            tiles_read += contig_pages_advanced;
+            pages_read_in_row += contig_pages_advanced;
             if (pages_read_in_row >= input_tensor_Wt) {
                 row_offset += output_tensor_Wt;
                 pages_read_in_row = 0;
@@ -202,17 +202,20 @@ void kernel_main() {
                 uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
                 for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
                     uint64_t noc0_dest_noc_addr = get_noc_addr(
-                        tile_id_start + row_offset + pages_read_in_row, tensor0_addrgen, 0 /*offset*/, 0 /*noc_id*/);
+                        tile_id_start + row_offset + pages_read_in_row,
+                        intermediate_addrgen,
+                        0 /*offset*/,
+                        0 /*noc_id*/);
 
                     write_and_advance_local_read_address_for_fabric_write_forward(
                         noc0_dest_noc_addr,
                         pkt_hdr_forward,
                         fabric_connection,
                         l1_read_addr,
-                        contig_pages_advanced * tensor0_page_size);
+                        contig_pages_advanced * intermediate_page_size);
 
-                    tiles_read++;
-                    pages_read_in_row++;
+                    tiles_read += contig_pages_advanced;
+                    pages_read_in_row += contig_pages_advanced;
                     if (pages_read_in_row >= input_tensor_Wt) {
                         row_offset += output_tensor_Wt;
                         pages_read_in_row = 0;
@@ -250,16 +253,19 @@ void kernel_main() {
                 uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
                 for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
                     uint64_t noc0_dest_noc_addr = get_noc_addr(
-                        tile_id_start + row_offset + pages_read_in_row, tensor0_addrgen, 0 /*offset*/, 0 /*noc_id*/);
+                        tile_id_start + row_offset + pages_read_in_row,
+                        intermediate_addrgen,
+                        0 /*offset*/,
+                        0 /*noc_id*/);
 
                     write_and_advance_local_read_address_for_fabric_write_backward(
                         noc0_dest_noc_addr,
                         pkt_hdr_backward,
                         fabric_connection,
                         l1_read_addr,
-                        contig_pages_advanced * tensor0_page_size);
-                    tiles_read++;
-                    pages_read_in_row++;
+                        contig_pages_advanced * intermediate_page_size);
+                    tiles_read += contig_pages_advanced;
+                    pages_read_in_row += contig_pages_advanced;
                     if (pages_read_in_row >= input_tensor_Wt) {
                         row_offset += output_tensor_Wt;
                         pages_read_in_row = 0;
