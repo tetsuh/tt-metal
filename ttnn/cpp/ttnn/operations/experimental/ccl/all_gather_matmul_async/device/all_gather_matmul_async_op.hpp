@@ -42,12 +42,14 @@ struct AllGatherMatmulAsync {
     std::vector<IDevice*> devices;
 
     /* General */
-    void validate(
+    void validate_with_output_tensors(
         const std::vector<Tensor>& input_tensors,
         const std::vector<std::optional<const Tensor>>& optional_input_tensors,
-        const std::vector<std::optional<Tensor>>& optional_output_tensors = {std::nullopt}) const;
+        const std::vector<std::optional<Tensor>>& output_tensors) const;
     std::vector<ttnn::TensorSpec> compute_output_specs(const std::vector<Tensor>& input_tensors) const;
-    std::vector<Tensor> create_output_tensors(const std::vector<Tensor>& input_tensors) const;
+    std::vector<Tensor> create_output_tensors(
+        const std::vector<Tensor>& input_tensors,
+        const std::vector<std::optional<Tensor>>& optional_output_tensors) const;
     tt::tt_metal::operation::MeshWorkloadWithCallbacks create_mesh_workload(
         const ttnn::MeshCoordinateRangeSet& tensor_coords,
         const std::vector<Tensor>& input_tensors,
@@ -82,6 +84,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_matmul_async_multi_core
 
     /* General Params */
     const Tensor& input_tensor,
+    Tensor& persistent_intermediate_tensor,
     Tensor& all_gather_output_tensor,
     const Tensor& weight_tensor,
     Tensor& matmul_output_tensor,
@@ -111,6 +114,8 @@ namespace ccl {
 std::vector<Tensor> all_gather_matmul_async(
     const Tensor& input_tensor,
     const Tensor& weight_tensor,
+    Tensor& persistent_intermediate_buffer,
+    Tensor& persistent_output_buffer,
     const uint32_t dim,
     const std::vector<GlobalSemaphore>& multi_device_global_semaphore,
     const CoreCoord all_gather_core_grid_offset,

@@ -26,8 +26,7 @@ constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(5);
 constexpr uint32_t input_tensor_page_size = get_compile_time_arg_val(6);
 constexpr uint32_t num_targets_forward_direction = get_compile_time_arg_val(7);
 constexpr uint32_t num_targets_backward_direction = get_compile_time_arg_val(8);
-constexpr bool fuse_op = get_compile_time_arg_val(9);
-constexpr Topology topology = static_cast<Topology>(get_compile_time_arg_val(10));
+constexpr Topology topology = static_cast<Topology>(get_compile_time_arg_val(9));
 /*
  * CCL Send will present various operating modes. Although there is only a single send kernel, it may (compile time)
  * dispatch implementations depending on those invocation parameters.
@@ -54,13 +53,6 @@ void kernel_main() {
     const uint8_t signal_receiver_sem_forward_noc0_y = get_arg_val<uint32_t>(arg_idx++);
     const uint8_t signal_receiver_sem_backward_noc0_x = get_arg_val<uint32_t>(arg_idx++);
     const uint8_t signal_receiver_sem_backward_noc0_y = get_arg_val<uint32_t>(arg_idx++);
-
-    OpSignaler op_signaler_forward;
-    OpSignaler op_signaler_backward;
-    if constexpr (fuse_op) {
-        op_signaler_forward = OpSignaler(arg_idx);
-        op_signaler_backward = OpSignaler(arg_idx);
-    }
 
     // Push out our local slice
     constexpr bool input_tensor_is_dram = input_buffer_type == tt::tt_metal::BufferType::DRAM;
@@ -126,10 +118,6 @@ void kernel_main() {
 
             int backward_chip_id = my_chip_id - backward_slices_received;
             uint32_t actual_backward_chip_id = (backward_chip_id < 0) ? ring_size + backward_chip_id : backward_chip_id;
-            if (fuse_op) {
-                // Signal matmul to go
-                op_signaler_backward.synchronize_workers_and_signal_op(actual_backward_chip_id);
-            }
             // Should I forward what I got from the left to my right?
             // In the linear case, if I have any targets to my right, always forward
             // In the ring case, if I have received on the left less than my targets on the right, forward
@@ -180,10 +168,6 @@ void kernel_main() {
             uint32_t forward_chip_id = my_chip_id + forward_slices_received;
             uint32_t actual_forward_chip_id =
                 (forward_chip_id >= ring_size) ? forward_chip_id - ring_size : forward_chip_id;
-            if (fuse_op) {
-                // Signal matmul to go
-                op_signaler_forward.synchronize_workers_and_signal_op(actual_forward_chip_id);
-            }
             // Should I forward what I got from the right to my left?
             // In the linear case, if I have any targets to my left, always forward
             // In the ring case, if I have received on the right less than my targets on the left, forward

@@ -253,9 +253,11 @@ def run_all_gather_impl(
                 tt_all_gather_out_tensor, tt_matmul_out_tensor = ttnn.experimental.all_gather_matmul_async(
                     input_tensor_mesh_list[i],
                     weight_tt,
-                    dim,
-                    ccl_semaphore_handles[i],
-                    (0, 6),
+                    persistent_intermediate_buffer=persistent_intermediate_buffers[i],
+                    persistent_output_buffer=persistent_output_buffers[i],
+                    dim=dim,
+                    multi_device_global_semaphore=ccl_semaphore_handles[i],
+                    all_gather_core_grid_offset=(0, 6),
                     bias=bias_tt,
                     num_links=num_links,
                     memory_config_ag=mem_config_ag,
@@ -363,8 +365,8 @@ def run_all_gather_impl(
 @pytest.mark.parametrize(
     "use_non_fused",
     [
-        True,
-        # False,
+        # True,
+        False,
     ],
 )
 @pytest.mark.parametrize(

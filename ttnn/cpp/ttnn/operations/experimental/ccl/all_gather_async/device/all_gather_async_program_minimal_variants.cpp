@@ -442,7 +442,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         op_config.get_page_size(),                               // tensor0_page_size
         num_targets_forward,                                     // num_slices_forward_direction
         num_targets_backward,                                    // num_slices_backward_direction
-        fuse_op,                                                 // fused op
         static_cast<uint32_t>(topology)                          // topology
     };
     auto worker_sender_reader_kernel_id = tt::tt_metal::CreateKernel(
@@ -489,7 +488,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         num_targets_forward,                                     // num_targets_forward_direction
         num_targets_backward,                                    // num_targets_backward_direction
         static_cast<uint32_t>(topology),                         // topology
-        1                                                        // direction
+        1,                                                       // direction
+        fuse_op,                                                 // fused op
     };
     auto worker_forward_receiver_writer_kernel_id = tt::tt_metal::CreateKernel(
         program,
@@ -529,7 +529,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         num_targets_forward,                                     // num_targets_forward_direction
         num_targets_backward,                                    // num_targets_backward_direction
         static_cast<uint32_t>(topology),                         // topology
-        0                                                        // direction
+        0,                                                       // direction
+        fuse_op,                                                 // fused op
     };
     auto worker_backward_receiver_writer_kernel_id = tt::tt_metal::CreateKernel(
         program,
@@ -622,10 +623,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             receiver_worker_cores_noc.at(0).x,         // backward receiver core x
             receiver_worker_cores_noc.at(0).y,         // backward receiver core y
         };
-        if (fuse_op) {
-            fused_op_signaler_forward->push_all_gather_fused_op_rt_args(reader_rt_args, 1, 0, 1);
-            fused_op_signaler_backward->push_all_gather_fused_op_rt_args(reader_rt_args, 1, 0, 0);
-        }
         tt::tt_metal::SetRuntimeArgs(program, worker_sender_reader_kernel_id, {core}, reader_rt_args);
 
         // Set Sender Writer runtime args
@@ -695,6 +692,9 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             input_tile_id_end,                  // slice_num_pages
             ring_size,                          // ring_size
         };
+        if (fuse_op) {
+            fused_op_signaler_forward->push_all_gather_fused_op_rt_args(forward_receiver_writer_rt_args, 1, 0, 1);
+        }
         tt::tt_metal::SetRuntimeArgs(
             program,
             worker_forward_receiver_writer_kernel_id,
@@ -707,6 +707,9 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             input_tile_id_end,                  // slice_num_pages
             ring_size,                          // ring_size
         };
+        if (fuse_op) {
+            fused_op_signaler_backward->push_all_gather_fused_op_rt_args(backward_receiver_writer_rt_args, 1, 0, 0);
+        }
         tt::tt_metal::SetRuntimeArgs(
             program,
             worker_backward_receiver_writer_kernel_id,

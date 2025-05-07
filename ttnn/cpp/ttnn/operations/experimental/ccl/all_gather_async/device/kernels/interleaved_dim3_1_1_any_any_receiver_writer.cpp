@@ -29,6 +29,7 @@ constexpr uint32_t num_targets_forward_direction = get_compile_time_arg_val(5);
 constexpr uint32_t num_targets_backward_direction = get_compile_time_arg_val(6);
 constexpr Topology topology = static_cast<Topology>(get_compile_time_arg_val(7));
 constexpr bool direction = get_compile_time_arg_val(8);
+constexpr bool fuse_op = get_compile_time_arg_val(9);
 
 void kernel_main() {
     ///////////////////////////////////////////////////
@@ -41,6 +42,11 @@ void kernel_main() {
     uint32_t output_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
     uint32_t slice_num_pages = get_arg_val<uint32_t>(arg_idx++);
     uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
+
+    OpSignaler op_signaler;
+    if constexpr (fuse_op) {
+        op_signaler = OpSignaler(arg_idx);
+    }
 
     // interleaved addrgen
     constexpr bool output_is_dram = output_tensor_buffer_type == tt::tt_metal::BufferType::DRAM;
@@ -115,6 +121,10 @@ void kernel_main() {
             }
 
             cb_pop_front(cb_intermediate_id, packet_size_in_pages);
+        }
+        if (fuse_op) {
+            // Signal matmul to go
+            op_signaler.synchronize_workers_and_signal_op(actual_sender_chip_id);
         }
     }
 
