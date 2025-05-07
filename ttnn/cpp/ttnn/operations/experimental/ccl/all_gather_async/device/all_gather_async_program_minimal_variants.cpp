@@ -362,10 +362,10 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     const auto receiver_worker_core_range = total_worker_core_range.subtract(sender_worker_core_range);
     const auto receiver_worker_cores = corerange_to_cores(receiver_worker_core_range, std::nullopt, true);
     std::set<CoreRange> receiver_forward_core_ranges;
-    receiver_forward_core_ranges.insert(CoreRange(receiver_worker_cores[0]));
+    receiver_forward_core_ranges.insert(CoreRange(receiver_worker_cores[1]));
     CoreRangeSet receiver_forward_core_range_set = CoreRangeSet(receiver_forward_core_ranges);
     std::set<CoreRange> receiver_backward_core_ranges;
-    receiver_backward_core_ranges.insert(CoreRange(receiver_worker_cores[1]));
+    receiver_backward_core_ranges.insert(CoreRange(receiver_worker_cores[0]));
     CoreRangeSet receiver_backward_core_range_set = CoreRangeSet(receiver_backward_core_ranges);
     // L1 Scratch CB Creation
     const size_t packet_size_bytes = tt::tt_fabric::get_1d_fabric_config().channel_buffer_size_bytes;
@@ -397,14 +397,14 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             cb_num_pages * l1_scratch_cb_page_size_bytes, {{receiver_forward_cb_index, df}})
             .set_page_size(receiver_forward_cb_index, l1_scratch_cb_page_size_bytes);
     tt::tt_metal::CBHandle cb_receiver_forward_workers =
-        CreateCircularBuffer(program, receiver_worker_core_range, cb_receiver_forward_config);
+        CreateCircularBuffer(program, receiver_forward_core_ranges, cb_receiver_forward_config);
     uint32_t receiver_backward_cb_index = tt::CB::c_in4;
     tt::tt_metal::CircularBufferConfig cb_receiver_backward_config =
         tt::tt_metal::CircularBufferConfig(
             cb_num_pages * l1_scratch_cb_page_size_bytes, {{receiver_backward_cb_index, df}})
             .set_page_size(receiver_backward_cb_index, l1_scratch_cb_page_size_bytes);
     tt::tt_metal::CBHandle cb_receiver_backward_workers =
-        CreateCircularBuffer(program, receiver_worker_core_range, cb_receiver_backward_config);
+        CreateCircularBuffer(program, receiver_backward_core_ranges, cb_receiver_backward_config);
 
     // Set aside a buffer we can use for storing packet headers in (particularly for atomic incs)
     const auto reserved_packet_header_CB_index = tt::CB::c_in1;
@@ -587,16 +587,39 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         uint32_t input_tensor_Wt = input_tensor_shape[3] / TILE_WIDTH;
         uint32_t output_tensor_Wt = output_tensor_shape[3] / TILE_WIDTH;
 
+        std::set<CoreRange> receiver_forward_semaphore_core_ranges;
+        receiver_forward_semaphore_core_ranges.insert(CoreRange(receiver_worker_cores[1]));
+        receiver_forward_semaphore_core_ranges.insert(CoreRange(sender_worker_cores[0]));
+        CoreRangeSet receiver_forward_semaphore_core_range_set = CoreRangeSet(receiver_forward_semaphore_core_ranges);
+        auto sender_to_forward_receiver_semaphore_id =
+            CreateSemaphore(program, receiver_forward_semaphore_core_range_set, 0);
+        std::set<CoreRange> receiver_backward_semaphore_core_ranges;
+        receiver_backward_semaphore_core_ranges.insert(CoreRange(receiver_worker_cores[0]));
+        receiver_backward_semaphore_core_ranges.insert(CoreRange(sender_worker_cores[0]));
+        CoreRangeSet receiver_backward_semaphore_core_range_set = CoreRangeSet(receiver_backward_semaphore_core_ranges);
+        auto sender_to_backward_receiver_semaphore_id =
+            CreateSemaphore(program, receiver_backward_semaphore_core_range_set, 0);
+        std::vector<CoreCoord> receiver_worker_cores_noc;
+        for (const auto& core : receiver_worker_cores) {
+            receiver_worker_cores_noc.push_back(mesh_device->worker_core_from_logical_core(core));
+        }
+
         std::vector<uint32_t> reader_rt_args = {
-            input_tensor.buffer()->address(),         // input_tensor_address
-            intermediate_tensor.buffer()->address(),  // output_tensor_address
-            input_tensor_Wt,                          // width in tiles of the output shard
-            output_tensor_Wt,                         // width in tiles of entire output
-            input_tile_id_start,                      // input_tile_id_start
-            input_tile_id_end,                        // slice_num_pages
-            ring_size,                                // ring_size
-            semaphore.at(0).address(),                // out_ready_semaphore_forward
-            semaphore.at(1).address()                 // out_ready_semaphore_backward
+            input_tensor.buffer()->address(),          // input_tensor_address
+            intermediate_tensor.buffer()->address(),   // output_tensor_address
+            input_tensor_Wt,                           // width in tiles of the output shard
+            output_tensor_Wt,                          // width in tiles of entire output
+            input_tile_id_start,                       // input_tile_id_start
+            input_tile_id_end,                         // slice_num_pages
+            ring_size,                                 // ring_size
+            semaphore.at(0).address(),                 // out_ready_semaphore_forward
+            semaphore.at(1).address(),                 // out_ready_semaphore_backward
+            sender_to_forward_receiver_semaphore_id,   // signal_receiver_sem_forward
+            sender_to_backward_receiver_semaphore_id,  // signal_receiver_sem_forward
+            receiver_worker_cores_noc.at(1).x,         // forward receiver core x
+            receiver_worker_cores_noc.at(1).y,         // forward receiver core y
+            receiver_worker_cores_noc.at(0).x,         // backward receiver core x
+            receiver_worker_cores_noc.at(0).y,         // backward receiver core y
         };
         if (fuse_op) {
             fused_op_signaler_forward->push_all_gather_fused_op_rt_args(reader_rt_args, 1, 0, 1);
@@ -641,25 +664,25 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             output_tensor_Wt,                         // width in tiles of entire output
             input_tile_id_end,                        // slice_num_pages
             ring_size,                                // ring_size
-            semaphore.at(0).address(),                // out_ready_semaphore_forward
+            sender_to_forward_receiver_semaphore_id,  // signal_receiver_sem_forward
         };
         tt::tt_metal::SetRuntimeArgs(
             program,
             worker_forward_receiver_reader_kernel_id,
-            {receiver_worker_cores[0]},
+            {receiver_worker_cores[1]},
             forward_receiver_reader_rt_args);
         std::vector<uint32_t> backward_receiver_reader_rt_args = {
-            intermediate_tensor.buffer()->address(),  // input_tensor_address
-            input_tensor_Wt,                          // width in tiles of the output shard
-            output_tensor_Wt,                         // width in tiles of entire output
-            input_tile_id_end,                        // slice_num_pages
-            ring_size,                                // ring_size
-            semaphore.at(1).address(),                // out_ready_semaphore_backward
+            intermediate_tensor.buffer()->address(),   // input_tensor_address
+            input_tensor_Wt,                           // width in tiles of the output shard
+            output_tensor_Wt,                          // width in tiles of entire output
+            input_tile_id_end,                         // slice_num_pages
+            ring_size,                                 // ring_size
+            sender_to_backward_receiver_semaphore_id,  // signal_receiver_sem_backward
         };
         tt::tt_metal::SetRuntimeArgs(
             program,
             worker_backward_receiver_reader_kernel_id,
-            {receiver_worker_cores[1]},
+            {receiver_worker_cores[0]},
             backward_receiver_reader_rt_args);
 
         // Writer
@@ -673,7 +696,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         tt::tt_metal::SetRuntimeArgs(
             program,
             worker_forward_receiver_writer_kernel_id,
-            {receiver_worker_cores[0]},
+            {receiver_worker_cores[1]},
             forward_receiver_writer_rt_args);
         std::vector<uint32_t> backward_receiver_writer_rt_args = {
             output_tensor.buffer()->address(),  // output_tensor_address
@@ -685,7 +708,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         tt::tt_metal::SetRuntimeArgs(
             program,
             worker_backward_receiver_writer_kernel_id,
-            {receiver_worker_cores[1]},
+            {receiver_worker_cores[0]},
             backward_receiver_writer_rt_args);
     }
 
@@ -729,7 +752,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             worker_writer_sender_runtime_args[0] = output.buffer()->address();
         }
 
-        const auto& forward_receiver_core = receiver_worker_cores[0];
+        const auto& forward_receiver_core = receiver_worker_cores[1];
         // forward receiver reader
         auto& worker_forward_receiver_reader_runtime_args =
             worker_forward_receiver_reader_runtime_args_by_core[forward_receiver_core.x][forward_receiver_core.y];
@@ -738,7 +761,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         auto& worker_forward_receiver_writer_runtime_args =
             worker_forward_receiver_writer_runtime_args_by_core[forward_receiver_core.x][forward_receiver_core.y];
         worker_forward_receiver_writer_runtime_args[0] = output.buffer()->address();
-        const auto& backward_receiver_core = receiver_worker_cores[1];
+        const auto& backward_receiver_core = receiver_worker_cores[0];
         // backward receiver reader
         auto& worker_backward_receiver_reader_runtime_args =
             worker_backward_receiver_reader_runtime_args_by_core[backward_receiver_core.x][backward_receiver_core.y];

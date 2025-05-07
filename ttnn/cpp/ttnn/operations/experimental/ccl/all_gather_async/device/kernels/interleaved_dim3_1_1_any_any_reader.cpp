@@ -48,6 +48,12 @@ void kernel_main() {
     uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
     size_t out_ready_sem_forward = get_arg_val<uint32_t>(arg_idx++);
     size_t out_ready_sem_backward = get_arg_val<uint32_t>(arg_idx++);
+    size_t signal_receiver_sem_forward = get_semaphore(get_arg_val<uint32_t>(arg_idx++));
+    size_t signal_receiver_sem_backward = get_semaphore(get_arg_val<uint32_t>(arg_idx++));
+    const uint8_t signal_receiver_sem_forward_noc0_x = get_arg_val<uint32_t>(arg_idx++);
+    const uint8_t signal_receiver_sem_forward_noc0_y = get_arg_val<uint32_t>(arg_idx++);
+    const uint8_t signal_receiver_sem_backward_noc0_x = get_arg_val<uint32_t>(arg_idx++);
+    const uint8_t signal_receiver_sem_backward_noc0_y = get_arg_val<uint32_t>(arg_idx++);
 
     OpSignaler op_signaler_forward;
     OpSignaler op_signaler_backward;
@@ -101,6 +107,12 @@ void kernel_main() {
         forward_writes_expected = num_targets_forward_direction - 1;
         backward_writes_expected = num_targets_backward_direction - 1;
     }
+
+    uint64_t forward_receiver_semaphore_addr = get_noc_addr(
+        signal_receiver_sem_forward_noc0_x, signal_receiver_sem_forward_noc0_y, signal_receiver_sem_forward);
+    uint64_t backward_receiver_semaphore_addr = get_noc_addr(
+        signal_receiver_sem_backward_noc0_x, signal_receiver_sem_backward_noc0_y, signal_receiver_sem_backward);
+
     while (forward_slices_received < forward_slices_expected || backward_slices_received < backward_slices_expected) {
         // Do i expect more from the left?
         // In the linear case, I expect num_targets_backward_direction slices from the left
@@ -108,6 +120,7 @@ void kernel_main() {
         // for odd/even chips)
         if (backward_slices_received < backward_slices_expected) {
             while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_backward) <= backward_slices_received);
+            noc_semaphore_inc(backward_receiver_semaphore_addr, 1);
             // Got it
             backward_slices_received++;
 
@@ -161,6 +174,7 @@ void kernel_main() {
         // odd/even chips)
         if (forward_slices_received < forward_slices_expected) {
             while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_forward) <= forward_slices_received);
+            noc_semaphore_inc(forward_receiver_semaphore_addr, 1);
             // Got it
             forward_slices_received++;
             uint32_t forward_chip_id = my_chip_id + forward_slices_received;

@@ -78,6 +78,8 @@ void kernel_main() {
     }
 
     while (slices_received < slices_expected) {
+        slices_received++;
+
         int sender_chip_id;
         uint32_t actual_sender_chip_id;
         if (direction == 1) {
@@ -115,5 +117,6 @@ void kernel_main() {
             cb_pop_front(cb_intermediate_id, packet_size_in_pages);
         }
     }
+
     noc_async_write_barrier();
 }

@@ -38,7 +38,7 @@ void kernel_main() {
     uint32_t output_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
     uint32_t slice_num_pages = get_arg_val<uint32_t>(arg_idx++);
     uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
-    size_t out_ready_sem = get_arg_val<uint32_t>(arg_idx++);
+    size_t out_ready_sem = get_semaphore(get_arg_val<uint32_t>(arg_idx++));
 
     constexpr bool intermediate_tensor_is_dram = intermediate_buffer_type == tt::tt_metal::BufferType::DRAM;
     auto intermediate_tensor_addrgen = InterleavedAddrGenFast<intermediate_tensor_is_dram>{
@@ -62,6 +62,7 @@ void kernel_main() {
         }
     }
 
+    volatile tt_l1_ptr uint32_t* out_ready_sem_addr = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem);
     while (slices_received < slices_expected) {
         // Do i expect more?
         // If direction == backward, do I expect more from the left?
@@ -71,7 +72,7 @@ void kernel_main() {
         // In the linear case, I expect num_targets_forward_direction slices from the right
         // In the ring case, I expect num_targets_forward_direction slices from the right (keep in mind this differs for
         // odd/even chips)
-        while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem) <= slices_received);
+        noc_semaphore_wait_min(out_ready_sem_addr, slices_received + 1);
         // Got it
         slices_received++;
 
@@ -115,4 +116,6 @@ void kernel_main() {
             cb_push_back(cb_intermediate_id, packet_size_in_pages);
         }
     }
+
+    noc_semaphore_set(out_ready_sem_addr, 0);
 }
