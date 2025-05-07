@@ -429,6 +429,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     const auto output_tensor_shape = output_tensor.get_padded_shape();
     const auto intermediate_tensor_buffer_type = intermediate_tensor.buffer()->buffer_type();
 
+    uint32_t tiles_to_write_per_packet = 2;
+
     // KERNEL CREATION
     // Reader
     auto sender_reader_kernel_config = tt::tt_metal::ReaderDataMovementConfig{};
@@ -442,7 +444,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         op_config.get_page_size(),                               // tensor0_page_size
         num_targets_forward,                                     // num_slices_forward_direction
         num_targets_backward,                                    // num_slices_backward_direction
-        static_cast<uint32_t>(topology)                          // topology
+        static_cast<uint32_t>(topology),                         // topology
+        tiles_to_write_per_packet,                               // contig_pages_advanced
     };
     auto worker_sender_reader_kernel_id = tt::tt_metal::CreateKernel(
         program,
@@ -467,7 +470,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         num_targets_backward,                                    // num_targets_backward_direction
         dynamic_alternate,                                       // alternate
         fuse_op,                                                 // fused op
-        static_cast<uint32_t>(topology)                          // topology
+        static_cast<uint32_t>(topology),                         // topology
+        tiles_to_write_per_packet,                               // contig_pages_advanced
     };
     auto worker_sender_writer_kernel_id = tt::tt_metal::CreateKernel(
         program,
@@ -490,6 +494,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         static_cast<uint32_t>(topology),                         // topology
         1,                                                       // direction
         fuse_op,                                                 // fused op
+        tiles_to_write_per_packet,                               // contig_pages_advanced
     };
     auto worker_forward_receiver_writer_kernel_id = tt::tt_metal::CreateKernel(
         program,
@@ -508,7 +513,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         num_targets_forward,                                     // num_targets_forward_direction
         num_targets_backward,                                    // num_targets_backward_direction
         static_cast<uint32_t>(topology),                         // topology
-        1                                                        // direction
+        1,                                                       // direction
+        tiles_to_write_per_packet,                               // contig_pages_advanced
     };
     auto worker_forward_receiver_reader_kernel_id = tt::tt_metal::CreateKernel(
         program,
@@ -531,6 +537,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         static_cast<uint32_t>(topology),                         // topology
         0,                                                       // direction
         fuse_op,                                                 // fused op
+        tiles_to_write_per_packet,                               // contig_pages_advanced
     };
     auto worker_backward_receiver_writer_kernel_id = tt::tt_metal::CreateKernel(
         program,
@@ -549,7 +556,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         num_targets_forward,                                     // num_targets_forward_direction
         num_targets_backward,                                    // num_targets_backward_direction
         static_cast<uint32_t>(topology),                         // topology
-        0                                                        // direction
+        0,                                                       // direction
+        tiles_to_write_per_packet,                               // contig_pages_advanced
     };
     auto worker_backward_receiver_reader_kernel_id = tt::tt_metal::CreateKernel(
         program,
@@ -610,8 +618,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             input_tensor.buffer()->address(),          // input_tensor_address
             intermediate_tensor.buffer()->address(),   // output_tensor_address
             input_tensor_Wt,                           // width in tiles of the output shard
-            output_tensor_Wt,                          // width in tiles of entire output
-            input_tile_id_start,                       // input_tile_id_start
             input_tile_id_end,                         // slice_num_pages
             ring_size,                                 // ring_size
             semaphore.at(0).address(),                 // out_ready_semaphore_forward
@@ -659,8 +665,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         // Reader
         std::vector<uint32_t> forward_receiver_reader_rt_args = {
             intermediate_tensor.buffer()->address(),  // input_tensor_address
-            input_tensor_Wt,                          // width in tiles of the output shard
-            output_tensor_Wt,                         // width in tiles of entire output
             input_tile_id_end,                        // slice_num_pages
             ring_size,                                // ring_size
             sender_to_forward_receiver_semaphore_id,  // signal_receiver_sem_forward
@@ -672,8 +676,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             forward_receiver_reader_rt_args);
         std::vector<uint32_t> backward_receiver_reader_rt_args = {
             intermediate_tensor.buffer()->address(),   // input_tensor_address
-            input_tensor_Wt,                           // width in tiles of the output shard
-            output_tensor_Wt,                          // width in tiles of entire output
             input_tile_id_end,                         // slice_num_pages
             ring_size,                                 // ring_size
             sender_to_backward_receiver_semaphore_id,  // signal_receiver_sem_backward

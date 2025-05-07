@@ -30,6 +30,7 @@ constexpr uint32_t num_targets_backward_direction = get_compile_time_arg_val(6);
 constexpr Topology topology = static_cast<Topology>(get_compile_time_arg_val(7));
 constexpr bool direction = get_compile_time_arg_val(8);
 constexpr bool fuse_op = get_compile_time_arg_val(9);
+constexpr uint32_t contig_pages_advanced = get_compile_time_arg_val(10);
 
 void kernel_main() {
     ///////////////////////////////////////////////////
@@ -105,11 +106,12 @@ void kernel_main() {
             cb_wait_front(cb_intermediate_id, packet_size_in_pages);
             size_t l1_read_addr = get_read_ptr(cb_intermediate_id);
             uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
-            uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
             uint32_t payload_size_bytes = contig_pages_advanced * output_tensor_page_size;
             for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
-                noc_async_write_tile(
-                    tile_id_start + row_offset + pages_read_in_row, output_tensor_addrgen, l1_read_addr);
+                uint32_t first_tile_id = tile_id_start + row_offset + pages_read_in_row;
+
+                noc_async_write_tile(first_tile_id, output_tensor_addrgen, l1_read_addr);
+                noc_async_write_tile(first_tile_id + 1, output_tensor_addrgen, l1_read_addr + output_tensor_page_size);
 
                 l1_read_addr += payload_size_bytes;
                 tiles_read += contig_pages_advanced;
