@@ -24,15 +24,16 @@ constexpr uint32_t my_chip_id = get_compile_time_arg_val(0);
 constexpr uint32_t reserved_packet_header_cb_id = get_compile_time_arg_val(1);
 constexpr uint32_t num_packet_headers_storable = get_compile_time_arg_val(2);
 constexpr BufferType intermediate_type = static_cast<BufferType>(get_compile_time_arg_val(3));
-constexpr uint32_t cb_forward_id = get_compile_time_arg_val(4);
-constexpr uint32_t cb_backward_id = get_compile_time_arg_val(5);
-constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(6);
-constexpr uint32_t intermediate_page_size = get_compile_time_arg_val(7);
-constexpr uint32_t num_targets_forward_direction = get_compile_time_arg_val(8);
-constexpr uint32_t num_targets_backward_direction = get_compile_time_arg_val(9);
-constexpr bool dynamic_alternate = get_compile_time_arg_val(10);
-constexpr bool fuse_op = get_compile_time_arg_val(11);
-constexpr Topology topology = static_cast<Topology>(get_compile_time_arg_val(12));
+constexpr BufferType output_type = static_cast<BufferType>(get_compile_time_arg_val(4));
+constexpr uint32_t cb_forward_id = get_compile_time_arg_val(5);
+constexpr uint32_t cb_backward_id = get_compile_time_arg_val(6);
+constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(7);
+constexpr uint32_t intermediate_page_size = get_compile_time_arg_val(8);
+constexpr uint32_t num_targets_forward_direction = get_compile_time_arg_val(9);
+constexpr uint32_t num_targets_backward_direction = get_compile_time_arg_val(10);
+constexpr bool dynamic_alternate = get_compile_time_arg_val(11);
+constexpr bool fuse_op = get_compile_time_arg_val(12);
+constexpr Topology topology = static_cast<Topology>(get_compile_time_arg_val(13));
 
 /*
  * CCL Send will present various operating modes. Although there is only a single send kernel, it may (compile time)
@@ -44,8 +45,8 @@ void kernel_main() {
     ///////////////////////////////////////////////////
 
     uint32_t arg_idx = 0;
-    // Load the input tensor spec
     address_t intermediate_address = get_arg_val<address_t>(arg_idx++);
+    address_t output_address = get_arg_val<address_t>(arg_idx++);
     uint32_t input_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
     uint32_t output_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
     uint32_t slice_num_pages = get_arg_val<uint32_t>(arg_idx++);
@@ -88,9 +89,14 @@ void kernel_main() {
     pkt_hdr_backward->to_chip_unicast(1);
 
     // interleaved addrgen
-    constexpr bool is_dram = intermediate_type == tt::tt_metal::BufferType::DRAM;
-    auto intermediate_addrgen = InterleavedAddrGenFast<is_dram>{
+    constexpr bool intermediate_is_dram = intermediate_type == tt::tt_metal::BufferType::DRAM;
+    auto intermediate_addrgen = InterleavedAddrGenFast<intermediate_is_dram>{
         .bank_base_address = intermediate_address,
+        .page_size = intermediate_page_size,
+        .data_format = get_dataformat(cb_forward_id)};
+    constexpr bool output_is_dram = output_type == tt::tt_metal::BufferType::DRAM;
+    auto output_addrgen = InterleavedAddrGenFast<output_is_dram>{
+        .bank_base_address = output_address,
         .page_size = intermediate_page_size,
         .data_format = get_dataformat(cb_forward_id)};
 
@@ -114,10 +120,13 @@ void kernel_main() {
         uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
         for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
             uint64_t noc0_dest_noc_addr = get_noc_addr(
+                tile_id_start + row_offset + pages_read_in_row, output_addrgen, 0 /*offset*/, 0 /*noc_id*/);
+            uint64_t remote_noc0_dest_noc_addr = get_noc_addr(
                 tile_id_start + row_offset + pages_read_in_row, intermediate_addrgen, 0 /*offset*/, 0 /*noc_id*/);
 
             write_and_advance_local_read_address_for_fabric_write(
                 noc0_dest_noc_addr,
+                remote_noc0_dest_noc_addr,
                 pkt_hdr_forward,
                 pkt_hdr_backward,
                 fabric_connection,

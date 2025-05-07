@@ -459,6 +459,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         reserved_packet_header_CB_index,                         // reserved_packet_header_cb_id
         num_packet_headers_storable,                             // num_packet_headers_storable
         static_cast<uint32_t>(intermediate_tensor_buffer_type),  // intermediate_buffer_type
+        static_cast<uint32_t>(output_tensor_buffer_type),        // output_buffer_type
         sender_forward_cb_index,                                 // cb_forward_id
         sender_backward_cb_index,                                // cb_backward_id
         num_pages_per_packet,                                    // packet_size_in_pages
@@ -632,6 +633,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
 
         std::vector<uint32_t> writer_rt_args = {
             intermediate_tensor.buffer()->address(),  // intermediate_tensor_address
+            output_tensor.buffer()->address(),        // output_tensor_address
             input_tensor_Wt,                          // width in tiles of the output shard
             output_tensor_Wt,                         // width in tiles of entire output
             input_tensor_num_pages,                   // slice_num_pages
@@ -749,7 +751,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             worker_reader_sender_runtime_args[1] = intermed.buffer()->address();
             // sender writer
             auto& worker_writer_sender_runtime_args = worker_writer_sender_runtime_args_by_core[core.x][core.y];
-            worker_writer_sender_runtime_args[0] = output.buffer()->address();
+            worker_writer_sender_runtime_args[0] = intermed.buffer()->address();
+            worker_writer_sender_runtime_args[1] = output.buffer()->address();
         }
 
         const auto& forward_receiver_core = receiver_worker_cores[1];
