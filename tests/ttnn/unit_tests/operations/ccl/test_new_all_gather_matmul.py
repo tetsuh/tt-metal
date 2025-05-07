@@ -358,8 +358,8 @@ def run_all_gather_impl(
 @pytest.mark.parametrize(
     "enable_trace",
     [
-        # True,
-        False,
+        True,
+        # False,
     ],
 )
 @pytest.mark.parametrize(
