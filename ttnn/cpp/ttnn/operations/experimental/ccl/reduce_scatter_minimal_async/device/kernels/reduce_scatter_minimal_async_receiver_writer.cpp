@@ -1,0 +1,123 @@
+// SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
+//
+// SPDX-License-Identifier: Apache-2.0
+
+#include "dataflow_api.h"
+#include <tt-metalium/buffer_types.hpp>
+#include "tt_metal/fabric/hw/inc/edm_fabric/fabric_connection_manager.hpp"
+#include "cpp/ttnn/operations/ccl/common/interpreter_backends/kernel_common/noc_addr.hpp"
+#include "cpp/ttnn/operations/ccl/kernel_common/worker_sync_utils.hpp"
+#include "cpp/ttnn/operations/ccl/ccl_host_types.hpp"
+#include "minimal_ccl_common.hpp"
+#include <cstdint>
+#include <utility>
+
+using address_t = uint32_t;
+using tt::tt_metal::BufferType;
+using ttnn::ccl::Topology;
+
+///////////////////////////////////////////////////
+// COMPILE TIME ARGS
+///////////////////////////////////////////////////
+
+constexpr uint32_t my_chip_id = get_compile_time_arg_val(0);
+constexpr BufferType output_tensor_buffer_type = static_cast<BufferType>(get_compile_time_arg_val(1));
+constexpr uint32_t cb_intermediate_id = get_compile_time_arg_val(2);
+constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(3);
+constexpr uint32_t output_tensor_page_size = get_compile_time_arg_val(4);
+constexpr uint32_t num_targets_forward_direction = get_compile_time_arg_val(5);
+constexpr uint32_t num_targets_backward_direction = get_compile_time_arg_val(6);
+constexpr Topology topology = static_cast<Topology>(get_compile_time_arg_val(7));
+constexpr bool direction = get_compile_time_arg_val(8);
+constexpr bool fuse_op = get_compile_time_arg_val(9);
+
+void kernel_main() {
+    ///////////////////////////////////////////////////
+    // ARGS
+    ///////////////////////////////////////////////////
+
+    uint32_t arg_idx = 0;
+    address_t output_tensor_address = get_arg_val<address_t>(arg_idx++);
+    uint32_t input_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t output_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t slice_num_pages = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
+
+    // interleaved addrgen
+    constexpr bool output_is_dram = output_tensor_buffer_type == tt::tt_metal::BufferType::DRAM;
+    auto output_tensor_addrgen = InterleavedAddrGenFast<output_is_dram>{
+        .bank_base_address = output_tensor_address,
+        .page_size = output_tensor_page_size,
+        .data_format = get_dataformat(cb_intermediate_id)};
+
+    uint32_t forward_writes = 0;
+    uint32_t backward_writes = 0;
+
+    uint32_t forward_writes_expected, backward_writes_expected;
+    if (topology == Topology::Linear) {
+        forward_writes_expected = num_targets_backward_direction;
+        backward_writes_expected = num_targets_forward_direction;
+    } else if (topology == Topology::Ring) {
+        forward_writes_expected = num_targets_forward_direction - 1;
+        backward_writes_expected = num_targets_backward_direction - 1;
+    }
+
+    uint32_t slices_received = 0;
+    uint32_t slices_expected;
+    if (topology == Topology::Linear) {
+        if (direction == 1) {
+            slices_expected = num_targets_forward_direction;
+        } else {
+            slices_expected = num_targets_backward_direction;
+        }
+    } else if (topology == Topology::Ring) {
+        if (direction == 1) {
+            slices_expected = num_targets_backward_direction;
+        } else {
+            slices_expected = num_targets_forward_direction;
+        }
+    }
+
+    while (slices_received < slices_expected) {
+        slices_received++;
+
+        int sender_chip_id;
+        uint32_t actual_sender_chip_id;
+        if (direction == 1) {
+            sender_chip_id = my_chip_id + slices_received;
+            actual_sender_chip_id = (sender_chip_id >= (int)ring_size) ? sender_chip_id - ring_size : sender_chip_id;
+        } else {
+            sender_chip_id = my_chip_id - slices_received;
+            actual_sender_chip_id = (sender_chip_id < 0) ? ring_size + sender_chip_id : sender_chip_id;
+        }
+
+        uint32_t pages_read_in_row = 0;
+        uint32_t row_offset = 0;
+        uint32_t tiles_read = 0;
+        uint32_t tile_id_start = actual_sender_chip_id * input_tensor_Wt;
+        uint32_t tiles_to_read = slice_num_pages;
+        while (tiles_read < tiles_to_read) {
+            cb_wait_front(cb_intermediate_id, packet_size_in_pages);
+            size_t l1_read_addr = get_read_ptr(cb_intermediate_id);
+            uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
+            uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
+            uint32_t payload_size_bytes = contig_pages_advanced * output_tensor_page_size;
+            for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
+                noc_async_write_tile(
+                    tile_id_start + row_offset + pages_read_in_row, output_tensor_addrgen, l1_read_addr);
+
+                l1_read_addr += payload_size_bytes;
+                tiles_read += contig_pages_advanced;
+                pages_read_in_row += contig_pages_advanced;
+                if (pages_read_in_row >= input_tensor_Wt) {
+                    row_offset += output_tensor_Wt;
+                    pages_read_in_row = 0;
+                }
+            }
+
+            cb_pop_front(cb_intermediate_id, packet_size_in_pages);
+        }
+    }
+
+    noc_async_write_barrier();
+}
