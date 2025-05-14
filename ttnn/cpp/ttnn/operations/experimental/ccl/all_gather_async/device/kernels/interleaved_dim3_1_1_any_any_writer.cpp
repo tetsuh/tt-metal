@@ -114,14 +114,26 @@ void kernel_main() {
     uint32_t tile_id_start = my_chip_id * input_tensor_Wt;
     uint32_t packet_id = 0;
     while (tiles_read < tiles_to_read) {
-        cb_wait_front(cb_forward_id, packet_size_in_pages);
-        size_t l1_read_addr = get_read_ptr(cb_forward_id);
         uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
+        cb_wait_front(cb_forward_id, num_pages_to_read);
+        size_t l1_read_addr = get_read_ptr(cb_forward_id);
+
         for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
             uint64_t noc0_dest_noc_addr_first_tile = get_noc_addr(
                 tile_id_start + row_offset + pages_read_in_row, output_addrgen, 0 /*offset*/, 0 /*noc_id*/);
+            pages_read_in_row += 1;
+            if (pages_read_in_row >= input_tensor_Wt) {
+                row_offset += output_tensor_Wt;
+                pages_read_in_row = 0;
+            }
+
             uint64_t noc0_dest_noc_addr_second_tile = get_noc_addr(
-                tile_id_start + row_offset + pages_read_in_row + 1, output_addrgen, 0 /*offset*/, 0 /*noc_id*/);
+                tile_id_start + row_offset + pages_read_in_row, output_addrgen, 0 /*offset*/, 0 /*noc_id*/);
+            pages_read_in_row += 1;
+            if (pages_read_in_row >= input_tensor_Wt) {
+                row_offset += output_tensor_Wt;
+                pages_read_in_row = 0;
+            }
 
             uint32_t intermediate_packet_id = my_chip_id + packet_id * ring_size;
             uint32_t intermediate_packet_first_tile_id =
@@ -141,16 +153,9 @@ void kernel_main() {
                 intermediate_page_size,
                 contig_pages_advanced);
             tiles_read += contig_pages_advanced;
-            pages_read_in_row += contig_pages_advanced;
-            if (pages_read_in_row >= input_tensor_Wt) {
-                row_offset += output_tensor_Wt;
-                pages_read_in_row = 0;
-            }
-
             packet_id++;
         }
-
-        cb_pop_front(cb_forward_id, packet_size_in_pages);
+        cb_pop_front(cb_forward_id, num_pages_to_read);
     }
 
     // 2. unicast output ready semaphore forward
@@ -214,9 +219,9 @@ void kernel_main() {
 
             uint32_t packet_id = 0;
             while (tiles_read < tiles_to_read) {
-                cb_wait_front(cb_forward_id, packet_size_in_pages);
-                size_t l1_read_addr = get_read_ptr(cb_forward_id);
                 uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
+                cb_wait_front(cb_forward_id, num_pages_to_read);
+                size_t l1_read_addr = get_read_ptr(cb_forward_id);
                 for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
                     uint32_t intermediate_packet_id = actual_slice_chip_id + packet_id * ring_size;
                     uint32_t intermediate_packet_first_tile_id =
@@ -233,10 +238,9 @@ void kernel_main() {
                         contig_pages_advanced * intermediate_page_size);
 
                     tiles_read += contig_pages_advanced;
+                    packet_id++;
                 }
-
-                packet_id++;
-                cb_pop_front(cb_forward_id, packet_size_in_pages);
+                cb_pop_front(cb_forward_id, num_pages_to_read);
             }
             // 2. unicast output ready semaphore forward
             fabric_connection.get_forward_connection().wait_for_empty_write_slot();
@@ -260,9 +264,9 @@ void kernel_main() {
 
             uint32_t packet_id = 0;
             while (tiles_read < tiles_to_read) {
-                cb_wait_front(cb_backward_id, packet_size_in_pages);
-                size_t l1_read_addr = get_read_ptr(cb_backward_id);
                 uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
+                cb_wait_front(cb_backward_id, num_pages_to_read);
+                size_t l1_read_addr = get_read_ptr(cb_backward_id);
                 for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
                     uint32_t intermediate_packet_id = actual_slice_chip_id + packet_id * ring_size;
                     uint32_t intermediate_packet_first_tile_id =
@@ -279,10 +283,9 @@ void kernel_main() {
                         contig_pages_advanced * intermediate_page_size);
 
                     tiles_read += contig_pages_advanced;
+                    packet_id++;
                 }
-
-                packet_id++;
-                cb_pop_front(cb_backward_id, packet_size_in_pages);
+                cb_pop_front(cb_backward_id, num_pages_to_read);
             }
 
             // 2. unicast output ready semaphore backward

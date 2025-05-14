@@ -324,3 +324,24 @@ struct MatmulOpReceiver {
         return block_id;
     }
 };
+
+struct ReduceScatterOpReceiver {
+    volatile tt_l1_ptr uint32_t* signal_op_semaphore_addr_ptr;
+
+    bool initialized = false;
+
+    ReduceScatterOpReceiver() {}
+
+    ReduceScatterOpReceiver(uint32_t& rt_args_idx) {
+        // Runtime args
+        this->signal_op_semaphore_addr_ptr =
+            reinterpret_cast<volatile tt_l1_ptr uint32_t*>(get_semaphore(get_arg_val<uint32_t>(rt_args_idx++)));
+
+        this->initialized = true;
+    }
+
+    void wait_for_matmul_batch(const uint32_t& batch_idx) {
+        ASSERT(this->initialized);
+        noc_semaphore_wait_min(this->signal_op_semaphore_addr_ptr, batch_idx + 1);
+    }
+};

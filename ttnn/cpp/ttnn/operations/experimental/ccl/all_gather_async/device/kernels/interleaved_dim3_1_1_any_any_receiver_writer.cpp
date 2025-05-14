@@ -103,26 +103,31 @@ void kernel_main() {
         uint32_t tile_id_start = actual_sender_chip_id * input_tensor_Wt;
         uint32_t tiles_to_read = slice_num_pages;
         while (tiles_read < tiles_to_read) {
-            cb_wait_front(cb_intermediate_id, packet_size_in_pages);
-            size_t l1_read_addr = get_read_ptr(cb_intermediate_id);
             uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
             uint32_t payload_size_bytes = contig_pages_advanced * output_tensor_page_size;
+            cb_wait_front(cb_intermediate_id, num_pages_to_read);
+            size_t l1_read_addr = get_read_ptr(cb_intermediate_id);
             for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
                 uint32_t first_tile_id = tile_id_start + row_offset + pages_read_in_row;
-
                 noc_async_write_tile(first_tile_id, output_tensor_addrgen, l1_read_addr);
-                noc_async_write_tile(first_tile_id + 1, output_tensor_addrgen, l1_read_addr + output_tensor_page_size);
-
-                l1_read_addr += payload_size_bytes;
-                tiles_read += contig_pages_advanced;
-                pages_read_in_row += contig_pages_advanced;
+                pages_read_in_row += 1;
                 if (pages_read_in_row >= input_tensor_Wt) {
                     row_offset += output_tensor_Wt;
                     pages_read_in_row = 0;
                 }
-            }
 
-            cb_pop_front(cb_intermediate_id, packet_size_in_pages);
+                uint32_t second_tile_id = tile_id_start + row_offset + pages_read_in_row;
+                noc_async_write_tile(second_tile_id, output_tensor_addrgen, l1_read_addr + output_tensor_page_size);
+                pages_read_in_row += 1;
+                if (pages_read_in_row >= input_tensor_Wt) {
+                    row_offset += output_tensor_Wt;
+                    pages_read_in_row = 0;
+                }
+
+                l1_read_addr += payload_size_bytes;
+                tiles_read += contig_pages_advanced;
+            }
+            cb_pop_front(cb_intermediate_id, num_pages_to_read);
         }
         if (fuse_op) {
             // Signal matmul to go
