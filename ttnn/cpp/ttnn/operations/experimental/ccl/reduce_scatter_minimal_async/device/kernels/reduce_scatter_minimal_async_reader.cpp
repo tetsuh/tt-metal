@@ -11,7 +11,6 @@
 
 using address_t = uint32_t;
 using tt::tt_metal::BufferType;
-using ttnn::ccl::Topology;
 
 ///////////////////////////////////////////////////
 // COMPILE TIME ARGS
@@ -20,17 +19,12 @@ using ttnn::ccl::Topology;
 constexpr uint32_t my_chip_id = get_compile_time_arg_val(0);
 constexpr BufferType input_buffer_type = static_cast<BufferType>(get_compile_time_arg_val(1));
 constexpr BufferType intermediate_buffer_type = static_cast<BufferType>(get_compile_time_arg_val(2));
-constexpr uint32_t cb_forward_id = get_compile_time_arg_val(3);
-constexpr uint32_t cb_backward_id = get_compile_time_arg_val(4);
-constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(5);
-constexpr uint32_t input_tensor_page_size = get_compile_time_arg_val(6);
-constexpr uint32_t num_targets_forward_direction = get_compile_time_arg_val(7);
-constexpr uint32_t num_targets_backward_direction = get_compile_time_arg_val(8);
-constexpr Topology topology = static_cast<Topology>(get_compile_time_arg_val(9));
-/*
- * CCL Send will present various operating modes. Although there is only a single send kernel, it may (compile time)
- * dispatch implementations depending on those invocation parameters.
- */
+constexpr uint32_t cb_input_id = get_compile_time_arg_val(3);
+constexpr uint32_t cb_intermediate_id = get_compile_time_arg_val(4);
+constexpr uint32_t cb_reader_output_id = get_compile_time_arg_val(5);
+constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(6);
+constexpr uint32_t input_tensor_page_size = get_compile_time_arg_val(7);
+
 void kernel_main() {
     ///////////////////////////////////////////////////
     // ARGS
@@ -41,103 +35,88 @@ void kernel_main() {
     address_t input_tensor_address = get_arg_val<address_t>(arg_idx++);
     address_t intermediate_tensor_address = get_arg_val<address_t>(arg_idx++);
     uint32_t input_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
-    uint32_t output_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
-    uint32_t input_tile_id_start = get_arg_val<uint32_t>(arg_idx++);
     uint32_t slice_num_pages = get_arg_val<uint32_t>(arg_idx++);
     uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
-    size_t out_ready_sem_forward = get_arg_val<uint32_t>(arg_idx++);
-    size_t out_ready_sem_backward = get_arg_val<uint32_t>(arg_idx++);
-    size_t signal_receiver_sem_forward = get_semaphore(get_arg_val<uint32_t>(arg_idx++));
-    size_t signal_receiver_sem_backward = get_semaphore(get_arg_val<uint32_t>(arg_idx++));
-    const uint8_t signal_receiver_sem_forward_noc0_x = get_arg_val<uint32_t>(arg_idx++);
-    const uint8_t signal_receiver_sem_forward_noc0_y = get_arg_val<uint32_t>(arg_idx++);
-    const uint8_t signal_receiver_sem_backward_noc0_x = get_arg_val<uint32_t>(arg_idx++);
-    const uint8_t signal_receiver_sem_backward_noc0_y = get_arg_val<uint32_t>(arg_idx++);
+    size_t out_ready_sem = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t num_batches = get_arg_val<uint32_t>(arg_idx++);
 
-    // Push out our local slice
+    uint32_t batch_slice_num_pages = slice_num_pages / num_batches;
+    uint32_t slice_Wt = input_tensor_Wt / ring_size;
+
+    uint32_t batch_num_pages = slice_num_pages * ring_size / num_batches;
+
     constexpr bool input_tensor_is_dram = input_buffer_type == tt::tt_metal::BufferType::DRAM;
     auto input_tensor_addrgen = InterleavedAddrGenFast<input_tensor_is_dram>{
         .bank_base_address = input_tensor_address,
         .page_size = input_tensor_page_size,
-        .data_format = get_dataformat(cb_forward_id)};
-    uint32_t pages_read_in_row = 0;
-    uint32_t row_offset = 0;
-    uint32_t tiles_read = 0;
-    uint32_t tiles_to_read = slice_num_pages;
-    uint32_t slice_Wt = input_tensor_Wt;
-    uint32_t stride_Wt = 0;
-    while (tiles_read < tiles_to_read) {
-        cb_reserve_back(cb_forward_id, packet_size_in_pages);
-        const uint32_t l1_write_addr_base = get_write_ptr(cb_forward_id);
-        uint32_t l1_write_addr = l1_write_addr_base;
-        uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
-        for (uint32_t j = 0; j < num_pages_to_read; j++) {
-            noc_async_read_tile(tiles_read, input_tensor_addrgen, l1_write_addr);
-            l1_write_addr += input_tensor_page_size;
-            tiles_read++;
-        }
+        .data_format = get_dataformat(cb_input_id)};
+    auto intermediate_tensor_addrgen = InterleavedAddrGenFast<is_dram>{
+        .bank_base_address = intermediate_buffer_addr,
+        .page_size = page_size,
+        .data_format = get_dataformat(cb_input_id)};
 
-        noc_async_read_barrier();
-        cb_push_back(cb_forward_id, packet_size_in_pages);
-    }
+    for (uint32_t b = 0; b < num_batches; b++) {
+        int slice_idx = my_chip_id - 1;
+        uint32_t batch_offset = batch_num_pages * b;
 
-    constexpr bool intermediate_tensor_is_dram = intermediate_buffer_type == tt::tt_metal::BufferType::DRAM;
-    auto intermediate_tensor_addrgen = InterleavedAddrGenFast<intermediate_tensor_is_dram>{
-        .bank_base_address = intermediate_tensor_address,
-        .page_size = input_tensor_page_size,
-        .data_format = get_dataformat(cb_forward_id)};
-    uint32_t forward_slices_received = 0;
-    uint32_t backward_slices_received = 0;
-    uint32_t forward_slices_expected, backward_slices_expected;
-    uint32_t forward_writes_expected, backward_writes_expected;
-    if (topology == Topology::Linear) {
-        forward_slices_expected = num_targets_forward_direction;
-        backward_slices_expected = num_targets_backward_direction;
-    } else if (topology == Topology::Ring) {
-        forward_slices_expected = num_targets_backward_direction;
-        backward_slices_expected = num_targets_forward_direction;
-        forward_writes_expected = num_targets_forward_direction - 1;
-        backward_writes_expected = num_targets_backward_direction - 1;
-    }
+        // Loop over the slices, starting from the furthest, and working backwards until we get to ourselves
+        // Read our local slice at this slice idx into cb_input_id or cb_output_id
+        // If we are not the first slice, then read intermediate into the cb_intermediate_id
+        // Then reduce those two CB's, and push that to cb_output_id
+        // If slices_forwarded in writer is 7, we don't forward anymore and write it to output_buffer
+        // Otherwise, the writer will write cb_output_id to the next chip in the forward direction
+        for (uint32_t i = 0; i < ring_size; ++i) {
+            const bool do_reduce = i != 0;
+            uint32_t cb_in0 = do_reduce ? cb_input_id : cb_reader_output_id;
 
-    uint64_t forward_receiver_semaphore_addr = get_noc_addr(
-        signal_receiver_sem_forward_noc0_x, signal_receiver_sem_forward_noc0_y, signal_receiver_sem_forward);
-    uint64_t backward_receiver_semaphore_addr = get_noc_addr(
-        signal_receiver_sem_backward_noc0_x, signal_receiver_sem_backward_noc0_y, signal_receiver_sem_backward);
+            uint32_t actual_slice_idx = (slice_idx < 0) ? ring_size + slice_idx : slice_idx;
 
-    while (forward_slices_received < forward_slices_expected || backward_slices_received < backward_slices_expected) {
-        // Do i expect more from the left?
-        // In the linear case, I expect num_targets_backward_direction slices from the left
-        // In the ring case, I expect num_targets_backward_direction slices from the right, (keep in mind this differs
-        // for odd/even chips)
-        if (backward_slices_received < backward_slices_expected) {
-            while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_backward) <= backward_slices_received);
-            noc_semaphore_inc(backward_receiver_semaphore_addr, 1);
-            // Got it
-            backward_slices_received++;
+            uint32_t input_tile_id_start = actual_slice_idx * slice_Wt + batch_offset;
+            uint32_t pages_read_in_row = 0;
+            uint32_t row_offset = 0;
+            uint32_t tiles_read = 0;
+            uint32_t tiles_to_read = batch_slice_num_pages;
+            uint32_t stride_Wt = input_tensor_Wt;
+            while (tiles_read < tiles_to_read) {
+                cb_reserve_back(cb_in0, packet_size_in_pages);
+                const uint32_t l1_write_addr_base = get_write_ptr(cb_in0);
+                uint32_t l1_write_addr = l1_write_addr_base;
+                uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
+                for (uint32_t j = 0; j < num_pages_to_read; j++) {
+                    noc_async_read_tile(
+                        input_tile_id_start + row_offset + pages_read_in_row, input_tensor_addrgen, l1_write_addr);
+                    l1_write_addr += input_tensor_page_size;
+                    tiles_read++;
 
-            int backward_chip_id = my_chip_id - backward_slices_received;
-            uint32_t actual_backward_chip_id = (backward_chip_id < 0) ? ring_size + backward_chip_id : backward_chip_id;
-            // Should I forward what I got from the left to my right?
-            // In the linear case, if I have any targets to my right, always forward
-            // In the ring case, if I have received on the left less than my targets on the right, forward
-            if ((topology == Topology::Linear && num_targets_forward_direction > 0) ||
-                (topology == Topology::Ring && (backward_slices_received < (forward_writes_expected + 1)))) {
-                // read the next backward slice out of memory, and put it in CB
-                uint32_t output_tile_id_start = actual_backward_chip_id * input_tensor_Wt;
+                    pages_read_in_row++;
+                    if (pages_read_in_row >= slice_Wt) {
+                        row_offset += stride_Wt;
+                        pages_read_in_row = 0;
+                    }
+                }
+
+                noc_async_read_barrier();
+                cb_push_back(cb_in0, packet_size_in_pages);
+            }
+
+            if (do_reduce) {
+                // Wait for the next slice to show up from the backward direction (everyone is pushing forward)
+                while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem) <= i);
+
+                // read the next intermediate slice out of the intermediate buffer, and put it in intermediate CB
+                uint32_t intermediate_tile_id_start = actual_slice_idx * slice_Wt;
                 pages_read_in_row = 0;
                 row_offset = 0;
                 tiles_read = 0;
-                tiles_to_read = slice_num_pages;
-                slice_Wt = input_tensor_Wt;
-                stride_Wt = output_tensor_Wt;
+                tiles_to_read = batch_slice_num_pages;
+                stride_Wt = input_tensor_Wt;
                 while (tiles_read < tiles_to_read) {
-                    cb_reserve_back(cb_forward_id, packet_size_in_pages);
-                    size_t l1_write_addr = get_write_ptr(cb_forward_id);
+                    cb_reserve_back(cb_intermediate_id, packet_size_in_pages);
+                    size_t l1_write_addr = get_write_ptr(cb_intermediate_id);
                     uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
                     for (uint32_t j = 0; j < num_pages_to_read; j++) {
                         noc_async_read_tile(
-                            output_tile_id_start + row_offset + pages_read_in_row,
+                            intermediate_tile_id_start + row_offset + pages_read_in_row,
                             intermediate_tensor_addrgen,
                             l1_write_addr);
                         l1_write_addr += input_tensor_page_size;
@@ -151,64 +130,15 @@ void kernel_main() {
                     }
 
                     noc_async_read_barrier();
-                    cb_push_back(cb_forward_id, packet_size_in_pages);
+                    cb_push_back(cb_intermediate_id, packet_size_in_pages);
                 }
             }
+
+            // Next slice idx
+            slice_idx--;
         }
 
-        // Do i expect more from the right?
-        // In the linear case, I expect num_targets_forward_direction slices from the right
-        // In the ring case, I expect num_targets_forward_direction slices from the right (keep in mind this differs for
-        // odd/even chips)
-        if (forward_slices_received < forward_slices_expected) {
-            while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_forward) <= forward_slices_received);
-            noc_semaphore_inc(forward_receiver_semaphore_addr, 1);
-            // Got it
-            forward_slices_received++;
-            uint32_t forward_chip_id = my_chip_id + forward_slices_received;
-            uint32_t actual_forward_chip_id =
-                (forward_chip_id >= ring_size) ? forward_chip_id - ring_size : forward_chip_id;
-            // Should I forward what I got from the right to my left?
-            // In the linear case, if I have any targets to my left, always forward
-            // In the ring case, if I have received on the right less than my targets on the left, forward
-            if ((topology == Topology::Linear && num_targets_backward_direction > 0) ||
-                (topology == Topology::Ring && (forward_slices_received < (backward_writes_expected + 1)))) {
-                // read the next forward slice out of memory, and put it in CB
-                uint32_t output_tile_id_start = actual_forward_chip_id * input_tensor_Wt;
-                pages_read_in_row = 0;
-                row_offset = 0;
-                tiles_read = 0;
-                tiles_to_read = slice_num_pages;
-                slice_Wt = input_tensor_Wt;
-                stride_Wt = output_tensor_Wt;
-                while (tiles_read < tiles_to_read) {
-                    cb_reserve_back(cb_backward_id, packet_size_in_pages);
-                    size_t l1_write_addr = get_write_ptr(cb_backward_id);
-                    uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
-                    for (uint32_t j = 0; j < num_pages_to_read; j++) {
-                        noc_async_read_tile(
-                            output_tile_id_start + row_offset + pages_read_in_row,
-                            intermediate_tensor_addrgen,
-                            l1_write_addr);
-                        l1_write_addr += input_tensor_page_size;
-                        tiles_read++;
-
-                        pages_read_in_row++;
-                        if (pages_read_in_row >= slice_Wt) {
-                            row_offset += stride_Wt;
-                            pages_read_in_row = 0;
-                        }
-                    }
-
-                    noc_async_read_barrier();
-                    cb_push_back(cb_backward_id, packet_size_in_pages);
-                }
-            }
-        }
+        // Reset the global semaphore before the next batch
+        *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem) = 0;
     }
-
-    const uint64_t dest_noc_addr_forward = get_noc_addr(my_x[0], my_y[0], out_ready_sem_forward);
-    noc_inline_dw_write(dest_noc_addr_forward, 0);
-    const uint64_t dest_noc_addr_backward = get_noc_addr(my_x[0], my_y[0], out_ready_sem_backward);
-    noc_inline_dw_write(dest_noc_addr_backward, 0);
 }
