@@ -117,7 +117,8 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
     const size_t packet_size_bytes = tt::tt_fabric::get_1d_fabric_config().channel_buffer_size_bytes;
     uint32_t l1_scratch_cb_page_size_bytes = op_config.get_page_size();
     uint32_t num_pages_per_packet = packet_size_bytes / l1_scratch_cb_page_size_bytes;
-    uint32_t cb_num_pages = 3 * num_pages_per_packet;  // triple buffering
+    uint32_t tile_granularity = 2 * num_pages_per_packet;
+    uint32_t cb_num_pages = 2 * tile_granularity;  // double buffering
     tt::DataFormat df = tt::tt_metal::datatype_to_dataformat_converter(input_tensor.get_dtype());
 
     uint32_t input_cb_index = tt::CB::c_in0;
@@ -147,7 +148,7 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
 
     // Set aside a buffer we can use for storing packet headers in (particularly for atomic incs)
     const auto reserved_packet_header_CB_index = tt::CB::c_in4;
-    static constexpr auto num_packet_headers_storable = 8;
+    static constexpr auto num_packet_headers_storable = 4;
     static constexpr auto packet_header_size_bytes = sizeof(tt::tt_fabric::PacketHeader);
     tt::tt_metal::CircularBufferConfig cb_reserved_packet_header_config =
         tt::tt_metal::CircularBufferConfig(
@@ -178,7 +179,7 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
         input_cb_index,                                          // cb_input_id
         intermediate_cb_index,                                   // cb_intermediate_id
         reader_output_cb_index,                                  // cb_reader_output_id
-        num_pages_per_packet,                                    // packet_size_in_pages
+        tile_granularity,                                        // packet_size_in_pages
         op_config.get_page_size(),                               // tensor0_page_size
         input_tensor_Wt,                                         // input_tensor_Wt
         slice_num_pages,                                         // slice_num_pages
@@ -202,7 +203,7 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
         static_cast<uint32_t>(output_tensor_buffer_type),        // output_buffer_type
         compute_output_cb_index,                                 // cb_compute_output_id
         reader_output_cb_index,                                  // cb_reader_output_id
-        num_pages_per_packet,                                    // packet_size_in_pages
+        tile_granularity,                                        // packet_size_in_pages
         op_config.get_page_size(),                               // tensor0_page_size
         input_tensor_Wt,                                         // input_tensor_Wt
         slice_num_pages,                                         // slice_num_pages
@@ -223,7 +224,7 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
         intermediate_cb_index,
         compute_output_cb_index,
         slice_num_pages,
-        num_pages_per_packet,
+        tile_granularity,
         ring_size,
         num_batches,
     };
@@ -248,8 +249,9 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
         std::vector<uint32_t> reader_rt_args = {
             input_tensor.buffer()->address(),         // input_tensor_address
             intermediate_tensor.buffer()->address(),  // intermediate_tensor_address
-            semaphore.at(0).address(),                // out_ready_semaphore
-            semaphore.at(1).address(),                // batch_ready_semaphore
+            semaphore.at(0).address(),                // out_ready_fwd_semaphore
+            semaphore.at(1).address(),                // out_ready_bwd_semaphore
+            semaphore.at(2).address(),                // batch_ready_semaphore
         };
         tt::tt_metal::SetRuntimeArgs(program, worker_sender_reader_kernel_id, {core}, reader_rt_args);
 
@@ -258,8 +260,9 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
             output_tensor.buffer()->address(),        // output_tensor_address
             drain_sync_core.x,                        // out_ready_sem_noc0_x
             drain_sync_core.y,                        // out_ready_sem_noc0_y
-            semaphore.at(0).address(),                // out_ready_semaphore
-            semaphore.at(1).address(),                // batch_ready_semaphore
+            semaphore.at(0).address(),                // out_ready_fwd_semaphore
+            semaphore.at(1).address(),                // out_ready_bwd_semaphore
+            semaphore.at(2).address(),                // batch_ready_semaphore
         };
         writer_rt_args.push_back(forward_device.has_value());
         if (forward_device.has_value()) {

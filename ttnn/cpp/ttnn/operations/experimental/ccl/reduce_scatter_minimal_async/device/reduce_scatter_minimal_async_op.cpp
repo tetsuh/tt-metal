@@ -93,6 +93,13 @@ void ReduceScatterMinimalAsync::validate_with_output_tensors(
             "Error, Output tensor memory layout should be same as input tensor memory layout but has {}",
             output_tensor.value().memory_config().memory_layout);
     }
+
+    // Each direction has a ready semaphore and there's a global sync semaphore, per link.
+    TT_FATAL(
+        semaphore.size() == num_links * 3,
+        "Error, semaphore size should be {} but has {}",
+        num_links * 3,
+        semaphore.size());
 }
 
 std::vector<ttnn::TensorSpec> ReduceScatterMinimalAsync::compute_output_specs(

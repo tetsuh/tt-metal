@@ -26,7 +26,7 @@ constexpr BufferType intermediate_type = static_cast<BufferType>(get_compile_tim
 constexpr BufferType output_type = static_cast<BufferType>(get_compile_time_arg_val(4));
 constexpr uint32_t cb_compute_output_id = get_compile_time_arg_val(5);
 constexpr uint32_t cb_reader_output_id = get_compile_time_arg_val(6);
-constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(7);
+constexpr uint32_t tile_granularity = get_compile_time_arg_val(7);
 constexpr uint32_t intermediate_page_size = get_compile_time_arg_val(8);
 constexpr uint32_t input_tensor_Wt = get_compile_time_arg_val(9);
 constexpr uint32_t slice_num_pages = get_compile_time_arg_val(10);
@@ -45,7 +45,8 @@ void kernel_main() {
     address_t output_address = get_arg_val<address_t>(arg_idx++);
     const uint8_t out_ready_sem_noc0_x = get_arg_val<uint32_t>(arg_idx++);
     const uint8_t out_ready_sem_noc0_y = get_arg_val<uint32_t>(arg_idx++);
-    size_t out_ready_sem = get_arg_val<uint32_t>(arg_idx++);
+    size_t out_ready_sem_fwd = get_arg_val<uint32_t>(arg_idx++);
+    size_t out_ready_sem_bwd = get_arg_val<uint32_t>(arg_idx++);
     size_t batch_ready_sem = get_arg_val<uint32_t>(arg_idx++);
     size_t arg_for_fab = arg_idx;
     auto fabric_connection = FabricConnectionManager::build_from_args(arg_for_fab);
@@ -55,13 +56,22 @@ void kernel_main() {
     auto packet_header_buffer_addr_forward = get_write_ptr(reserved_packet_header_cb_id);
     cb_push_back(reserved_packet_header_cb_id, 1);
     cb_reserve_back(reserved_packet_header_cb_id, 1);
+    auto packet_header_buffer_addr_backward = get_write_ptr(reserved_packet_header_cb_id);
+    cb_push_back(reserved_packet_header_cb_id, 1);
+    cb_reserve_back(reserved_packet_header_cb_id, 1);
     auto packet_header_buffer_seminc_forward = get_write_ptr(reserved_packet_header_cb_id);
+    cb_push_back(reserved_packet_header_cb_id, 1);
+    cb_reserve_back(reserved_packet_header_cb_id, 1);
+    auto packet_header_buffer_seminc_backward = get_write_ptr(reserved_packet_header_cb_id);
     cb_push_back(reserved_packet_header_cb_id, 1);
 
     // pre-populate packet headers
     volatile PACKET_HEADER_TYPE* pkt_hdr_forward =
         reinterpret_cast<volatile PACKET_HEADER_TYPE*>(packet_header_buffer_addr_forward);
     pkt_hdr_forward->to_chip_unicast(1);
+    volatile PACKET_HEADER_TYPE* pkt_hdr_backward =
+        reinterpret_cast<volatile PACKET_HEADER_TYPE*>(packet_header_buffer_addr_backward);
+    pkt_hdr_backward->to_chip_unicast(1);
 
     uint32_t batch_slice_num_pages = slice_num_pages / num_batches;
     uint32_t slice_Wt = input_tensor_Wt / ring_size;
@@ -86,10 +96,14 @@ void kernel_main() {
     }
 
     for (uint32_t b = 0; b < num_batches; b++) {
-        int slice_idx = my_chip_id - 1;
+        int fwd_slice_idx = my_chip_id - 1;
+        int bwd_slice_idx = my_chip_id + 1;
+
         uint32_t batch_offset = batch_slice_num_pages * b;
         for (uint32_t i = 0; i < ring_size; ++i) {
-            uint32_t actual_slice_idx = (slice_idx < 0) ? ring_size + slice_idx : slice_idx;
+            uint32_t actual_fwd_slice_idx = (fwd_slice_idx + ring_size) % ring_size;
+            uint32_t actual_bwd_slice_idx = bwd_slice_idx % ring_size;
+
             uint32_t cb_output_id = i > 0 ? cb_compute_output_id : cb_reader_output_id;
             // If not the last slice, write what's on cb_output_id forward
             if (i < (ring_size - 1)) {
@@ -97,31 +111,53 @@ void kernel_main() {
                 uint32_t row_offset = 0;
                 uint32_t tiles_read = 0;
                 uint32_t tiles_to_read = batch_slice_num_pages;
-                uint32_t tile_id_start = actual_slice_idx * slice_Wt;
+                uint32_t fwd_tile_id_start = actual_fwd_slice_idx * slice_Wt;
+                uint32_t bwd_tile_id_start = actual_bwd_slice_idx * slice_Wt;
+                bool write_forward = true;
                 while (tiles_read < tiles_to_read) {
-                    cb_wait_front(cb_output_id, packet_size_in_pages);
+                    // Alternate writes in forward and backward direction
+                    cb_wait_front(cb_output_id, tile_granularity);
                     size_t l1_read_addr = get_read_ptr(cb_output_id);
-                    uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
+                    uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, tile_granularity);
 
                     for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
-                        uint64_t remote_noc0_dest_noc_addr = get_noc_addr(
-                            tile_id_start + row_offset + pages_read_in_row,
-                            intermediate_addrgen,
-                            0 /*offset*/,
-                            0 /*noc_id*/);
-
-                        pkt_hdr_forward->to_noc_unicast_write(
-                            tt::tt_fabric::NocUnicastCommandHeader{remote_noc0_dest_noc_addr}, payload_size_bytes);
-                        if (fabric_connection.has_forward_connection()) {
-                            fabric_connection.get_forward_connection().wait_for_empty_write_slot();
-                            fabric_connection.get_forward_connection()
-                                .send_payload_without_header_non_blocking_from_address(
-                                    l1_read_addr, payload_size_bytes);
-                            fabric_connection.get_forward_connection().send_payload_flush_non_blocking_from_address(
-                                (uint32_t)pkt_hdr_forward, sizeof(PACKET_HEADER_TYPE));
+                        if (write_forward) {
+                            uint64_t remote_noc0_dest_noc_addr = get_noc_addr(
+                                fwd_tile_id_start + row_offset + pages_read_in_row,
+                                intermediate_addrgen,
+                                0 /*offset*/,
+                                0 /*noc_id*/);
+                            pkt_hdr_forward->to_noc_unicast_write(
+                                tt::tt_fabric::NocUnicastCommandHeader{remote_noc0_dest_noc_addr}, payload_size_bytes);
+                            if (fabric_connection.has_forward_connection()) {
+                                fabric_connection.get_forward_connection().wait_for_empty_write_slot();
+                                fabric_connection.get_forward_connection()
+                                    .send_payload_without_header_non_blocking_from_address(
+                                        l1_read_addr, payload_size_bytes);
+                                fabric_connection.get_forward_connection().send_payload_flush_non_blocking_from_address(
+                                    (uint32_t)pkt_hdr_forward, sizeof(PACKET_HEADER_TYPE));
+                            }
+                        } else {
+                            uint64_t remote_noc0_dest_noc_addr = get_noc_addr(
+                                bwd_tile_id_start + row_offset + pages_read_in_row,
+                                intermediate_addrgen,
+                                0 /*offset*/,
+                                0 /*noc_id*/);
+                            pkt_hdr_backward->to_noc_unicast_write(
+                                tt::tt_fabric::NocUnicastCommandHeader{remote_noc0_dest_noc_addr}, payload_size_bytes);
+                            if (fabric_connection.has_backward_connection()) {
+                                fabric_connection.get_backward_connection().wait_for_empty_write_slot();
+                                fabric_connection.get_backward_connection()
+                                    .send_payload_without_header_non_blocking_from_address(
+                                        l1_read_addr, payload_size_bytes);
+                                fabric_connection.get_backward_connection()
+                                    .send_payload_flush_non_blocking_from_address(
+                                        (uint32_t)pkt_hdr_backward, sizeof(PACKET_HEADER_TYPE));
+                            }
                         }
-
+                        // Note: Must flush write for correctness
                         noc_async_writes_flushed();
+
                         l1_read_addr += payload_size_bytes;
 
                         tiles_read += contig_pages_advanced;
@@ -132,12 +168,13 @@ void kernel_main() {
                         }
                     }
 
-                    cb_pop_front(cb_output_id, packet_size_in_pages);
+                    cb_pop_front(cb_output_id, tile_granularity);
+                    write_forward = !write_forward;
                 }
 
                 // 2. unicast output ready semaphore forward
                 uint64_t out_ready_sem_noc_addr_in_pkt_forward =
-                    safe_get_noc_addr(out_ready_sem_noc0_x, out_ready_sem_noc0_y, out_ready_sem, 0);
+                    safe_get_noc_addr(out_ready_sem_noc0_x, out_ready_sem_noc0_y, out_ready_sem_fwd, 0);
                 auto* pkt_hdr_fwd = reinterpret_cast<PACKET_HEADER_TYPE*>(packet_header_buffer_seminc_forward);
                 pkt_hdr_fwd->to_noc_unicast_atomic_inc(tt::tt_fabric::NocUnicastAtomicIncCommandHeader{
                     out_ready_sem_noc_addr_in_pkt_forward,
@@ -145,10 +182,26 @@ void kernel_main() {
                     32});
                 // Write the unicast packet (forward)
                 if (fabric_connection.has_forward_connection()) {
-                    fabric_connection.get_forward_connection().wait_for_empty_write_slot();
                     pkt_hdr_fwd->to_chip_unicast(1);
+                    fabric_connection.get_forward_connection().wait_for_empty_write_slot();
                     fabric_connection.get_forward_connection().send_payload_flush_blocking_from_address(
                         packet_header_buffer_seminc_forward, sizeof(PACKET_HEADER_TYPE));
+                }
+                noc_async_writes_flushed();
+                // 2. unicast output ready semaphore backward
+                uint64_t out_ready_sem_noc_addr_in_pkt_backward =
+                    safe_get_noc_addr(out_ready_sem_noc0_x, out_ready_sem_noc0_y, out_ready_sem_bwd, 0);
+                auto* pkt_hdr_bwd = reinterpret_cast<PACKET_HEADER_TYPE*>(packet_header_buffer_seminc_backward);
+                pkt_hdr_bwd->to_noc_unicast_atomic_inc(tt::tt_fabric::NocUnicastAtomicIncCommandHeader{
+                    out_ready_sem_noc_addr_in_pkt_backward,
+                    static_cast<uint16_t>(1),  // increment 1
+                    32});
+                // Write the unicast packet (backward)
+                if (fabric_connection.has_backward_connection()) {
+                    pkt_hdr_bwd->to_chip_unicast(1);
+                    fabric_connection.get_backward_connection().wait_for_empty_write_slot();
+                    fabric_connection.get_backward_connection().send_payload_flush_blocking_from_address(
+                        packet_header_buffer_seminc_backward, sizeof(PACKET_HEADER_TYPE));
                 }
                 noc_async_writes_flushed();
             } else {
@@ -157,9 +210,9 @@ void kernel_main() {
                 uint32_t tiles_to_read = batch_slice_num_pages;
                 uint32_t tile_id_start = batch_offset;
                 while (tiles_read < tiles_to_read) {
-                    cb_wait_front(cb_output_id, packet_size_in_pages);
+                    cb_wait_front(cb_output_id, tile_granularity);
                     size_t l1_read_addr = get_read_ptr(cb_output_id);
-                    uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
+                    uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, tile_granularity);
 
                     for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
                         for (uint32_t t = 0; t < contig_pages_advanced; t++) {
@@ -170,11 +223,12 @@ void kernel_main() {
                     }
 
                     noc_async_writes_flushed();
-                    cb_pop_front(cb_output_id, packet_size_in_pages);
+                    cb_pop_front(cb_output_id, tile_granularity);
                 }
                 noc_async_write_barrier();
 
-                *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem) = 0;
+                *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_fwd) = 0;
+                *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_bwd) = 0;
 
                 // 2. mcast batch ready semaphore forward
                 uint64_t out_ready_sem_noc_addr_in_pkt =
@@ -196,7 +250,8 @@ void kernel_main() {
             }
 
             // Next slice idx
-            slice_idx--;
+            fwd_slice_idx--;
+            bwd_slice_idx++;
         }
         // Reset the global semaphore before the next batch
         while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(batch_ready_sem) < ring_size - 1);

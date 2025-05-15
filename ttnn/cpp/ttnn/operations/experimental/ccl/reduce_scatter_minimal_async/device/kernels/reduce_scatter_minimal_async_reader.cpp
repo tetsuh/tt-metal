@@ -22,7 +22,7 @@ constexpr BufferType intermediate_buffer_type = static_cast<BufferType>(get_comp
 constexpr uint32_t cb_input_id = get_compile_time_arg_val(3);
 constexpr uint32_t cb_intermediate_id = get_compile_time_arg_val(4);
 constexpr uint32_t cb_reader_output_id = get_compile_time_arg_val(5);
-constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(6);
+constexpr uint32_t tile_granularity = get_compile_time_arg_val(6);
 constexpr uint32_t input_tensor_page_size = get_compile_time_arg_val(7);
 constexpr uint32_t input_tensor_Wt = get_compile_time_arg_val(8);
 constexpr uint32_t slice_num_pages = get_compile_time_arg_val(9);
@@ -38,7 +38,8 @@ void kernel_main() {
     // Load the input tensor spec
     address_t input_tensor_address = get_arg_val<address_t>(arg_idx++);
     address_t intermediate_tensor_address = get_arg_val<address_t>(arg_idx++);
-    size_t out_ready_sem = get_arg_val<uint32_t>(arg_idx++);
+    size_t out_ready_sem_fwd = get_arg_val<uint32_t>(arg_idx++);
+    size_t out_ready_sem_bwd = get_arg_val<uint32_t>(arg_idx++);
     size_t batch_ready_sem = get_arg_val<uint32_t>(arg_idx++);
 
     constexpr uint32_t batch_slice_num_pages = slice_num_pages / num_batches;
@@ -59,7 +60,8 @@ void kernel_main() {
         .data_format = get_dataformat(cb_input_id)};
 
     for (uint32_t b = 0; b < num_batches; b++) {
-        int slice_idx = my_chip_id - 1;
+        int fwd_slice_idx = my_chip_id - 1;
+        int bwd_slice_idx = my_chip_id + 1;
         uint32_t batch_offset = batch_num_pages * b;
 
         // Loop over the slices, starting from the furthest, and working backwards until we get to ourselves
@@ -72,27 +74,44 @@ void kernel_main() {
             const bool do_reduce = i != 0;
             uint32_t cb_in0 = do_reduce ? cb_input_id : cb_reader_output_id;
 
-            uint32_t actual_slice_idx = (slice_idx < 0) ? ring_size + slice_idx : slice_idx;
+            uint32_t actual_fwd_slice_idx = (fwd_slice_idx + ring_size) % ring_size;
+            uint32_t actual_bwd_slice_idx = bwd_slice_idx % ring_size;
 
-            uint32_t input_tile_id_start = actual_slice_idx * slice_Wt + batch_offset;
-            uint32_t intermediate_tile_id_start = actual_slice_idx * slice_Wt;
+            uint32_t fwd_input_tile_id_start = actual_fwd_slice_idx * slice_Wt + batch_offset;
+            uint32_t fwd_intermediate_tile_id_start = actual_fwd_slice_idx * slice_Wt;
+            uint32_t bwd_input_tile_id_start = actual_bwd_slice_idx * slice_Wt + batch_offset;
+            uint32_t bwd_intermediate_tile_id_start = actual_bwd_slice_idx * slice_Wt;
             uint32_t pages_read_in_row = 0;
             uint32_t row_offset = 0;
             uint32_t tiles_read = 0;
             uint32_t tiles_to_read = batch_slice_num_pages;
             uint32_t stride_Wt = input_tensor_Wt;
+
+            /**
+             * Interleave forward and backward ring reads
+             * forward handles even tiles, backward handles odd tiles
+             * after ring_size-1 steps, we've transferred all tiles
+             */
+            if (do_reduce) {
+                while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_fwd) <= i - 1);
+                while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_bwd) <= i - 1);
+            }
+            bool read_forward = true;
             while (tiles_read < tiles_to_read) {
-                cb_reserve_back(cb_in0, packet_size_in_pages);
+                cb_reserve_back(cb_in0, tile_granularity);
                 const uint32_t l1_write_addr_base = get_write_ptr(cb_in0);
                 uint32_t l1_write_addr = l1_write_addr_base;
-                uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
+                uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, tile_granularity);
 
                 uint32_t intermediate_pages_read_in_row = pages_read_in_row;
                 uint32_t intermediate_row_offset = row_offset;
 
                 for (uint32_t j = 0; j < num_pages_to_read; j++) {
                     noc_async_read_tile(
-                        input_tile_id_start + row_offset + pages_read_in_row, input_tensor_addrgen, l1_write_addr);
+                        (read_forward ? fwd_input_tile_id_start : bwd_input_tile_id_start) + row_offset +
+                            pages_read_in_row,
+                        input_tensor_addrgen,
+                        l1_write_addr);
                     l1_write_addr += input_tensor_page_size;
                     tiles_read++;
 
@@ -103,19 +122,14 @@ void kernel_main() {
                     }
                 }
 
-                noc_async_read_barrier();
-                cb_push_back(cb_in0, packet_size_in_pages);
-
                 if (do_reduce) {
-                    // Wait for the next slice to show up from the backward direction (everyone is pushing forward)
-                    while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem) <= i - 1);
-
                     // read the next intermediate slice out of the intermediate buffer, and put it in intermediate CB
-                    cb_reserve_back(cb_intermediate_id, packet_size_in_pages);
+                    cb_reserve_back(cb_intermediate_id, tile_granularity);
                     size_t intermediate_l1_write_addr = get_write_ptr(cb_intermediate_id);
                     for (uint32_t j = 0; j < num_pages_to_read; j++) {
                         noc_async_read_tile(
-                            intermediate_tile_id_start + intermediate_row_offset + intermediate_pages_read_in_row,
+                            (read_forward ? fwd_intermediate_tile_id_start : bwd_intermediate_tile_id_start) +
+                                intermediate_row_offset + intermediate_pages_read_in_row,
                             intermediate_tensor_addrgen,
                             intermediate_l1_write_addr);
                         intermediate_l1_write_addr += input_tensor_page_size;
@@ -128,12 +142,17 @@ void kernel_main() {
                     }
 
                     noc_async_read_barrier();
-                    cb_push_back(cb_intermediate_id, packet_size_in_pages);
+                    cb_push_back(cb_intermediate_id, tile_granularity);
                 }
+                noc_async_read_barrier();
+                cb_push_back(cb_in0, tile_granularity);
+
+                read_forward = !read_forward;
             }
 
             // Next slice idx
-            slice_idx--;
+            fwd_slice_idx--;
+            bwd_slice_idx++;
         }
     }
 }
