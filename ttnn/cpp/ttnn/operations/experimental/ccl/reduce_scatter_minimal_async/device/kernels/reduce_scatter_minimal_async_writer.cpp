@@ -28,6 +28,12 @@ constexpr uint32_t cb_compute_output_id = get_compile_time_arg_val(5);
 constexpr uint32_t cb_reader_output_id = get_compile_time_arg_val(6);
 constexpr uint32_t packet_size_in_pages = get_compile_time_arg_val(7);
 constexpr uint32_t intermediate_page_size = get_compile_time_arg_val(8);
+constexpr uint32_t input_tensor_Wt = get_compile_time_arg_val(9);
+constexpr uint32_t slice_num_pages = get_compile_time_arg_val(10);
+constexpr uint32_t ring_size = get_compile_time_arg_val(11);
+constexpr uint32_t num_batches = get_compile_time_arg_val(12);
+
+// TODO: calculate half of batch_slice_num_pages
 
 void kernel_main() {
     ///////////////////////////////////////////////////
@@ -37,14 +43,10 @@ void kernel_main() {
     uint32_t arg_idx = 0;
     address_t intermediate_address = get_arg_val<address_t>(arg_idx++);
     address_t output_address = get_arg_val<address_t>(arg_idx++);
-    uint32_t input_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
-    uint32_t slice_num_pages = get_arg_val<uint32_t>(arg_idx++);
     const uint8_t out_ready_sem_noc0_x = get_arg_val<uint32_t>(arg_idx++);
     const uint8_t out_ready_sem_noc0_y = get_arg_val<uint32_t>(arg_idx++);
-    uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
     size_t out_ready_sem = get_arg_val<uint32_t>(arg_idx++);
     size_t batch_ready_sem = get_arg_val<uint32_t>(arg_idx++);
-    uint32_t num_batches = get_arg_val<uint32_t>(arg_idx++);
     size_t arg_for_fab = arg_idx;
     auto fabric_connection = FabricConnectionManager::build_from_args(arg_for_fab);
 

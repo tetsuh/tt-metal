@@ -146,15 +146,16 @@ def run_reduce_scatter_impl(
         return tt_reduce_scatter_output_tensor
 
     if enable_trace:
-        assert num_iters == 1, "When running in trace, use num_iters = 1"
-
         # Compile the op
-        tt_reduce_scatter_output_tensor = run_op(0)
+        for i in range(num_iters):
+            tt_reduce_scatter_output_tensor = run_op(i)
         logger.info(f"Done compiling Op")
 
         # Capture the trace
         trace_id = ttnn.begin_trace_capture(t3k_mesh_device, cq_id=0)
-        tt_reduce_scatter_output_tensor = run_op(0)
+        for i in range(num_iters):
+            tt_reduce_scatter_output_tensor = run_op(i)
+            tt_reduce_scatter_output_list.append(tt_reduce_scatter_output_tensor)
         ttnn.end_trace_capture(t3k_mesh_device, trace_id, cq_id=0)
         logger.info(f"Done capturing trace")
 
@@ -165,7 +166,7 @@ def run_reduce_scatter_impl(
         # Synchronize the devices
         ttnn.synchronize_device(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
 
-        tt_reduce_scatter_output_list.append(tt_reduce_scatter_output_tensor)
+        # tt_reduce_scatter_output_list.append(tt_reduce_scatter_output_tensor)
     else:
         for i in range(num_iters):
             tt_reduce_scatter_output_tensor = run_op(i)
@@ -211,7 +212,11 @@ def run_reduce_scatter_impl(
         #     1,
         # ),  # Full SD3.5 shape, when reduce scatter unfused
         (8, 1, [1, 1, 4096, 2560], 3, ttnn.TILE_LAYOUT, ttnn.bfloat16, 8),  # use batching when fused
+        (8, 1, [1, 1, 4096, 2560], 3, ttnn.TILE_LAYOUT, ttnn.bfloat16, 4),  # use batching when fused
+        (8, 1, [1, 1, 4096, 2560], 3, ttnn.TILE_LAYOUT, ttnn.bfloat16, 2),  # use batching when fused
+        (8, 1, [1, 1, 4096, 2560], 3, ttnn.TILE_LAYOUT, ttnn.bfloat16, 1),  # use batching when fused
     ],
+    ids=["batch_8", "batch_4", "batch_2", "batch_1"],
 )
 @pytest.mark.parametrize(
     "mem_config_input, mem_config_rs",
@@ -223,11 +228,12 @@ def run_reduce_scatter_impl(
     ],
 )
 @pytest.mark.parametrize(
-    "enable_trace",
+    "enable_trace, num_iters",
     [
-        # True,
-        False,
+        (True, 10),
+        (False, 1),
     ],
+    ids=["perf", "check"],
 )
 @pytest.mark.parametrize(
     "device_params, rs_topology",
@@ -252,6 +258,7 @@ def test_reduce_scatter_async(
     mem_config_input,
     mem_config_rs,
     enable_trace,
+    num_iters,
     use_program_cache,
     rs_topology,
     rs_num_batches,
@@ -269,6 +276,6 @@ def test_reduce_scatter_async(
         use_program_cache=use_program_cache,
         rs_topology=rs_topology,
         enable_trace=enable_trace,
-        num_iters=1,
+        num_iters=num_iters,
         rs_num_batches=rs_num_batches,
     )
