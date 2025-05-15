@@ -50,9 +50,10 @@ void kernel_main() {
         .bank_base_address = input_tensor_address,
         .page_size = input_tensor_page_size,
         .data_format = get_dataformat(cb_input_id)};
-    auto intermediate_tensor_addrgen = InterleavedAddrGenFast<is_dram>{
-        .bank_base_address = intermediate_buffer_addr,
-        .page_size = page_size,
+    constexpr bool intermediate_tensor_is_dram = intermediate_buffer_type == tt::tt_metal::BufferType::DRAM;
+    auto intermediate_tensor_addrgen = InterleavedAddrGenFast<intermediate_tensor_is_dram>{
+        .bank_base_address = intermediate_tensor_address,
+        .page_size = input_tensor_page_size,
         .data_format = get_dataformat(cb_input_id)};
 
     for (uint32_t b = 0; b < num_batches; b++) {

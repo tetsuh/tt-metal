@@ -255,6 +255,7 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
             drain_sync_core.y,                        // out_ready_sem_noc0_y
             ring_size,                                // ring_size
             semaphore.at(0).address(),                // out_ready_semaphore
+            num_batches,                              // num_batches
         };
         writer_rt_args.push_back(forward_device.has_value());
         if (forward_device.has_value()) {

@@ -17,7 +17,7 @@ from ttnn import ShardTensorToMesh, ConcatMeshToTensor
 
 def create_global_semaphores(mesh_device, num_devices, cores, initial_value):
     # create global semaphore handles
-    ccl_semaphore_handles = [ttnn.create_global_semaphore(mesh_device, cores, initial_value) for _ in range(2)]
+    ccl_semaphore_handles = [ttnn.create_global_semaphore(mesh_device, cores, initial_value) for _ in range(1)]
     return ccl_semaphore_handles
 
 
@@ -68,7 +68,7 @@ def run_reduce_scatter_impl(
     ### Create persistent output buffers
     logger.info("Creating persistent buffers")
     single_batch_input_shape = rs_input_shape
-    single_batch_input_shape[2] /= rs_num_batches
+    single_batch_input_shape[2] //= rs_num_batches
     persistent_intermediate_buffers = [
         ttnn.from_torch(
             torch.zeros(single_batch_input_shape),
@@ -81,7 +81,7 @@ def run_reduce_scatter_impl(
         for _ in range(num_iters)
     ]
     rs_output_shape = rs_input_shape
-    rs_output_shape[3] /= num_devices
+    rs_output_shape[3] //= num_devices
     persistent_output_buffers = [
         ttnn.from_torch(
             torch.zeros(rs_output_shape),
@@ -114,7 +114,7 @@ def run_reduce_scatter_impl(
         torch_input_tensor_list.append(input_tensors)
         tt_input_tensors = []
         for j, t in enumerate(input_tensors):
-            tt_input_tensors.append(ttnn.Tensor(t, ag_input_dtype).to(layout))
+            tt_input_tensors.append(ttnn.Tensor(t, rs_input_dtype).to(layout))
         input_tensor_mesh = ttnn.aggregate_as_tensor(tt_input_tensors).to(t3k_mesh_device, mem_config_input)
 
         tt_input_tensor_mesh_list.append(input_tensor_mesh)

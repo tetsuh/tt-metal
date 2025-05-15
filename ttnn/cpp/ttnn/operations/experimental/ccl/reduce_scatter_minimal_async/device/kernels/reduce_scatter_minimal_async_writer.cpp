@@ -8,7 +8,6 @@
 #include "cpp/ttnn/operations/ccl/common/interpreter_backends/kernel_common/noc_addr.hpp"
 #include "cpp/ttnn/operations/ccl/kernel_common/worker_sync_utils.hpp"
 #include "cpp/ttnn/operations/ccl/ccl_host_types.hpp"
-#include "minimal_ccl_common.hpp"
 #include <cstdint>
 #include <utility>
 
@@ -44,6 +43,7 @@ void kernel_main() {
     const uint8_t out_ready_sem_noc0_y = get_arg_val<uint32_t>(arg_idx++);
     uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
     size_t out_ready_sem = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t num_batches = get_arg_val<uint32_t>(arg_idx++);
     size_t arg_for_fab = arg_idx;
     auto fabric_connection = FabricConnectionManager::build_from_args(arg_for_fab);
 
@@ -65,7 +65,7 @@ void kernel_main() {
 
     uint32_t batch_num_pages = slice_num_pages * ring_size / num_batches;
     uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
-    uint32_t payload_size_bytes = contig_pages_advanced * intermediate_page_size);
+    uint32_t payload_size_bytes = contig_pages_advanced * intermediate_page_size;
 
     // interleaved addrgen
     constexpr bool intermediate_is_dram = intermediate_type == tt::tt_metal::BufferType::DRAM;
@@ -96,7 +96,6 @@ void kernel_main() {
                 uint32_t tiles_read = 0;
                 uint32_t tiles_to_read = batch_slice_num_pages;
                 uint32_t tile_id_start = actual_slice_idx * slice_Wt;
-                stride_Wt = input_tensor_Wt;
                 while (tiles_read < tiles_to_read) {
                     cb_wait_front(cb_output_id, packet_size_in_pages);
                     size_t l1_read_addr = get_read_ptr(cb_output_id);
