@@ -38,9 +38,11 @@ void kernel_main() {
     uint32_t slice_num_pages = get_arg_val<uint32_t>(arg_idx++);
     uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
     size_t out_ready_sem = get_arg_val<uint32_t>(arg_idx++);
+    size_t batch_ready_sem = get_arg_val<uint32_t>(arg_idx++);
     uint32_t num_batches = get_arg_val<uint32_t>(arg_idx++);
 
     uint32_t batch_slice_num_pages = slice_num_pages / num_batches;
+
     uint32_t slice_Wt = input_tensor_Wt / ring_size;
 
     uint32_t batch_num_pages = slice_num_pages * ring_size / num_batches;
@@ -73,6 +75,7 @@ void kernel_main() {
             uint32_t actual_slice_idx = (slice_idx < 0) ? ring_size + slice_idx : slice_idx;
 
             uint32_t input_tile_id_start = actual_slice_idx * slice_Wt + batch_offset;
+            uint32_t intermediate_tile_id_start = actual_slice_idx * slice_Wt;
             uint32_t pages_read_in_row = 0;
             uint32_t row_offset = 0;
             uint32_t tiles_read = 0;
@@ -83,6 +86,10 @@ void kernel_main() {
                 const uint32_t l1_write_addr_base = get_write_ptr(cb_in0);
                 uint32_t l1_write_addr = l1_write_addr_base;
                 uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
+
+                uint32_t intermediate_pages_read_in_row = pages_read_in_row;
+                uint32_t intermediate_row_offset = row_offset;
+
                 for (uint32_t j = 0; j < num_pages_to_read; j++) {
                     noc_async_read_tile(
                         input_tile_id_start + row_offset + pages_read_in_row, input_tensor_addrgen, l1_write_addr);
@@ -98,35 +105,25 @@ void kernel_main() {
 
                 noc_async_read_barrier();
                 cb_push_back(cb_in0, packet_size_in_pages);
-            }
 
-            if (do_reduce) {
-                // Wait for the next slice to show up from the backward direction (everyone is pushing forward)
-                while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem) <= i);
+                if (do_reduce) {
+                    // Wait for the next slice to show up from the backward direction (everyone is pushing forward)
+                    while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem) <= i - 1);
 
-                // read the next intermediate slice out of the intermediate buffer, and put it in intermediate CB
-                uint32_t intermediate_tile_id_start = actual_slice_idx * slice_Wt;
-                pages_read_in_row = 0;
-                row_offset = 0;
-                tiles_read = 0;
-                tiles_to_read = batch_slice_num_pages;
-                stride_Wt = input_tensor_Wt;
-                while (tiles_read < tiles_to_read) {
+                    // read the next intermediate slice out of the intermediate buffer, and put it in intermediate CB
                     cb_reserve_back(cb_intermediate_id, packet_size_in_pages);
-                    size_t l1_write_addr = get_write_ptr(cb_intermediate_id);
-                    uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
+                    size_t intermediate_l1_write_addr = get_write_ptr(cb_intermediate_id);
                     for (uint32_t j = 0; j < num_pages_to_read; j++) {
                         noc_async_read_tile(
-                            intermediate_tile_id_start + row_offset + pages_read_in_row,
+                            intermediate_tile_id_start + intermediate_row_offset + intermediate_pages_read_in_row,
                             intermediate_tensor_addrgen,
-                            l1_write_addr);
-                        l1_write_addr += input_tensor_page_size;
-                        tiles_read++;
+                            intermediate_l1_write_addr);
+                        intermediate_l1_write_addr += input_tensor_page_size;
 
-                        pages_read_in_row++;
-                        if (pages_read_in_row >= slice_Wt) {
-                            row_offset += stride_Wt;
-                            pages_read_in_row = 0;
+                        intermediate_pages_read_in_row++;
+                        if (intermediate_pages_read_in_row >= slice_Wt) {
+                            intermediate_row_offset += stride_Wt;
+                            intermediate_pages_read_in_row = 0;
                         }
                     }
 
@@ -138,8 +135,5 @@ void kernel_main() {
             // Next slice idx
             slice_idx--;
         }
-
-        // Reset the global semaphore before the next batch
-        *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem) = 0;
     }
 }

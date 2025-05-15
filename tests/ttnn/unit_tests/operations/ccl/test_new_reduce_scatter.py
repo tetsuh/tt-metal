@@ -17,7 +17,7 @@ from ttnn import ShardTensorToMesh, ConcatMeshToTensor
 
 def create_global_semaphores(mesh_device, num_devices, cores, initial_value):
     # create global semaphore handles
-    ccl_semaphore_handles = [ttnn.create_global_semaphore(mesh_device, cores, initial_value) for _ in range(1)]
+    ccl_semaphore_handles = [ttnn.create_global_semaphore(mesh_device, cores, initial_value) for _ in range(2)]
     return ccl_semaphore_handles
 
 
@@ -67,7 +67,7 @@ def run_reduce_scatter_impl(
 
     ### Create persistent output buffers
     logger.info("Creating persistent buffers")
-    single_batch_input_shape = rs_input_shape
+    single_batch_input_shape = rs_input_shape[:]
     single_batch_input_shape[2] //= rs_num_batches
     persistent_intermediate_buffers = [
         ttnn.from_torch(
@@ -80,7 +80,7 @@ def run_reduce_scatter_impl(
         )
         for _ in range(num_iters)
     ]
-    rs_output_shape = rs_input_shape
+    rs_output_shape = rs_input_shape[:]
     rs_output_shape[3] //= num_devices
     persistent_output_buffers = [
         ttnn.from_torch(
@@ -107,7 +107,7 @@ def run_reduce_scatter_impl(
     torch_input_tensor_list = []
 
     for i in range(num_iters):
-        rs_global_input_shape = rs_input_shape
+        rs_global_input_shape = rs_input_shape[:]
         rs_global_input_shape[3] *= num_devices
         rs_input_tensor = torch.rand(rs_global_input_shape).bfloat16()
         input_tensors = torch.chunk(rs_input_tensor, num_devices, dim)
@@ -181,13 +181,15 @@ def run_reduce_scatter_impl(
         tt_rs_out_tensor = tt_reduce_scatter_output_list[i]
         torch_rs_out_tensor = torch_reduce_scatter_output_list[i]
 
+        torch_rs_out = torch.cat(torch_rs_out_tensor, 3)
+
         tt_rs_out = ttnn.from_device(tt_rs_out_tensor)
         tt_rs_out = ttnn.to_torch(tt_rs_out, mesh_composer=ConcatMeshToTensor(t3k_mesh_device, dim=3))
-        eq, output = comp_pcc(tt_rs_out, torch_rs_out_tensor)
+        eq, output = comp_pcc(tt_rs_out, torch_rs_out)
         logger.info(f"{output}, iteration {i}")
         assert eq, f"{i} FAILED ag: {output}"
 
-        # print(f"RS TORCH TENSOR {torch_rs_out_tensor}")
+        # print(f"RS TORCH TENSOR {torch_rs_out}")
         # print(f"RS TT TENSOR {tt_rs_out}")
 
     t3k_mesh_device.reset_sub_device_stall_group()
@@ -199,16 +201,16 @@ def run_reduce_scatter_impl(
 @pytest.mark.parametrize(
     "num_devices, num_links, rs_input_shape, dim, layout, rs_input_dtype, rs_num_batches",
     [
-        (
-            8,
-            1,
-            [1, 1, 4096, 2560],
-            3,
-            ttnn.TILE_LAYOUT,
-            ttnn.bfloat16,
-            1,
-        ),  # Full SD3.5 shape, when reduce scatter unfused
-        #        (8, 1, [1, 1, 4096, 2560], 3, ttnn.TILE_LAYOUT, ttnn.bfloat16, 8), # use batching when fused
+        # (
+        #     8,
+        #     1,
+        #     [1, 1, 4096, 2560],
+        #     3,
+        #     ttnn.TILE_LAYOUT,
+        #     ttnn.bfloat16,
+        #     1,
+        # ),  # Full SD3.5 shape, when reduce scatter unfused
+        (8, 1, [1, 1, 4096, 2560], 3, ttnn.TILE_LAYOUT, ttnn.bfloat16, 8),  # use batching when fused
     ],
 )
 @pytest.mark.parametrize(

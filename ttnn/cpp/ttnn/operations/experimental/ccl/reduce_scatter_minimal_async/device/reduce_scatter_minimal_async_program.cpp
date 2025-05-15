@@ -92,6 +92,7 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
     const bool enable_persistent_fabric_mode = true;
     bool is_first_chip = ring_index == 0;
     bool is_last_chip = ring_index == ring_size - 1;
+
     log_trace(
         tt::LogOp,
         "DEBUG: device: {}, is_first_chip: {}, is_last_chip: {}",
@@ -103,6 +104,8 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
     std::vector<Tensor> input_tensors = {input_tensor};
     std::vector<Tensor> output_tensors = {intermediate_tensor, output_tensor};
     const auto& op_config = ttnn::ccl::CCLOpConfig(input_tensors, output_tensors, topology);
+    auto [num_targets_forward, num_targets_backward, dynamic_alternate] =
+        ccl::get_forward_backward_configuration(ring_size, ring_index, topology);
 
     // Get worker cores
     // 1 sender (reader + core + writer)
@@ -242,6 +245,7 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
             slice_num_pages,                          // slice_num_pages
             ring_size,                                // ring_size
             semaphore.at(0).address(),                // out_ready_semaphore
+            semaphore.at(1).address(),                // batch_ready_semaphore
             num_batches,                              // num_batches
         };
         tt::tt_metal::SetRuntimeArgs(program, worker_sender_reader_kernel_id, {core}, reader_rt_args);
@@ -255,6 +259,7 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
             drain_sync_core.y,                        // out_ready_sem_noc0_y
             ring_size,                                // ring_size
             semaphore.at(0).address(),                // out_ready_semaphore
+            semaphore.at(1).address(),                // batch_ready_semaphore
             num_batches,                              // num_batches
         };
         writer_rt_args.push_back(forward_device.has_value());

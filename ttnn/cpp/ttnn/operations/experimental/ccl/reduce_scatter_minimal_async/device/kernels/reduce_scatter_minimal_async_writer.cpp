@@ -43,6 +43,7 @@ void kernel_main() {
     const uint8_t out_ready_sem_noc0_y = get_arg_val<uint32_t>(arg_idx++);
     uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
     size_t out_ready_sem = get_arg_val<uint32_t>(arg_idx++);
+    size_t batch_ready_sem = get_arg_val<uint32_t>(arg_idx++);
     uint32_t num_batches = get_arg_val<uint32_t>(arg_idx++);
     size_t arg_for_fab = arg_idx;
     auto fabric_connection = FabricConnectionManager::build_from_args(arg_for_fab);
@@ -63,7 +64,6 @@ void kernel_main() {
     uint32_t batch_slice_num_pages = slice_num_pages / num_batches;
     uint32_t slice_Wt = input_tensor_Wt / ring_size;
 
-    uint32_t batch_num_pages = slice_num_pages * ring_size / num_batches;
     uint32_t contig_pages_advanced = 1;  // always 1 for interleaved
     uint32_t payload_size_bytes = contig_pages_advanced * intermediate_page_size;
 
@@ -85,7 +85,7 @@ void kernel_main() {
 
     for (uint32_t b = 0; b < num_batches; b++) {
         int slice_idx = my_chip_id - 1;
-        uint32_t batch_offset = batch_num_pages * b;
+        uint32_t batch_offset = batch_slice_num_pages * b;
         for (uint32_t i = 0; i < ring_size; ++i) {
             uint32_t actual_slice_idx = (slice_idx < 0) ? ring_size + slice_idx : slice_idx;
             uint32_t cb_output_id = i > 0 ? cb_compute_output_id : cb_reader_output_id;
@@ -148,6 +148,7 @@ void kernel_main() {
                     fabric_connection.get_forward_connection().send_payload_flush_blocking_from_address(
                         packet_header_buffer_seminc_forward, sizeof(PACKET_HEADER_TYPE));
                 }
+                noc_async_writes_flushed();
             } else {
                 // Otherwise, on the last slice, write it to output buffer
                 uint32_t tiles_read = 0;
@@ -166,10 +167,38 @@ void kernel_main() {
                         }
                     }
 
+                    noc_async_writes_flushed();
                     cb_pop_front(cb_output_id, packet_size_in_pages);
                 }
+                noc_async_write_barrier();
+
+                *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem) = 0;
+
+                // 2. mcast batch ready semaphore forward
+                uint64_t out_ready_sem_noc_addr_in_pkt =
+                    safe_get_noc_addr(out_ready_sem_noc0_x, out_ready_sem_noc0_y, batch_ready_sem, 0);
+                auto* pkt_hdr_fwd = reinterpret_cast<PACKET_HEADER_TYPE*>(packet_header_buffer_seminc_forward);
+                pkt_hdr_fwd->to_noc_unicast_atomic_inc(tt::tt_fabric::NocUnicastAtomicIncCommandHeader{
+                    out_ready_sem_noc_addr_in_pkt,
+                    static_cast<uint16_t>(1),  // increment 1
+                    32});
+                // Write the mcast packet (forward)
+                if (fabric_connection.has_forward_connection()) {
+                    fabric_connection.get_forward_connection().wait_for_empty_write_slot();
+                    pkt_hdr_fwd->to_chip_multicast(
+                        tt::tt_fabric::MulticastRoutingCommandHeader{1, static_cast<uint8_t>(ring_size - 1)});
+                    fabric_connection.get_forward_connection().send_payload_flush_blocking_from_address(
+                        packet_header_buffer_seminc_forward, sizeof(PACKET_HEADER_TYPE));
+                }
+                noc_async_writes_flushed();
             }
+
+            // Next slice idx
+            slice_idx--;
         }
+        // Reset the global semaphore before the next batch
+        while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(batch_ready_sem) < ring_size - 1);
+        *reinterpret_cast<volatile tt_l1_ptr uint32_t*>(batch_ready_sem) = 0;
     }
 
     if (fabric_connection.is_logically_connected()) {
