@@ -283,6 +283,8 @@ set(CCL_EXPERIMENTAL_TTNN_SRCS_PYBIND
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/experimental/ccl/all_to_all_async/all_to_all_async_${PY_BINDING}.cpp
 )
 
+set(TTNN_P2P_PYBIND ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/point_to_point/point_to_point_${PY_BINDING}.cpp)
+
 set(CCL_TTNN_SRCS_PYBIND
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/ccl/ccl_${PY_BINDING}.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn/operations/ccl/all_gather/all_gather_${PY_BINDING}.cpp
@@ -308,6 +310,7 @@ list(
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn-${PY_BINDING}/tensor.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/cpp/ttnn-${PY_BINDING}/pytensor.cpp
 )
+
 
 ##################################################
 # Build the libraries!
@@ -450,6 +453,7 @@ target_link_libraries(
         TT::NN::Ops::SlidingWindow
         TT::NN::Ops::Transformer
         TT::NN::Ops::Uniform
+        TT::NN::Ops::PointToPoint
         TT::NN::Ops::Pool
         TT::NN::Ops::Normalization
 )
@@ -483,6 +487,7 @@ if(WITH_PYTHON_BINDINGS)
             ${TTNN_SRC_PYBIND}
             ${CCL_TTNN_SRCS_PYBIND}
             ${CCL_EXPERIMENTAL_TTNN_SRCS_PYBIND}
+            ${TTNN_P2P_PYBIND}
             ${Python3_LIBRARY_DIRS}
     )
     target_include_directories(
@@ -590,4 +595,5 @@ add_subdirectory(cpp/ttnn/operations/sliding_window)
 add_subdirectory(cpp/ttnn/operations/transformer)
 add_subdirectory(cpp/ttnn/operations/uniform)
 add_subdirectory(cpp/ttnn/operations/pool)
+add_subdirectory(cpp/ttnn/operations/point_to_point)
 add_subdirectory(cpp/ttnn/operations/normalization)
