@@ -129,12 +129,13 @@ void kernel_main() {
     constexpr uint32_t weight_inner_block_stride_h =
         weight_next_block_stride_h / weight_block_height_num_outer;  // TODO: Pass as args
     const uint32_t act_l1_read_addr = get_read_ptr(cb_id_sharded_act);
-    // coalesce reads along weight_size_w
-    uint32_t start_reader_idx;
-    if constexpr (split_reader) {
-        start_reader_idx = 0;
-        start_reader_idx = act_block_h_datums_first_reader / 2;
-    }
+    // DPRINT << "weight_start_tile_id=" << weight_start_tile_id << ENDL();
+    for (uint32_t bw = 0; bw < out_num_blocks_w; bw++) {
+        // coalesce reads along weight_size_w
+        uint32_t start_reader_idx;
+        if constexpr (split_reader) {
+            start_reader_idx = (uint32_t)(packed_reader_indices_ptr[0] & 0xffff) + 1;
+        }
 
     for (uint32_t bh = 0; bh < out_num_blocks_h; bh++) {
         // READ WEIGHTS + MCAST SEND WEIGHTS
@@ -145,30 +146,25 @@ void kernel_main() {
 
         uint32_t weight_current_block_start_tile_id = 0;
 
-        uint32_t reader_offset = act_l1_read_addr;
-        for (uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) {
-            if constexpr (split_reader) {
-                // Do the second half of the reads for act
-                noc_async_read_one_packet_set_state(get_noc_addr(act_l1_read_addr), coalesced_read_bytes);
-                reader_idx = start_reader_idx;
-                cb_reserve_back(cb_id_act_second_reader, act_block_num_tiles);
-                uint32_t l1_write_addr_act = get_write_ptr(cb_id_act_second_reader);
-                uint32_t act_block_h_datums_read_curr =
-                    bh == out_num_blocks_h - 1 ? act_block_h_datums_read_last_block : act_block_h_datums_read;
-                read_sticks<
-                    dilation_w,
-                    coalesced_read_bytes,
-                    conv_act_c_read_bytes,
-                    act_block_w_extra_align_bytes,
-                    stride_w_bytes,
-                    weight_size_w>(
-                    act_block_h_datums_read_curr,
-                    packed_reader_indices_ptr,
-                    reader_offset,
-                    l1_write_addr_act,
-                    reader_idx);
-                noc_async_read_barrier();
-                cb_push_back(cb_id_act_second_reader, act_block_num_tiles);
+                uint32_t reader_offset = act_l1_read_addr;
+                for (uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) {
+                    if constexpr (split_reader) {
+                        // Do the second half of the reads for act
+                        noc_async_read_one_packet_set_state(get_noc_addr(act_l1_read_addr), coalesced_read_bytes);
+                        reader_idx = start_reader_idx;
+                        cb_reserve_back(cb_id_act_second_reader, act_block_num_tiles);
+                        uint32_t l1_write_addr_act = get_write_ptr(cb_id_act_second_reader);
+                        uint32_t act_block_h_datums_read_curr =
+                            bh == out_num_blocks_h - 1 ? act_block_h_datums_read_last_block : act_block_h_datums_read;
+                        read_sticks<
+                            dilation_w,
+                            coalesced_read_bytes,
+                            conv_act_c_read_bytes,
+                            act_block_w_extra_align_bytes,
+                            stride_w_bytes,
+                            weight_size_w>(packed_reader_indices_ptr, reader_offset, l1_write_addr_act, reader_idx);
+                        noc_async_read_barrier();
+                        cb_push_back(cb_id_act_second_reader, act_block_num_tiles);
 
                 reader_offset += window_outer_offset;
             }
@@ -287,6 +283,10 @@ void kernel_main() {
             // be sent in order they are issued
             noc_async_writes_flushed();
 #endif
+            if constexpr (split_reader) {
+                start_reader_idx = reader_idx + (uint32_t)(packed_reader_indices_ptr[reader_idx] & 0xffff) + 1;
+            }
+        }  // out_num_blocks_h
 
             // We should also multicast the flag to destinations
             // num_dests must not include source, since we are NOT really doing a local copy!
