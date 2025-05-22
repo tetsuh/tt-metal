@@ -632,6 +632,8 @@ Result conv2d_L1(
                 "Conv2D: Split reader was requested by the user, but it can't be support with just one tile per core "
                 "in activation matrix height.");
         }
+        tt::log_info("shard_spec: {}", input_tensor_post_tm.shard_spec());
+
         // call conv micro op
         auto conv_output = optimized_conv_new(
             input_tensor_post_tm,

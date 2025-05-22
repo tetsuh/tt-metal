@@ -138,36 +138,38 @@ void kernel_main() {
 
     uint32_t act_l1_read_addr = get_read_ptr(cb_id_sharded_act);
     noc_async_read_one_packet_set_state(get_noc_addr(act_l1_read_addr), conv_act_c_read_bytes);
+    uint32_t reader_idx = 0;
 
     // Reset reader_idx to finish act_block_h_datums
     for (uint32_t block_h_index = 0; block_h_index < act_num_blocks_h; block_h_index++) {
         act_l1_read_addr = get_read_ptr(cb_id_sharded_act);
+        uint32_t old_reader_idx = reader_idx;
         for (uint32_t block_w_index = 0; block_w_index < act_num_blocks_w; block_w_index++) {
-            uint32_t reader_idx = block_h_index * (act_block_h_datums / 2);
+            reader_idx = old_reader_idx;
             cb_reserve_back(cb_id_act_row_major_bfloat16, act_block_num_tiles);
             if (this_core_id < num_input_cores) {
                 uint32_t l1_write_addr_act = get_write_ptr(cb_id_act_row_major_bfloat16);
-                for (uint32_t bh = 0; bh < act_block_h_datums / 2; bh++) {
-                    uint32_t two_reader_indices = packed_reader_indices_ptr[reader_idx];
-                    read_channels<weight_size_h, weight_size_w>(
-                        l1_write_addr_act,
-                        act_l1_read_addr,
-                        two_reader_indices & 0xffff,
-                        conv_act_c_bytes,
-                        conv_act_c_read_bytes,
-                        stride_h_bytes,
-                        stride_w_bytes);
-                    read_channels<weight_size_h, weight_size_w>(
-                        l1_write_addr_act,
-                        act_l1_read_addr,
-                        two_reader_indices >> 16,
-                        conv_act_c_bytes,
-                        conv_act_c_read_bytes,
-                        stride_h_bytes,
-                        stride_w_bytes);
+                uint32_t two_reader_indices = packed_reader_indices_ptr[reader_idx];
+                uint32_t num_elems = two_reader_indices & 0xffff;
+                uint32_t stride_w = two_reader_indices >> 16;
 
+                do {
                     reader_idx++;
-                }
+                    two_reader_indices = packed_reader_indices_ptr[reader_idx];
+                    uint32_t start_ind = two_reader_indices & 0xffff;
+                    uint32_t end_ind = two_reader_indices >> 16;
+                    for (uint32_t ind = start_ind; ind <= end_ind; ind += stride_w) {
+                        read_channels<weight_size_h, weight_size_w>(
+                            l1_write_addr_act,
+                            act_l1_read_addr,
+                            ind,
+                            conv_act_c_bytes,
+                            conv_act_c_read_bytes,
+                            stride_h_bytes,
+                            stride_w_bytes);
+                    }
+                } while (--num_elems);
+                reader_idx++;
 
                 // After reading one block, increment the starting read pointer by the width of the block.
                 // Next read uses the next set of channels.

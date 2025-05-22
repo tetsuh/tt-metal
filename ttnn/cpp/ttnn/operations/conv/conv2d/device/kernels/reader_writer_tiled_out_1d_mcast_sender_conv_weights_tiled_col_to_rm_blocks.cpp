@@ -4,6 +4,7 @@
 
 #include "dataflow_api.h"
 #include "height_sharded_reader_common.hpp"
+#include "dprint.h"
 
 void kernel_main() {
     // This writer is for output tensor in tile format
@@ -140,8 +141,7 @@ void kernel_main() {
         // coalesce reads along weight_size_w
         uint32_t start_reader_idx;
         if constexpr (split_reader) {
-            start_reader_idx = 0;
-            start_reader_idx = act_block_h_datums_first_reader / 2;
+            start_reader_idx = (uint32_t)(packed_reader_indices_ptr[0] & 0xffff) + 1;
         }
 
         for (uint32_t bh = 0; bh < out_num_blocks_h; bh++) {
@@ -173,12 +173,7 @@ void kernel_main() {
                             conv_act_c_read_bytes,
                             act_block_w_extra_align_bytes,
                             stride_w_bytes,
-                            weight_size_w>(
-                            act_block_h_datums_read_curr,
-                            packed_reader_indices_ptr,
-                            reader_offset,
-                            l1_write_addr_act,
-                            reader_idx);
+                            weight_size_w>(packed_reader_indices_ptr, reader_offset, l1_write_addr_act, reader_idx);
                         noc_async_read_barrier();
                         cb_push_back(cb_id_act_second_reader, act_block_num_tiles);
 
@@ -317,7 +312,7 @@ void kernel_main() {
             }
 #endif
             if constexpr (split_reader) {
-                start_reader_idx = reader_idx + act_block_h_datums_first_reader_read;
+                start_reader_idx = reader_idx + (uint32_t)(packed_reader_indices_ptr[reader_idx] & 0xffff) + 1;
             }
         }  // out_num_blocks_h
 
