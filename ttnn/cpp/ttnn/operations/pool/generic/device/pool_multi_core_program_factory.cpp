@@ -17,7 +17,6 @@ namespace ttnn::operations::pool {
 /**
  * Generic pool implementation that uses the new sliding window infrastructure.
  */
-
 // This function creates a scalar config tensor for the AvgPool2D operation. It is entirely made of
 // a vector of ScalarInfo structs, which are used to configure the pooling operation. The config tensor
 // is filled with out_nhw_per_core number of ScalarInfos for each core and then sharded across the cores.
