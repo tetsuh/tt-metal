@@ -95,7 +95,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     // L1 Scratch CB Creation
     const size_t packet_size_bytes = tt::tt_fabric::get_1d_fabric_config().channel_buffer_size_bytes;
     uint32_t l1_scratch_cb_page_size_bytes = op_config.get_page_size();
-    uint32_t num_pages_per_packet = 2;                 // packet_size_bytes / l1_scratch_cb_page_size_bytes;
+    uint32_t num_pages_per_packet = packet_size_bytes / l1_scratch_cb_page_size_bytes;
     uint32_t cb_num_pages = 3 * num_pages_per_packet;  // tripple buffering
     uint32_t src0_cb_index = tt::CB::c_in0;
     tt::DataFormat df = tt::tt_metal::datatype_to_dataformat_converter(input_tensor.get_dtype());
@@ -391,7 +391,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     // L1 Scratch CB Creation
     const size_t packet_size_bytes = tt::tt_fabric::get_1d_fabric_config().channel_buffer_size_bytes;
     uint32_t l1_scratch_cb_page_size_bytes = op_config.get_page_size();
-    uint32_t num_pages_per_packet = 2;                 // packet_size_bytes / l1_scratch_cb_page_size_bytes;
+    uint32_t tiles_to_write_per_packet = packet_size_bytes / l1_scratch_cb_page_size_bytes;
+    uint32_t num_pages_per_packet = 4 * tiles_to_write_per_packet;
     uint32_t cb_num_pages = 3 * num_pages_per_packet;  // triple buffering
     tt::DataFormat df = tt::tt_metal::datatype_to_dataformat_converter(input_tensor.get_dtype());
 
@@ -449,8 +450,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     const auto input_tensor_shape = input_tensor.get_padded_shape();
     const auto output_tensor_shape = output_tensor.get_padded_shape();
     const auto intermediate_tensor_buffer_type = intermediate_tensor.buffer()->buffer_type();
-
-    uint32_t tiles_to_write_per_packet = 2;
 
     // KERNEL CREATION
     // Reader
@@ -883,7 +882,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_llama_sharded(
     // L1 Scratch CB Creation
     const size_t packet_size_bytes = tt::tt_fabric::get_1d_fabric_config().channel_buffer_size_bytes;
     uint32_t l1_scratch_cb_page_size_bytes = op_config.get_page_size();
-    uint32_t num_pages_per_packet = 2;  // packet_size_bytes / l1_scratch_cb_page_size_bytes; failes for != 2
+    uint32_t num_pages_per_packet = packet_size_bytes / l1_scratch_cb_page_size_bytes;
     uint32_t cb_num_pages =
         input_tensor_num_pages / num_links +
         1;  // We are dealing with small shapes, so assuming all pages for a worker can be fit into the CB

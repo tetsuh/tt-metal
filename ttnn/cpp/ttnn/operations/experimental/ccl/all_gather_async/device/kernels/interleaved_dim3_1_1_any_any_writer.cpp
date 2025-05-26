@@ -142,21 +142,22 @@ void kernel_main() {
         size_t l1_read_addr = get_read_ptr(cb_forward_id);
 
         for (uint32_t j = 0; j < num_pages_to_read; j += contig_pages_advanced) {
-            uint64_t noc0_dest_noc_addr_first_tile = get_noc_addr(
-                tile_id_start + row_offset + pages_read_in_row, output_addrgen, 0 /*offset*/, 0 /*noc_id*/);
-            pages_read_in_row += 1;
-            if (pages_read_in_row >= input_tensor_Wt) {
-                row_offset += output_tensor_Wt;
-                pages_read_in_row = 0;
+            for (uint32_t i = 0; i < contig_pages_advanced; i++) {
+                uint64_t noc0_dest_noc_addr = get_noc_addr(
+                    tile_id_start + row_offset + pages_read_in_row, output_addrgen, 0 /*offset*/, 0 /*noc_id*/);
+                noc_async_write_tile(
+                    tile_id_start + row_offset + pages_read_in_row,
+                    output_addrgen,
+                    l1_read_addr + i * intermediate_page_size);
+
+                pages_read_in_row += 1;
+                if (pages_read_in_row >= input_tensor_Wt) {
+                    row_offset += output_tensor_Wt;
+                    pages_read_in_row = 0;
+                }
             }
 
-            uint64_t noc0_dest_noc_addr_second_tile = get_noc_addr(
-                tile_id_start + row_offset + pages_read_in_row, output_addrgen, 0 /*offset*/, 0 /*noc_id*/);
-            pages_read_in_row += 1;
-            if (pages_read_in_row >= input_tensor_Wt) {
-                row_offset += output_tensor_Wt;
-                pages_read_in_row = 0;
-            }
+            const uint32_t payload_size_bytes = intermediate_page_size * contig_pages_advanced;
 
             uint32_t intermediate_packet_id = my_chip_id + packet_id * ring_size;
             uint32_t intermediate_packet_first_tile_id =
@@ -165,15 +166,12 @@ void kernel_main() {
             uint64_t remote_noc0_dest_noc_addr =
                 get_noc_addr(intermediate_packet_first_tile_id, intermediate_addrgen, 0 /*offset*/, 0 /*noc_id*/);
             write_and_advance_local_read_address_for_fabric_write(
-                noc0_dest_noc_addr_first_tile,
-                noc0_dest_noc_addr_second_tile,
                 remote_noc0_dest_noc_addr,
                 pkt_hdr_forward,
                 pkt_hdr_backward,
                 fabric_connection,
                 l1_read_addr,
-                intermediate_page_size,
-                contig_pages_advanced);
+                payload_size_bytes);
             tiles_read += contig_pages_advanced;
             packet_id++;
         }
