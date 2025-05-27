@@ -194,7 +194,7 @@ void MAIN {
         pack_untilize_uninit(out_cb_id);
         pack_untilize_dst_init_short<partial_iter_output_tiles>(out_cb_id, num_out_rows, num_faces_in_output_tile);
         reduce_h_fused<partial_iter_output_tiles, is_partial_tile, max_rows_for_reduction>(
-            interm_cb_id, REDUCE_OP == PoolType::MAX ? curr_scalar_cb_id : in_one_cb_id, out_cb_id);
+            interm_cb_id, REDUCE_OP == PoolType::MAX ? in_scalar_cb_id_0 : in_one_cb_id, out_cb_id);
         // prepare for the next iteration if not last element
         if constexpr (!one_scalar_per_core) {
             cb_pop_front(curr_scalar_cb_id, 1);
