@@ -96,4 +96,6 @@ void kernel_main() {
             cb_pop_front(value_tensor_cb_index, one_tile);
         }  // Wt loop
     }  // core_loop_count loop
+
+    //
 }
