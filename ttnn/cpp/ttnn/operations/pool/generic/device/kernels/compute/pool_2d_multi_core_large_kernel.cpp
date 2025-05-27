@@ -172,7 +172,7 @@ void MAIN {
             pack_untilize_uninit(out_cb_id);
             pack_untilize_dst_init_short<max_tiles_per_iter>(out_cb_id, num_out_rows, num_faces_in_output_tile);
             reduce_h_fused<max_tiles_per_iter, is_partial_tile, max_rows_for_reduction>(
-                interm_cb_id, REDUCE_OP == PoolType::MAX ? curr_scalar_cb_id : in_one_cb_id, out_cb_id);
+                interm_cb_id, REDUCE_OP == PoolType::MAX ? in_scalar_cb_id_0 : in_one_cb_id, out_cb_id);
         }
 
         // perform the intermediate reduction over chunk N (across the whole chunk even if the last chunk is
