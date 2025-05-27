@@ -9,6 +9,7 @@
 
 #include "ttnn/operations/ccl/all_gather/all_gather_pybind.hpp"
 #include "ttnn/operations/ccl/reduce_scatter/reduce_scatter_pybind.hpp"
+#include "ttnn/operations/ccl/multidevice_scatter/multidevice_scatter_pybind.hpp"
 #include "ttnn/operations/ccl/barrier/barrier_pybind.hpp"
 
 #include "ttnn/operations/ccl/ccl_host_datastructures.hpp"
@@ -43,6 +44,7 @@ void py_module(py::module& module) {
     ccl::py_bind_common(module);
     ccl::py_bind_all_gather(module);
     ccl::py_bind_reduce_scatter(module);
+    ccl::py_bind_multidevice_scatter(module);
     ccl::py_bind_barrier(module);
 }
 
