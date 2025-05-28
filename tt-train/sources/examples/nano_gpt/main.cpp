@@ -1,5 +1,4 @@
-// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
-//
+// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 // SPDX-License-Identifier: Apache-2.0
 
 #include <CLI/CLI.hpp>
@@ -444,11 +443,13 @@ int main(int argc, char **argv) {
     CLI::App app{"NanoGPT Example"};
     argv = app.ensure_utf8(argv);
 
-    std::string config_name = std::string(CONFIGS_FOLDER) + "/training_shakespear_nanogpt.yaml";
+    std::string config_name =
+        "/home/ttuser/git/tt-metal/tt-train/configs/training_shakespear_gpt2s.yaml";  // std::string(CONFIGS_FOLDER) +
+                                                                                      // "/training_shakespear_nanogpt.yaml";
     std::string run_name = "";
     bool is_eval = false;
     bool add_time_to_name = true;
-    bool enable_wandb = true;
+    bool enable_wandb = false;
     bool ddp = false;
     bool enable_tp = false;
     std::string save_and_exit_path = "";
@@ -863,7 +864,7 @@ int main(int argc, char **argv) {
             auto loss = ttml::ops::nll_loss(output, target);
             loss = gradient_accumulator_helper.scale(loss);
             float loss_float = get_loss_value(loss);
-
+            tt::tt_metal::detail::DumpDeviceProfileResults(device->get_devices()[0]);
             loss->backward();
             ttml::autograd::ctx().reset_graph();
 
@@ -951,6 +952,7 @@ int main(int argc, char **argv) {
     if (enable_wandb) {
         wandbcpp::finish();
     }
-
+    tt::tt_metal::detail::DumpDeviceProfileResults(
+        device->get_devices()[0], tt::tt_metal::ProfilerDumpState::CLOSE_DEVICE_SYNC);
     return 0;
 }
