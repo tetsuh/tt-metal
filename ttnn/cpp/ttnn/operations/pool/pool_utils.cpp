@@ -25,7 +25,7 @@ std::vector<ScalarInfo> get_bf16_avg_pool_config_scalars(
 
     if ((config.ceil_mode && (config.ceil_w > 0 || config.ceil_h > 0)) ||
         (!config.count_include_pad && (config.pad_h > 0 || config.pad_w > 0))) {
-        for (uint32_t i = 0; i < num_of_elements_per_core; i++) {
+        for (uint32_t i = 0; i < config.out_nhw_per_core; i++) {
             // Compute starting and ending indices of the pooling window
             int h_start = output_stick_x * config.stride_h - config.pad_h;
             int w_start = output_stick_y * config.stride_w - config.pad_w;
