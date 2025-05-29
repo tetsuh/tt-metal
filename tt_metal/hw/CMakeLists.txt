@@ -93,8 +93,7 @@ foreach(ARCH IN LISTS ARCHS)
                     VERBATIM
                 )
 
-                # Add to preprocessed files list
-                list(APPEND PREPROCESSED_LD_FILES ${OUTPUT_FILE})
+                list(APPEND LD_FILES ${OUTPUT_FILE})
             endforeach()
         endforeach()
     endif()
@@ -123,7 +122,7 @@ foreach(ARCH IN LISTS ARCHS)
             )
 
             # add output file to the custom target
-            list(APPEND PREPROCESSED_LD_FILES ${HW_OUTPUT_DIR}/${HW_OUTPUT_FILE})
+            list(APPEND LD_FILES ${HW_OUTPUT_DIR}/${HW_OUTPUT_FILE})
         endforeach()
     endforeach()
 endforeach()
@@ -180,24 +179,23 @@ foreach(ARCH IN LISTS ARCHS)
     get_alias(${ARCH} ARCH_B0)
 
     # These are the set of object files we are to build foreach ARCH
-    set(HWLIBS
+    set(HWOBJS
         tmu-crt0
-        tmu-crt0k
-        tmu-crt0k-ncrisc
         substitutes
         tdma_xmov
         noc
-        ncrisc-halt-wormhole
+        wh-iram-start
+        wh-iram-trampoline
     )
 
-    # Map each .o to its source file
-    set(tmu-crt0_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/toolchain/tmu-crt0.S")
-    set(tmu-crt0k_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/toolchain/tmu-crt0k.S")
-    set(tmu-crt0k-ncrisc_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/toolchain/tmu-crt0k-ncrisc.S")
-    set(substitutes_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/toolchain/substitutes.cpp")
-    set(tdma_xmov_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src/tdma_xmov.c")
-    set(noc_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/firmware/src/${ARCH}/noc.c")
-    set(ncrisc-halt-wormhole_SOURCE "${PROJECT_SOURCE_DIR}/tt_metal/hw/toolchain/ncrisc-halt-wormhole.S")
+    # Same order as HWOBJS
+    set(HWSRCS
+      "tt_metal/hw/toolchain/tmu-crt0.S"
+      "tt_metal/hw/toolchain/substitutes.cpp"
+      "tt_metal/hw/firmware/src/tdma_xmov.c"
+      "tt_metal/hw/firmware/src/${ARCH}/noc.c"
+      "tt_metal/hw/toolchain/wh-iram-start.S"
+      "tt_metal/hw/toolchain/wh-iram-trampoline.S")
 
     # Set GPP_FLAGS based on ARCH
     set(GPP_FLAGS
@@ -206,7 +204,7 @@ foreach(ARCH IN LISTS ARCHS)
     )
 
     # Dump object files to this directory
-    set(HW_LIB_DIR ${PROJECT_SOURCE_DIR}/runtime/hw/lib/${ARCH})
+    set(HW_OBJ_DIR ${PROJECT_SOURCE_DIR}/runtime/hw/lib/${ARCH})
 
     # Includes independent from ARCH
     set(GPP_INCLUDES
@@ -232,30 +230,27 @@ foreach(ARCH IN LISTS ARCHS)
     list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk/tt_llk_${ARCH_B0}/common/inc)
     list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk/tt_llk_${ARCH_B0}/llk_lib)
 
-    foreach(HWLIB IN LISTS HWLIBS)
-        if("${ARCH}" STREQUAL "blackhole" AND ("${HWLIB}" STREQUAL "tmu-crt0k-ncrisc"))
-            continue() # Skip the iteration, blackhole doesn't have IRAM
-        endif()
-        if((NOT "${ARCH}" STREQUAL "wormhole") AND "${HWLIB}" STREQUAL "ncrisc-halt-wormhole")
-            continue() # Skip the iteration, only wormhole has ncrisc-halt-wormhole
+    foreach(HWOBJ HWSRC IN ZIP_LISTS HWOBJS HWSRCS)
+        if((NOT "${ARCH}" STREQUAL "wormhole") AND "${HWOBJ}" MATCHES "^wh-iram-")
+            continue() # Skip the iteration, only for wormholw
         endif()
 
-        set(HW_OUTPUT_FILE "${HW_LIB_DIR}/${HWLIB}.o")
+        set(HW_OUTPUT_FILE "${HW_OBJ_DIR}/${HWOBJ}.o")
         add_custom_command(
             OUTPUT
                 ${HW_OUTPUT_FILE}
             COMMAND
-                ${CMAKE_COMMAND} -E make_directory ${HW_LIB_DIR}
+                ${CMAKE_COMMAND} -E make_directory ${HW_OBJ_DIR}
             COMMAND
-                ${GPP_CMD} ${GPP_FLAGS} ${GPP_DEFINES} ${GPP_INCLUDES} -c -o ${HW_LIB_DIR}/${HWLIB}.o ${${HWLIB}_SOURCE}
+                ${GPP_CMD} ${GPP_FLAGS} ${GPP_DEFINES} ${GPP_INCLUDES} -c -o ${HW_OBJ_DIR}/${HWOBJ}.o ${PROJECT_SOURCE_DIR}/${HWSRC}
             DEPENDS
-                ${${HWLIB}_SOURCE}
+                ${PROJECT_SOURCE_DIR}/${HWSRC}
                 # If the compiler changes, rebuild
                 ../sfpi-version.sh
-            COMMENT "Building ${ARCH} hw lib ${HWLIB}.o"
+            COMMENT "Building ${ARCH} hw lib ${HWOBJ}.o"
             VERBATIM
         )
-        list(APPEND PREPROCESSED_O_FILES ${HW_OUTPUT_FILE})
+        list(APPEND OBJ_FILES ${HW_OUTPUT_FILE})
     endforeach()
 endforeach()
 
@@ -264,9 +259,8 @@ add_custom_target(
     hw_toolchain
     ALL
     DEPENDS
-        ${PREPROCESSED_LD_FILES}
-        ${PREPROCESSED_O_FILES}
-        ${SFPI_VERSION_JSON_PATH}
+        ${LD_FILES}
+        ${OBJ_FILES}
 )
 
 add_library(hw INTERFACE)
