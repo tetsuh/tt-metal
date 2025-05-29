@@ -179,3 +179,94 @@ def test_conv_dram(
             num_slices=num_slices,
         ),
     )
+
+
+# oft
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 32768}], indirect=True)
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize(
+    "output_channels, input_channels, input_height, input_width, shard_layout, config",
+    ((256, 256, 159, 159, ttnn.TensorMemoryLayout.HEIGHT_SHARDED, {"act_block_h": 32}),),
+)
+@pytest.mark.parametrize(
+    "weights_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize(
+    "activations_dtype",
+    [ttnn.bfloat8_b],
+)
+@pytest.mark.parametrize(
+    "fp32_accum",
+    [False],
+)
+@pytest.mark.parametrize(
+    "packer_l1_acc",
+    [False],
+)
+@pytest.mark.parametrize(
+    "filter, stride, padding",
+    [
+        [3, 1, 1],
+    ],
+)
+@pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
+@pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
+def test_conv_l1_oft(
+    device,
+    torch_tensor_map,
+    use_program_cache,
+    math_fidelity,
+    activations_dtype,
+    weights_dtype,
+    batch_size,
+    output_channels,
+    input_channels,
+    input_height,
+    input_width,
+    shard_layout,
+    config,
+    filter,
+    stride,
+    padding,
+    output_layout,
+    fp32_accum,
+    packer_l1_acc,
+):
+    if output_layout == ttnn.ROW_MAJOR_LAYOUT and shard_layout == WS:
+        pytest.skip("Bug in Width Sharded Row Major Tensor Creation when height%32!=0. #19408")
+
+    if output_layout == ttnn.ROW_MAJOR_LAYOUT and activations_dtype == ttnn.bfloat8_b:
+        pytest.skip("Row major layout not compatible with bfloat8_b")
+
+    if output_layout == ttnn.ROW_MAJOR_LAYOUT and activations_dtype == ttnn.bfloat16 and packer_l1_acc and fp32_accum:
+        pytest.skip("skipping due to pack_untilize_dst issue!")
+
+    run_conv(
+        device,
+        torch_tensor_map,
+        math_fidelity,
+        activations_dtype,
+        weights_dtype,
+        batch_size,
+        output_channels,
+        input_channels,
+        input_height,
+        input_width,
+        filter,
+        filter,
+        stride,
+        stride,
+        padding,
+        config,
+        shard_layout=shard_layout,
+        input_layout=ttnn.TILE_LAYOUT,
+        output_layout=output_layout,
+        has_bias=True,
+        fp32_accum=fp32_accum,
+        packer_l1_acc=packer_l1_acc,
+        preprocess_weights_on_device=True,
+        run_twice=True,
+    )

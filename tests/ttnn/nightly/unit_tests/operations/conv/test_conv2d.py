@@ -187,6 +187,7 @@ def run_conv(
         mesh_mapper=input_mesh_mapper,
         layout=input_layout,
         device=device if activations_dtype == ttnn.bfloat8_b else None,
+        memory_config=ttnn.L1_MEMORY_CONFIG,
     )
 
     conv_config = ttnn.Conv2dConfig(
