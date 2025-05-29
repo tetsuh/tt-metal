@@ -321,7 +321,7 @@ tt::tt_metal::operation::ProgramWithCallbacks AllGatherAsync::create_program_at(
                 this->ring_size,
                 device_index,
                 this->topology,
-                this->semaphore.at(device_index),
+                this->semaphore.at(0),
                 this->sub_device_id);
     }
 }
