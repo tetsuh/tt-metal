@@ -5,8 +5,8 @@
 #include <stdint.h>
 #include <tt-metalium/assert.hpp>
 #include <tt-metalium/device.hpp>
-#include <tt-metalium/erisc_datamover_builder.hpp>
-#include <tt-metalium/fabric_edm_packet_header.hpp>
+#include "tt_metal/fabric/erisc_datamover_builder.hpp"
+#include "tt_metal/fabric/fabric_edm_packet_header.hpp"
 #include <tt-metalium/hal.hpp>
 #include <tt-metalium/host_api.hpp>
 #include <tt-metalium/math.hpp>
@@ -25,7 +25,7 @@
 #include "impl/context/metal_context.hpp"
 #include "tt_metal/fabric/fabric_host_utils.hpp"
 #include "core_coord.hpp"
-#include "fabric_edm_types.hpp"
+#include "tt_metal/fabric/fabric_edm_types.hpp"
 #include "logger.hpp"
 #include <umd/device/tt_core_coordinates.h>
 

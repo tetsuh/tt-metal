@@ -7,7 +7,7 @@
 #include <cstddef>
 #include <vector>
 #include <tt-metalium/fabric.hpp>
-#include <tt-metalium/erisc_datamover_builder.hpp>
+#include "tt_metal/fabric/erisc_datamover_builder.hpp"
 #include "impl/context/metal_context.hpp"
 #include "tt_metal/fabric/fabric_context.hpp"
 

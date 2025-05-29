@@ -57,7 +57,6 @@ target_sources(
             api/tt-metalium/distribution_spec.hpp
             api/tt-metalium/event.hpp
             api/tt-metalium/fabric_host_interface.h
-            api/tt-metalium/fabric_edm_packet_header.hpp
             api/tt-metalium/global_circular_buffer.hpp
             api/tt-metalium/global_semaphore.hpp
             api/tt-metalium/graph_tracking.hpp
@@ -120,7 +119,6 @@ target_sources(
         FILES
             api/tt-metalium/circular_buffer_constants.h
             api/tt-metalium/fabric_host_interface.h
-            api/tt-metalium/fabric_edm_packet_header.hpp
             core_descriptors/blackhole_140_arch.yaml
             core_descriptors/wormhole_b0_80_arch.yaml
             fabric/mesh_graph_descriptors/n150_mesh_graph_descriptor.yaml

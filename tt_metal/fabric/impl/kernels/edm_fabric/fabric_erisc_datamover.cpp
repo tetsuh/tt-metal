@@ -7,7 +7,7 @@
 
 #include "tt_metal/api/tt-metalium/fabric_edm_packet_header.hpp"
 #include "tt_metal/api/tt-metalium/edm_fabric_counters.hpp"
-#include "tt_metal/api/tt-metalium/fabric_edm_types.hpp"
+#include "tt_metal/fabric/fabric_edm_types.hpp"
 
 #include "tt_metal/fabric/hw/inc/edm_fabric/1d_fabric_constants.hpp"
 #include "tt_metal/fabric/hw/inc/edm_fabric/edm_handshake.hpp"

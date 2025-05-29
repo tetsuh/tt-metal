@@ -13,7 +13,7 @@
 
 #include "cpp/ttnn/operations/ccl/common/types/ccl_types.hpp"
 // For command dest type
-#include <tt-metalium/fabric_edm_packet_header.hpp>
+#include "tt_metal/fabric/fabric_edm_packet_header.hpp"
 
 namespace ttnn {
 namespace ccl {

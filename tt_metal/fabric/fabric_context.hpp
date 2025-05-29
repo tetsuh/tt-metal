@@ -4,11 +4,11 @@
 
 #pragma once
 
-#include <tt-metalium/fabric_edm_types.hpp>
+#include "tt_metal/fabric/fabric_edm_types.hpp"
 #include <tt-metalium/fabric_types.hpp>
 #include <tt-metalium/mesh_graph.hpp>                   // FabricType
 #include <umd/device/types/cluster_descriptor_types.h>  // chip_id_t
-#include <tt-metalium/erisc_datamover_builder.hpp>
+#include "tt_metal/fabric/erisc_datamover_builder.hpp"
 #include <vector>
 #include "tt_metal/fabric/fabric_host_utils.hpp"
 

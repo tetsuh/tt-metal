@@ -20,8 +20,6 @@
 #include "dispatch/dispatch_settings.hpp"
 #include "dprint_server.hpp"
 #include "env_lib.hpp"
-#include "erisc_datamover_builder.hpp"
-#include "fabric_edm_packet_header.hpp"
 #include "fabric_host_interface.h"
 #include "fabric_types.hpp"
 #include "hal.hpp"

@@ -14,7 +14,7 @@
 #include <tt-metalium/device.hpp>
 #include <tt-metalium/kernel_types.hpp>
 #include <tt_stl/span.hpp>
-#include <tt-metalium/erisc_datamover_builder.hpp>
+#include "tt_metal/fabric/erisc_datamover_builder.hpp"
 #include "cpp/ttnn/operations/ccl/common/host/ccl_worker_builder.hpp"
 #include <tt-metalium/fabric.hpp>
 #include <tt-metalium/host_api.hpp>

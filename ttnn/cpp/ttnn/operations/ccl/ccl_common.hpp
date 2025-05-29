@@ -15,8 +15,7 @@
 #include "ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include <tt-metalium/program.hpp>
 #include "ttnn/tensor/types.hpp"
-#include <tt-metalium/erisc_datamover_builder.hpp>
-#include "erisc_datamover_builder_helper.hpp"
+#include "tt_metal/fabric/erisc_datamover_builder_helper.hpp"
 #include "cpp/ttnn/operations/ccl/common/host/ccl_command_stream_builders.hpp"
 
 namespace ttnn {
@@ -552,14 +551,6 @@ class InterleavedRingAllGatherTensorSlicer : public LegacyCclTensorSlicer {
     }
 };
 
-
-tt::tt_metal::KernelHandle generate_edm_kernel(
-   tt::tt_metal::Program& program,
-    tt::tt_metal::IDevice const* device,
-    tt::tt_fabric::FabricEriscDatamoverBuilder const& edm_builder,
-    CoreCoord const& eth_core,
-    tt::tt_metal::DataMovementProcessor const risc_id,
-    tt::tt_metal::NOC noc_id);
 
 tt::tt_metal::KernelHandle generate_edm_kernel(
    tt::tt_metal::Program& program,

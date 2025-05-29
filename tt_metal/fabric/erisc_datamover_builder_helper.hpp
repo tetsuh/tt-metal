@@ -4,13 +4,12 @@
 
 #pragma once
 
-#include <tt-metalium/erisc_datamover_builder.hpp>
+#include "tt_metal/fabric/erisc_datamover_builder.hpp"
 
-#include "ttnn/operations/ccl/ccl_host_types.hpp"
+#include "tt-metal/fabric/fabric_edm_types.hpp"
 #include "ttnn/distributed/types.hpp"
 
-namespace ttnn {
-namespace ccl {
+namespace tt::tt_metal::tt_fabric {
 
 class EdmLineFabricOpInterface {
 public:
@@ -132,5 +131,22 @@ void initialize_edm_fabric(
 void teardown_edm_fabric(
     distributed::MeshDevice* mesh_device, bool wrap_fabric_around_mesh = false, Topology topology = Topology::Linear);
 
-};  // namespace ccl
-};  // namespace ttnn
+tt::tt_metal::KernelHandle generate_edm_kernel_impl(
+    Program& program,
+    const IDevice* device,
+    const EDMBuilder& edm_builder,
+    const std::string& kernel_path,
+    const CoreCoord& eth_core,
+    tt::tt_metal::DataMovementProcessor risc_id,
+    tt::tt_metal::NOC noc_id,
+    std::optional<tt::tt_metal::KernelBuildOptLevel> opt_level = std::nullopt);
+
+tt::tt_metal::KernelHandle generate_edm_kernel(
+    Program& program,
+    const IDevice* device,
+    const tt::tt_fabric::FabricEriscDatamoverBuilder& edm_builder,
+    const CoreCoord& eth_core,
+    const tt::tt_metal::DataMovementProcessor risc_id,
+    tt::tt_metal::NOC noc_id);
+
+};  // namespace tt::tt_metal::tt_fabric
