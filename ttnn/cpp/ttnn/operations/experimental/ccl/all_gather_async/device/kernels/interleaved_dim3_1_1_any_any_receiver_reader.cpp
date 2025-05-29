@@ -37,7 +37,8 @@ void kernel_main() {
 
     uint32_t arg_idx = 0;
     address_t intermediate_buffer_addr = get_arg_val<address_t>(arg_idx++);
-    uint32_t slice_num_pages = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t input_tile_id_start = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t input_tile_id_end = get_arg_val<uint32_t>(arg_idx++);
     uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
     size_t out_ready_sem = get_semaphore(get_arg_val<uint32_t>(arg_idx++));
 
@@ -89,10 +90,10 @@ void kernel_main() {
             actual_sender_chip_id = (sender_chip_id < 0) ? ring_size + sender_chip_id : sender_chip_id;
         }
 
-        uint32_t tiles_read = 0;
-        uint32_t tiles_to_read = slice_num_pages;
+        uint32_t tiles_read = input_tile_id_start;
+        uint32_t tiles_to_read = input_tile_id_end;
 
-        uint32_t packet_id = 0;
+        uint32_t packet_id = input_tile_id_start / contig_pages_advanced;
         while (tiles_read < tiles_to_read) {
             uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
             cb_reserve_back(cb_intermediate_id, num_pages_to_read);

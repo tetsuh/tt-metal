@@ -41,7 +41,8 @@ void kernel_main() {
     address_t output_tensor_address = get_arg_val<address_t>(arg_idx++);
     uint32_t input_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
     uint32_t output_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
-    uint32_t slice_num_pages = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t input_tile_id_start = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t input_tile_id_end = get_arg_val<uint32_t>(arg_idx++);
     uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
 
     OpSignaler op_signaler;
@@ -97,11 +98,11 @@ void kernel_main() {
             actual_sender_chip_id = (sender_chip_id < 0) ? ring_size + sender_chip_id : sender_chip_id;
         }
 
-        uint32_t pages_read_in_row = 0;
-        uint32_t row_offset = 0;
-        uint32_t tiles_read = 0;
+        uint32_t pages_read_in_row = input_tile_id_start % input_tensor_Wt;
+        uint32_t row_offset = (input_tile_id_start / input_tensor_Wt) * output_tensor_Wt;
+        uint32_t tiles_read = input_tile_id_start;
         uint32_t tile_id_start = actual_sender_chip_id * input_tensor_Wt;
-        uint32_t tiles_to_read = slice_num_pages;
+        uint32_t tiles_to_read = input_tile_id_end;
         while (tiles_read < tiles_to_read) {
             uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
             uint32_t payload_size_bytes = contig_pages_advanced * output_tensor_page_size;

@@ -362,7 +362,16 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     const auto receiver_worker_core_range = total_worker_core_range.subtract(sender_worker_core_range);
     const auto receiver_worker_cores = corerange_to_cores(receiver_worker_core_range, std::nullopt, true);
     std::set<CoreRange> receiver_forward_core_ranges;
-    receiver_forward_core_ranges.insert(CoreRange(receiver_worker_cores[1]));
+    std::set<CoreRange> receiver_backward_core_ranges;
+
+    for (int i = 0; i < receiver_worker_cores.size(); i++) {
+        const auto& core = receiver_worker_cores[i];
+        if (i % 2 == 1) {
+            receiver_forward_core_ranges.insert(CoreRange(core));
+        } else {
+            receiver_backward_core_ranges.insert(CoreRange(core));
+        }
+    }
     CoreRangeSet receiver_forward_core_range_set = CoreRangeSet(receiver_forward_core_ranges);
     std::set<CoreRange> receiver_backward_core_ranges;
     receiver_backward_core_ranges.insert(CoreRange(receiver_worker_cores[0]));
@@ -516,6 +525,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         1,                                                       // direction
         tiles_to_write_per_packet,                               // contig_pages_advanced
     };
+    std::cout << "interleaved_dim3_1_1_any_any_receiver_reader" << std::endl;
+    std::cout << "interleaved_dim3_1_1_any_any_receiver_reader: " << receiver_forward_core_range_set.str() << std::endl;
     auto worker_forward_receiver_reader_kernel_id = tt::tt_metal::CreateKernel(
         program,
         "ttnn/cpp/ttnn/operations/experimental/ccl/all_gather_async/device/kernels/"

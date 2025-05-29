@@ -124,7 +124,7 @@ void kernel_main() {
                 tiles_read = 0;
                 tiles_to_read = slice_num_pages;
 
-                uint32_t packet_id = 0;
+                uint32_t packet_id = input_tile_id_start / contig_pages_advanced;
                 while (tiles_read < tiles_to_read) {
                     uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);  // 2
                     cb_reserve_back(cb_forward_id, num_pages_to_read);
@@ -170,7 +170,7 @@ void kernel_main() {
                 tiles_read = 0;
                 tiles_to_read = slice_num_pages;
 
-                uint32_t packet_id = 0;
+                uint32_t packet_id = input_tile_id_start / contig_pages_advanced;
                 while (tiles_read < tiles_to_read) {
                     uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
                     cb_reserve_back(cb_backward_id, num_pages_to_read);
