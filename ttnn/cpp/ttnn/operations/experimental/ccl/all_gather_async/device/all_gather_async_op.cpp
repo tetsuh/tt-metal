@@ -230,6 +230,7 @@ tt::tt_metal::operation::ProgramWithCallbacks AllGatherAsync::create_program_at(
     } else {
         devices_to_use = devices;
     }
+    uint32_t target_ring_size = devices_to_use.size();
 
     std::optional<IDevice*> forward_device = std::nullopt;
     std::optional<IDevice*> backward_device = std::nullopt;
@@ -420,7 +421,8 @@ Tensor all_gather_async_impl(
     const std::optional<MemoryConfig>& memory_config,
     const ttnn::ccl::Topology topology,
     std::optional<tt::tt_metal::SubDeviceId> sub_device_id,
-    const std::vector<IDevice*>& devices) {
+    const std::vector<IDevice*>& devices,
+    const std::optional<uint32_t>& cluster_axis) {
     TT_FATAL(
         std::getenv("TT_METAL_SLOW_DISPATCH_MODE") == nullptr,
         "all_gather_async op is only supported for Fast Dispatch");
@@ -452,7 +454,7 @@ Tensor all_gather_async_impl(
                    ccl_topology,
                    multi_device_global_semaphore,
                    sub_device_id,
-                   /*cluster_axis=*/std::nullopt),
+                   cluster_axis),
                {input_tensor},
                {},
                optional_output_tensors)
@@ -534,7 +536,8 @@ Tensor all_gather_async(
     const uint32_t num_links,
     const std::optional<MemoryConfig>& memory_config,
     const ttnn::ccl::Topology topology,
-    std::optional<tt::tt_metal::SubDeviceId> sub_device_id) {
+    std::optional<tt::tt_metal::SubDeviceId> sub_device_id,
+    std::optional<uint32_t> cluster_axis) {
     std::vector<IDevice*> devices;
     for (const auto& spec : input_tensor.device_storage().specs) {
         devices.push_back(input_tensor.mesh_device()->get_device(spec.first));
@@ -549,7 +552,8 @@ Tensor all_gather_async(
         memory_config,
         topology,
         sub_device_id,
-        devices);
+        devices,
+        cluster_axis);
 }
 
 std::vector<Tensor> all_gather_async(
