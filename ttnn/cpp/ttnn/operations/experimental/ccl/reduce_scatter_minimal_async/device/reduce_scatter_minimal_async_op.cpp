@@ -5,7 +5,7 @@
 #include "reduce_scatter_minimal_async_op.hpp"
 #include "ttnn/operations/functions.hpp"
 #include "ttnn/operations/math.hpp"
-#include "cpp/ttnn/global_semaphore.hpp"
+#include "ttnn/global_semaphore.hpp"
 
 #include "ttnn/tensor/tensor_utils.hpp"
 
@@ -28,12 +28,12 @@ void ReduceScatterMinimalAsync::validate_with_output_tensors(
         "Worker cores used by links are parallelizaed over rows");
 
     TT_FATAL(
-        input_tensor.memory_config().memory_layout == TensorMemoryLayout::INTERLEAVED ||
-            input_tensor.memory_config().memory_layout == TensorMemoryLayout::WIDTH_SHARDED ||
-            input_tensor.memory_config().memory_layout == TensorMemoryLayout::BLOCK_SHARDED ||
-            input_tensor.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED,
+        input_tensor.memory_config().memory_layout() == TensorMemoryLayout::INTERLEAVED ||
+            input_tensor.memory_config().memory_layout() == TensorMemoryLayout::WIDTH_SHARDED ||
+            input_tensor.memory_config().memory_layout() == TensorMemoryLayout::BLOCK_SHARDED ||
+            input_tensor.memory_config().memory_layout() == TensorMemoryLayout::HEIGHT_SHARDED,
         "Unsupported memory layout {}.",
-        input_tensor.memory_config().memory_layout);
+        input_tensor.memory_config().memory_layout());
 
     if (output_tensors.size() > 0 and output_tensors[0].has_value()) {
         TT_FATAL(
@@ -89,9 +89,9 @@ void ReduceScatterMinimalAsync::validate_with_output_tensors(
 
         // check memory layout
         TT_FATAL(
-            output_tensor.value().memory_config().memory_layout == input_tensor.memory_config().memory_layout,
+            output_tensor.value().memory_config().memory_layout() == input_tensor.memory_config().memory_layout(),
             "Error, Output tensor memory layout should be same as input tensor memory layout but has {}",
-            output_tensor.value().memory_config().memory_layout);
+            output_tensor.value().memory_config().memory_layout());
     }
 
     // Each direction has a ready semaphore and there's a global sync semaphore, per link.

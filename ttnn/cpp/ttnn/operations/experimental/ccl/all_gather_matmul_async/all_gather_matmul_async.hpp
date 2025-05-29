@@ -7,7 +7,7 @@
 #include "ttnn/decorators.hpp"
 #include <tt-metalium/core_coord.hpp>
 #include "ttnn/operations/experimental/ccl/all_gather_matmul_async/device/all_gather_matmul_async_op.hpp"
-#include "cpp/ttnn/distributed/api.hpp"
+#include "ttnn/distributed/api.hpp"
 
 namespace ttnn {
 namespace operations::experimental::ccl {

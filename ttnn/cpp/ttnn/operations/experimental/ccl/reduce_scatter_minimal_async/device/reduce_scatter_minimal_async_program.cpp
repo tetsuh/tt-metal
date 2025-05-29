@@ -100,6 +100,8 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
         is_first_chip,
         is_last_chip);
 
+    std::cout << "RING RS!!!" << std::endl;
+
     bool fuse_op = fused_op_signaler.has_value();
 
     // Get OP Config, topology config
@@ -116,7 +118,7 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
         num_links, num_senders_per_link, enable_persistent_fabric_mode, mesh_device, sub_device_id, core_grid_offset);
 
     // L1 Scratch CB Creation
-    const size_t packet_size_bytes = tt::tt_fabric::get_1d_fabric_config().channel_buffer_size_bytes;
+    const size_t packet_size_bytes = tt::tt_fabric::get_tt_fabric_channel_buffer_size_bytes();
     uint32_t l1_scratch_cb_page_size_bytes = op_config.get_page_size();
     uint32_t num_pages_per_packet = 2;  // empiricly choosen as both smaller and larger values lead to worse performance
 
