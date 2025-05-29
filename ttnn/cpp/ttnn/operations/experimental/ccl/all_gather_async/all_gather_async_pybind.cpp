@@ -27,6 +27,16 @@ struct GlobalSemaphoreArg {
     operator const std::vector<GlobalSemaphore>&() const { return semaphores; }
 };
 
+struct GlobalSemaphoreArg {
+    // allows semaphore arguments to be passed as a single semaphore or a vector of semaphores
+    std::vector<GlobalSemaphore> semaphores;
+    GlobalSemaphoreArg(const GlobalSemaphore& single) : semaphores{single} {}
+    GlobalSemaphoreArg(const std::vector<GlobalSemaphore>& vec) : semaphores(vec) {}
+    GlobalSemaphoreArg(std::vector<GlobalSemaphore>&& vec) : semaphores(std::move(vec)) {}
+    const std::vector<GlobalSemaphore>& get() const { return semaphores; }
+    operator const std::vector<GlobalSemaphore>&() const { return semaphores; }
+};
+
 template <typename ccl_operation_t>
 void bind_all_gather_async(pybind11::module& module, const ccl_operation_t& operation, const char* doc) {
     // namespace py = pybind11;
