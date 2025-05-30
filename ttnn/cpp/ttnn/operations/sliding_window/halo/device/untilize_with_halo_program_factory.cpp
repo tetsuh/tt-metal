@@ -502,12 +502,12 @@ operation::ProgramWithCallbacks inplace_untilize_with_halo_multi_core(
     }
 
     // create the local temp CB
-    int half_max_bandwidth_stick_size =
-        device->arch() == tt::ARCH::WORMHOLE_B0 ? 256 : 512;  // 256 for wormhole, 512 for blackhole
+    int max_bandwidth_stick_size =
+        device->arch() == tt::ARCH::WORMHOLE_B0 ? 512 : 1024;  // 512 for wormhole, 1024 for blackhole
     uint32_t local_temp_cb_id = 0;
     // printf("max_local_size = %d\n", max_local_size);
     // printf("max_remote_size = %d\n", max_ref_size);
-    if (out_stick_nbytes <= half_max_bandwidth_stick_size && max_local_size > 0) {  // we will use the temp local buffer
+    if (out_stick_nbytes <= max_bandwidth_stick_size && max_local_size > 0) {  // we will use the temp local buffer
         local_temp_cb_id = cb_indices.get_next_cb_id();
         auto local_temp_cb_config =
             CircularBufferConfig(
@@ -610,7 +610,7 @@ operation::ProgramWithCallbacks inplace_untilize_with_halo_multi_core(
         temp_cb_id,
         ntiles_per_block,
         input_nblocks_per_core,
-        half_max_bandwidth_stick_size,
+        max_bandwidth_stick_size,
         sync_cb_id1,
         sync_cb_id2};
 

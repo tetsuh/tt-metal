@@ -32,7 +32,7 @@ template <
     bool is_width_sharded,
     bool is_col_major,
     bool main_thread>
-void copy_sticks_async_to_temp_or_final(
+void copy_sticks_async_to_temp(
     const tt_l1_ptr uint16_t* config_data,
     const uint16_t my_noc_x,
     const uint16_t my_noc_y,
@@ -165,7 +165,7 @@ void copy_sticks_async_from_temp(
 template <
     uint32_t stick_nbytes,
     uint32_t input_aligned_page_size,
-    uint32_t half_max_bandwidth_stick_size,
+    uint32_t max_bandwidth_stick_size,
     uint32_t local_temp_cb_id,
     uint32_t sycn_cb_id,
     bool main_thread>
@@ -200,109 +200,75 @@ void copy_sticks_async_local(
             uint32_t dst_relative_src = src_local_idx + in_out_buffer_start_delta;
             bool is_not_overlap_copy =
                 dst_local_idx + nsticks < dst_relative_src || dst_relative_src + nsticks < dst_local_idx;
+
+            if constexpr (main_thread) {
+                cb_reserve_back(sycn_cb_id, 1);
+                noc_async_write_barrier();  // wait for last local copy to finish to preseve order
+                cb_push_back(sycn_cb_id, 1);
+            } else {
+                cb_wait_front(sycn_cb_id, 1);  // wait for main thread to be ready to copy
+            }
+
             if (is_not_overlap_copy) {
-                if (size >= 16 * half_max_bandwidth_stick_size) {
+                if (size >= 8 * max_bandwidth_stick_size) {  // experimentally determined size limit
                     uint32_t half_size = size / 2;
                     if constexpr (main_thread) {
-                        cb_reserve_back(sycn_cb_id, 1);  // wait for any stick by stick copies to finish
-                        noc_async_write_barrier();
-                        cb_push_back(sycn_cb_id, 1);
                         noc_async_write(src_addr, dst_addr, half_size);
                     } else {
-                        cb_wait_front(sycn_cb_id, 1);
                         noc_async_write(src_addr + half_size, dst_addr + half_size, half_size);
-                        noc_async_write_barrier();
-                        cb_pop_front(sycn_cb_id, 1);
                     }
                 } else {
                     if constexpr (main_thread) {
-                        cb_reserve_back(sycn_cb_id, 1);  // wait for any stick by stick copies to finish
                         noc_async_write(src_addr, dst_addr, size);
                     }
                 }
             } else {  // dst and src data overlaps, stick by stick copy is necessary
-                if constexpr (stick_nbytes <= half_max_bandwidth_stick_size) {  // noc transfers with larger page sizes
-                                                                                // are faster, with a page
-                    // size of 256 bytes on WH the transfer rate is half of the maximum
-                    // thus, for stick sizes smaller that this it is faster to do a
-                    // double copy, doubling the total amount of data being copied but
-                    // avoiding the slow stick by stick copy, however with larger
-                    // stick sizes the stick by stick transfer is fast enough that it
-                    // is more efficient than the double copy.
-                    // if (length == 4) {
-                    //     // DPRINT << "HALF SIZE" << ENDL();
-                    //     uint32_t half_size = size / 2;
-                    //     if constexpr (main_thread) {
-                    //         noc_async_write(src_addr, temp_addr_write, half_size);
-                    //         noc_async_write_barrier();
-                    //         cb_reserve_back(sycn_cb_id, 1);
-                    //         cb_push_back(sycn_cb_id, 1);
-                    //         noc_async_write(temp_addr_read, dst_addr, half_size);
-                    //     } else {
-                    //         noc_async_write(src_addr + half_size, temp_addr_write + half_size, half_size);
-                    //         noc_async_write_barrier();
-                    //         cb_wait_front(sycn_cb_id, 1);
-                    //         cb_pop_front(sycn_cb_id, 1);
-                    //         noc_async_write(temp_addr_read + half_size, dst_addr + half_size, half_size);
-                    //     }
-                    // } else {
+                bool is_forward_copy = dst_local_idx > dst_relative_src;
+                if constexpr (stick_nbytes <= max_bandwidth_stick_size) {  // small sticks, use one DM core
                     if constexpr (main_thread) {
-                        // TODO do we have a race here between overalp and non-overlap?  we should probably use the sync
-                        // cb...
-                        cb_reserve_back(local_temp_cb_id, 1);
-                        const uint32_t local_temp_addr = get_write_ptr(local_temp_cb_id);
-                        const uint64_t temp_addr = get_noc_addr(my_noc_x, my_noc_y, local_temp_addr);
-                        noc_async_write(src_addr, temp_addr, size);
-                        noc_async_write_barrier();
-                        cb_push_back(local_temp_cb_id, 1);
-                    } else {
-                        cb_wait_front(local_temp_cb_id, 1);
-                        const uint32_t temp_addr = get_read_ptr(local_temp_cb_id);
-                        noc_async_write(temp_addr, dst_addr, size);
-                        noc_async_write_barrier();
-                        cb_pop_front(local_temp_cb_id, 1);
+                        if (is_forward_copy) {  // dst data is being moved "in front" of the source data, reverse
+                            // ordering of stick by stick copy is necessary
+                            for (int16_t k = nsticks - 1; k >= 0; k--) {
+                                noc_async_write(src_addr + k * stick_nbytes, dst_addr + k * stick_nbytes, stick_nbytes);
+                            }
+                        } else {
+                            for (uint16_t k = 0; k < nsticks; k++) {
+                                noc_async_write(src_addr + k * stick_nbytes, dst_addr + k * stick_nbytes, stick_nbytes);
+                            }
+                        }
                     }
-                    // }
-                } else {
+                } else {  // large sticks, use both DM cores
+                    // note front half and back half of stick copies are orthogonal so relative order doesn't matter
                     uint32_t half_stick = stick_nbytes / 2;
-                    if constexpr (main_thread) {
-                        cb_reserve_back(sycn_cb_id, 1);
-                        noc_async_write_barrier();
-                        cb_push_back(sycn_cb_id, 1);
-                        bool is_forward_copy = dst_local_idx > dst_relative_src;
-                        if (is_forward_copy) {  // dst data is being moved "in front" of the source data, reverse
-                                                // ordering of stick by stick copy is necessary
-                            for (int16_t k = nsticks - 1; k >= 0; k--) {
+                    if (is_forward_copy) {
+                        for (int16_t k = nsticks - 1; k >= 0; k--) {
+                            if constexpr (main_thread) {
                                 noc_async_write(src_addr + k * stick_nbytes, dst_addr + k * stick_nbytes, half_stick);
-                            }
-                        } else {
-                            for (uint16_t k = 0; k < nsticks; k++) {
-                                noc_async_write(src_addr + k * stick_nbytes, dst_addr + k * stick_nbytes, half_stick);
+                            } else {
+                                noc_async_write(
+                                    src_addr + k * stick_nbytes + half_stick,
+                                    dst_addr + k * stick_nbytes + half_stick,
+                                    half_stick);
                             }
                         }
                     } else {
-                        cb_wait_front(sycn_cb_id, 1);
-                        bool is_forward_copy = dst_local_idx > dst_relative_src;
-                        if (is_forward_copy) {  // dst data is being moved "in front" of the source data, reverse
-                                                // ordering of stick by stick copy is necessary
-                            for (int16_t k = nsticks - 1; k >= 0; k--) {
-                                noc_async_write(
-                                    src_addr + k * stick_nbytes + half_stick,
-                                    dst_addr + k * stick_nbytes + half_stick,
-                                    half_stick);
-                            }
-                        } else {
-                            for (uint16_t k = 0; k < nsticks; k++) {
+                        for (uint16_t k = 0; k < nsticks; k++) {
+                            if constexpr (main_thread) {
+                                noc_async_write(src_addr + k * stick_nbytes, dst_addr + k * stick_nbytes, half_stick);
+                            } else {
                                 noc_async_write(
                                     src_addr + k * stick_nbytes + half_stick,
                                     dst_addr + k * stick_nbytes + half_stick,
                                     half_stick);
                             }
                         }
-                        noc_async_write_barrier();
-                        cb_pop_front(sycn_cb_id, 1);
                     }
                 }
+            }
+
+            if constexpr (!main_thread) {
+                noc_async_write_barrier();
+                cb_pop_front(sycn_cb_id, 1);  // signal to main thread that secondary thread is ready to copy
             }
         }
 
@@ -360,7 +326,7 @@ void kernel_main() {
         get_compile_time_arg_val(29);  // temp buffer for in place untilize with wide tensors
     constexpr uint32_t tile_cols = get_compile_time_arg_val(30);
     constexpr uint32_t tile_rows = get_compile_time_arg_val(31);
-    constexpr uint32_t half_max_bandwidth_stick_size = get_compile_time_arg_val(32);
+    constexpr uint32_t max_bandwidth_stick_size = get_compile_time_arg_val(32);
     constexpr uint32_t sync_cb_id1 = get_compile_time_arg_val(33);
     constexpr uint32_t sync_cb_id2 = get_compile_time_arg_val(34);
 
@@ -412,7 +378,7 @@ void kernel_main() {
     uint32_t remote_config_data_l1_addr = get_read_ptr(remote_config_cb_id);
     const tt_l1_ptr uint16_t* remote_config_data =
         reinterpret_cast<const tt_l1_ptr uint16_t*>(remote_config_data_l1_addr);
-    copy_sticks_async_to_temp_or_final<
+    copy_sticks_async_to_temp<
         stick_nbytes,
         input_aligned_page_size,
         is_block_sharded,
@@ -440,7 +406,7 @@ void kernel_main() {
     copy_sticks_async_local<
         stick_nbytes,
         input_aligned_page_size,
-        half_max_bandwidth_stick_size,
+        max_bandwidth_stick_size,
         local_temp_cb_id,
         sync_cb_id1,
         main_thread>(
