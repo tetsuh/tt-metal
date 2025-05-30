@@ -28,13 +28,16 @@ def load_coco_class_names():
     raise Exception("Failed to fetch COCO class names from both online and local sources.")
 
 
-def load_torch_model(use_weights_from_ultralytics=True, module=None):
+def load_torch_model(use_weights_from_ultralytics=True, module=None, model_task="segment"):
     state_dict = None
+    weights = "yolov9c-seg.pt" if model_task == "segment" else "yolov9c.pt"
+    enable_segment = model_task == "segment"
+
     if use_weights_from_ultralytics:
-        model = YOLO("yolov9c.pt")
+        model = YOLO(weights)  # Use "yolov9c.pt" weight for detection
         model.load_state_dict(model.state_dict(), strict=False)
 
-    model = YoloV9()
+    model = YoloV9(enable_segment=enable_segment)
     new_state_dict = {name: param for name, param in model.state_dict().items() if isinstance(param, torch.FloatTensor)}
 
     model.load_state_dict(new_state_dict)

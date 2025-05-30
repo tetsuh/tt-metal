@@ -18,6 +18,7 @@ class YOLOv9PerformantRunner:
         device_batch_size=1,
         act_dtype=ttnn.bfloat16,
         weight_dtype=ttnn.bfloat16,
+        model_task="segment",
         model_location_generator=None,
         resolution=(640, 640),
     ):
@@ -28,6 +29,7 @@ class YOLOv9PerformantRunner:
             device_batch_size,
             act_dtype,
             weight_dtype,
+            model_task,
             model_location_generator,
             resolution=resolution,
         )
