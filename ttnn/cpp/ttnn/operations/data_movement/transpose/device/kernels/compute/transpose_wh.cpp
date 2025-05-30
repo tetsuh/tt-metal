@@ -1,5 +1,4 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
-//
+// SPDX-FileCopyrightText: © 2023 Tenstorrent AI ULC
 // SPDX-License-Identifier: Apache-2.0
 
 #include <cstdint>
@@ -20,10 +19,13 @@ void MAIN {
         cb_wait_front(tt::CBIndex::c_0, 1);
         cb_reserve_back(tt::CBIndex::c_16, 1);
 
-        acquire_dst();
+        tile_regs_acquire();
         transpose_wh_tile(tt::CBIndex::c_0, 0, 0);
+        tile_regs_commit();
+
+        tile_regs_wait();
         pack_tile(0, tt::CBIndex::c_16);
-        release_dst();
+        tile_regs_release();
 
         cb_push_back(tt::CBIndex::c_16, 1);
         cb_pop_front(tt::CBIndex::c_0, 1);

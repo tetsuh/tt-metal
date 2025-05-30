@@ -1,5 +1,4 @@
-// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.
-//
+// SPDX-FileCopyrightText: © 2023 Tenstorrent AI ULC
 // SPDX-License-Identifier: Apache-2.0
 
 #include "transpose_op.hpp"
@@ -117,7 +116,9 @@ void Transpose::validate(const std::vector<Tensor>& input_tensors) const {
                 BUFFER_ALIGNMENT);
         }
         TT_FATAL(
-            input_tensor.get_dtype() == DataType::BFLOAT16 || input_tensor.get_dtype() == DataType::FLOAT32, "Error");
+            input_tensor.get_dtype() == DataType::BFLOAT16 || input_tensor.get_dtype() == DataType::FLOAT32 ||
+                input_tensor.get_dtype() == DataType::INT32,
+            "Error");
         TT_FATAL(
             !(input_tensor.is_sharded() && input_tensor.get_layout() == Layout::TILE),
             "HC transpose does not support sharded+tilized inputs");
