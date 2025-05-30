@@ -361,6 +361,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         core_grid_offset);
     const auto receiver_worker_core_range = total_worker_core_range.subtract(sender_worker_core_range);
     const auto receiver_worker_cores = corerange_to_cores(receiver_worker_core_range, std::nullopt, true);
+
     std::set<CoreRange> receiver_forward_core_ranges;
     std::set<CoreRange> receiver_backward_core_ranges;
 
@@ -524,8 +525,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         1,                                                       // direction
         tiles_to_write_per_packet,                               // contig_pages_advanced
     };
-    std::cout << "interleaved_dim3_1_1_any_any_receiver_reader" << std::endl;
-    std::cout << "interleaved_dim3_1_1_any_any_receiver_reader: " << receiver_forward_core_range_set.str() << std::endl;
     auto worker_forward_receiver_reader_kernel_id = tt::tt_metal::CreateKernel(
         program,
         "ttnn/cpp/ttnn/operations/experimental/ccl/all_gather_async/device/kernels/"
@@ -736,7 +735,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
                                                 worker_backward_receiver_reader_kernel_id,
                                                 worker_backward_receiver_writer_kernel_id,
                                                 sender_worker_cores,
-                                                receiver_worker_cores](
+                                                receiver_worker_cores,
+                                                num_links](
                                                    const void* operation,
                                                    Program& program,
                                                    const std::vector<Tensor>& input_tensors,
@@ -770,24 +770,47 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             worker_writer_sender_runtime_args[1] = output.buffer()->address();
         }
 
-        const auto& forward_receiver_core = receiver_worker_cores[1];
-        // forward receiver reader
-        auto& worker_forward_receiver_reader_runtime_args =
-            worker_forward_receiver_reader_runtime_args_by_core[forward_receiver_core.x][forward_receiver_core.y];
-        worker_forward_receiver_reader_runtime_args[0] = intermed.buffer()->address();
-        // forward receiver writer
-        auto& worker_forward_receiver_writer_runtime_args =
-            worker_forward_receiver_writer_runtime_args_by_core[forward_receiver_core.x][forward_receiver_core.y];
-        worker_forward_receiver_writer_runtime_args[0] = output.buffer()->address();
-        const auto& backward_receiver_core = receiver_worker_cores[0];
-        // backward receiver reader
-        auto& worker_backward_receiver_reader_runtime_args =
-            worker_backward_receiver_reader_runtime_args_by_core[backward_receiver_core.x][backward_receiver_core.y];
-        worker_forward_receiver_reader_runtime_args[0] = intermed.buffer()->address();
-        // backward receiver writer
-        auto& worker_backward_receiver_writer_runtime_args =
-            worker_backward_receiver_writer_runtime_args_by_core[backward_receiver_core.x][backward_receiver_core.y];
-        worker_backward_receiver_writer_runtime_args[0] = output.buffer()->address();
+        for (int link = 0; link < num_links; link++) {
+            const auto& forward_receiver_core = receiver_worker_cores[link * 2 + 1];
+            // forward receiver reader
+            auto& worker_forward_receiver_reader_runtime_args =
+                worker_forward_receiver_reader_runtime_args_by_core[forward_receiver_core.x][forward_receiver_core.y];
+            worker_forward_receiver_reader_runtime_args[0] = intermed.buffer()->address();
+            // forward receiver writer
+            auto& worker_forward_receiver_writer_runtime_args =
+                worker_forward_receiver_writer_runtime_args_by_core[forward_receiver_core.x][forward_receiver_core.y];
+            worker_forward_receiver_writer_runtime_args[0] = output.buffer()->address();
+            const auto& backward_receiver_core = receiver_worker_cores[link * 2];
+            // backward receiver reader
+            auto& worker_backward_receiver_reader_runtime_args =
+                worker_backward_receiver_reader_runtime_args_by_core[backward_receiver_core.x]
+                                                                    [backward_receiver_core.y];
+            worker_backward_receiver_reader_runtime_args[0] = intermed.buffer()->address();
+            // backward receiver writer
+            auto& worker_backward_receiver_writer_runtime_args =
+                worker_backward_receiver_writer_runtime_args_by_core[backward_receiver_core.x]
+                                                                    [backward_receiver_core.y];
+            worker_backward_receiver_writer_runtime_args[0] = output.buffer()->address();
+        }
+
+        // const auto& forward_receiver_core = receiver_worker_cores[1];
+        // // forward receiver reader
+        // auto& worker_forward_receiver_reader_runtime_args =
+        //     worker_forward_receiver_reader_runtime_args_by_core[forward_receiver_core.x][forward_receiver_core.y];
+        // worker_forward_receiver_reader_runtime_args[0] = intermed.buffer()->address();
+        // // forward receiver writer
+        // auto& worker_forward_receiver_writer_runtime_args =
+        //     worker_forward_receiver_writer_runtime_args_by_core[forward_receiver_core.x][forward_receiver_core.y];
+        // worker_forward_receiver_writer_runtime_args[0] = output.buffer()->address();
+        // const auto& backward_receiver_core = receiver_worker_cores[0];
+        // // backward receiver reader
+        // auto& worker_backward_receiver_reader_runtime_args =
+        //     worker_backward_receiver_reader_runtime_args_by_core[backward_receiver_core.x][backward_receiver_core.y];
+        // worker_forward_receiver_reader_runtime_args[0] = intermed.buffer()->address();
+        // // backward receiver writer
+        // auto& worker_backward_receiver_writer_runtime_args =
+        //     worker_backward_receiver_writer_runtime_args_by_core[backward_receiver_core.x][backward_receiver_core.y];
+        // worker_backward_receiver_writer_runtime_args[0] = output.buffer()->address();
     };
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
