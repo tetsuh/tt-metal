@@ -76,7 +76,11 @@ class Yolov9(GstBase.BaseTransform):
         print("ARCH YAML in initialize  ", os.environ["WH_ARCH_YAML"])
         device_id = 0
         self.device = ttnn.CreateDevice(
-            device_id, l1_small_size=79104, trace_region_size=23887872, num_command_queues=2
+            device_id,
+            dispatch_core_config=self.get_dispatch_core_config(),
+            l1_small_size=24576,
+            trace_region_size=3211264,
+            num_command_queues=2,
         )
         #        self.batch_size=1
         # ttnn.enable_program_cache(self.device)
@@ -90,6 +94,16 @@ class Yolov9(GstBase.BaseTransform):
         )
         self.model._capture_yolov9_trace_2cqs()
         print("########################################", batch_size)
+
+    def get_dispatch_core_config(self):
+        # TODO: 11059 move dispatch_core_type to device_params when all tests are updated to not use WH_ARCH_YAML env flag
+        dispatch_core_type = ttnn.device.DispatchCoreType.WORKER
+        if ("WH_ARCH_YAML" in os.environ) and os.environ["WH_ARCH_YAML"] == "wormhole_b0_80_arch_eth_dispatch.yaml":
+            dispatch_core_type = ttnn.device.DispatchCoreType.ETH
+        dispatch_core_axis = ttnn.DispatchCoreAxis.ROW
+        dispatch_core_config = ttnn.DispatchCoreConfig(dispatch_core_type, dispatch_core_axis)
+
+        return dispatch_core_config
 
     def _trace_release(self):
         ttnn.release_trace(self.device, self.tid)
