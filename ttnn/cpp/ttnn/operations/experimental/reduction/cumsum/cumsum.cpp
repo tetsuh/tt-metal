@@ -26,7 +26,8 @@ Tensor CumSumOperation::invoke(
     int64_t dim,
     std::optional<ttnn::DataType> dtype,
     std::optional<Tensor> optional_output_tensor,
-    std::optional<bool> flip) {
+    std::optional<bool> flip,
+    const std::optional<MemoryConfig>& memory_config) {
     const auto& input_shape = input_tensor.get_logical_shape();
     int tensor_rank = input_shape.rank();
 
@@ -130,8 +131,9 @@ Tensor CumSumBackwardOperation::invoke(
     const Tensor& input,
     int64_t dim,
     std::optional<ttnn::DataType> dtype,
-    std::optional<Tensor> optional_output_tensor) {
-    return CumSumOperation::invoke(queue_id, input, dim, dtype, optional_output_tensor, true);
+    std::optional<Tensor> optional_output_tensor,
+    const std::optional<MemoryConfig>& memory_config) {
+    return CumSumOperation::invoke(queue_id, input, dim, dtype, optional_output_tensor, true, memory_config);
 }
 
 }  // namespace ttnn::operations::experimental::reduction
