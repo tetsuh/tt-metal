@@ -30,6 +30,10 @@ inline __attribute__((always_inline)) uint32_t fast_udiv_70(uint32_t n) {
     return (((uint64_t)n * 0xEA0EA0EB) >> 32) >> 6;
 }
 
+inline __attribute__((always_inline)) uint32_t fast_udiv_72(uint32_t n) {
+    return (((uint64_t)n * 0xE38E38E4) >> 32) >> 6;
+}
+
 inline __attribute__((always_inline)) uint32_t fast_udiv_80(uint32_t n) {
     return (((uint64_t)n * 0xCCCCCCCD) >> 32) >> 6;
 }
