@@ -20,21 +20,16 @@ namespace ckernel {
  * Initialize the tilize operation. To be called once at beginning of a kernel.
  */
 ALWI void tilize_init(uint32_t icb, uint32_t block, uint32_t ocb) {
+    UNPACK((llk_unpack_tilize_init(icb, block)));
     MATH((llk_math_eltwise_unary_datacopy_init<
           A2D,
           BroadcastType::NONE,
           DST_ACCUM_MODE,
           false /*is_int_en*/,
           true /*tilize en*/>(false /*transpose of faces*/, false /*transpose within 16x16 face*/, icb)));
-    MATH((llk_math_pack_sync_init<DST_ACCUM_MODE>()));
-    MATH((llk_math_hw_configure_disaggregated(icb, icb)));
-
-    PACK((llk_pack_hw_configure_disaggregated<false, DST_ACCUM_MODE, ReluType::NO_RELU, 0, true /*tilize en*/>(ocb)));
-    PACK((llk_pack_init<false, false, true /*tilize en*/>(ocb)));
-    PACK((llk_pack_dest_init<false, DST_ACCUM_MODE>(ocb)));
-
-    UNPACK((llk_unpack_tilize_hw_configure_disaggregated<DST_ACCUM_MODE>(icb)));
-    UNPACK((llk_unpack_tilize_init(icb, block)));
+#ifdef ARCH_BLACKHOLE
+    PACK((llk_pack_init<false /*untilize*/, false /*skip_inputs*/, true /*tilize en*/>(ocb)));
+#endif
 }
 
 #if (defined(REDUCE_OP) and defined(REDUCE_DIM)) or defined(__DOXYGEN__)
@@ -95,25 +90,6 @@ ALWI void tilizeA_B_dot_product_init(
 }
 
 /**
- * Re-initialize for the tilize operation. This can be called after a full init.
- */
-ALWI void tilize_init_short(uint32_t icb, uint32_t block, uint32_t ocb) {
-    MATH((llk_math_eltwise_unary_datacopy_init<
-          A2D,
-          BroadcastType::NONE,
-          DST_ACCUM_MODE,
-          false /*is_int_en*/,
-          true /*tilize en*/>(false /*transpose of faces*/, false /*transpose within 16x16 face*/, icb)));
-    UNPACK((llk_unpack_tilize_init(icb, block)));
-
-#ifdef ARCH_BLACKHOLE
-    PACK((llk_pack_init<false, false, true /*tilize en*/>(ocb)));
-#endif
-}
-
-ALWI void tilize_init_unpack(uint32_t icb, uint32_t block) { UNPACK((llk_unpack_tilize_init(icb, block))); }
-
-/**
  * Re-initialize for the tilize operation. This also reconfigure the unpacker with CB data type.
  */
 ALWI void tilize_init_short_with_dt(uint32_t old_icb, uint32_t new_icb, uint32_t block, uint32_t ocb) {
@@ -155,8 +131,6 @@ ALWI void tilize_block(uint32_t icb, uint32_t block, uint32_t ocb) {
         PACK((llk_pack_dest_section_done<DST_ACCUM_MODE>()));
     }
 }
-
-ALWI void unpack_tilize_block(uint32_t icb, uint32_t block) { UNPACK((llk_unpack_tilize_block(icb, block))); }
 
 ALWI void unpack_tilizeA_B_block(
     uint32_t icb0,
@@ -203,7 +177,7 @@ ALWI void unpack_tilizeA_B_dot_product_block(
 ALWI void tilize_uninit(uint32_t icb, uint32_t ocb) {
     UNPACK((llk_unpack_tilize_uninit(icb)));
 #ifdef ARCH_BLACKHOLE
-    PACK((llk_pack_init(ocb)));
+    PACK((llk_pack_init<false /*untilize*/, false /*skip_inputs*/, false /*tilize en*/>(ocb)));
 #endif
 }
 
