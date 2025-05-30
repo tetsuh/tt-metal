@@ -29,7 +29,7 @@ constexpr uint32_t batch_slice_num_pages = get_compile_time_arg_val(9);
 constexpr uint32_t ring_size = get_compile_time_arg_val(10);
 constexpr uint32_t num_batches = get_compile_time_arg_val(11);
 constexpr uint32_t fuse_op = get_compile_time_arg_val(12);
-constexpr uint32_t contig_pages_advanced = 4;
+constexpr uint32_t contig_pages_advanced = get_compile_time_arg_val(13);
 
 constexpr uint32_t N_DRAM_BANKS = 12;
 
