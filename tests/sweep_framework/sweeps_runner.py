@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: © 2024 Tenstorrent Inc.
+# SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
 
 # SPDX-License-Identifier: Apache-2.0
 
@@ -95,6 +95,16 @@ def run(test_module, input_queue, output_queue):
                 output_queue.put([status, message, e2e_perf, perf_result])
             else:
                 output_queue.put([status, message, e2e_perf, None])
+            if not status:
+                print("----------")
+                print("Shape ", test_vector["input_dtype"]["input_a_dtype"])
+                print("input_a_dtype ", test_vector["input_dtype"]["input_a_dtype"])
+                print("input_b_dtype ", test_vector["input_dtype"]["input_b_dtype"])
+                print("a_mem ", test_vector["input_mem_config"]["a_mem"])
+                print("b_mem ", test_vector["input_mem_config"]["b_mem"])
+                print("status ", status)
+                print("message ", message)
+                print("----------")
     except Empty as e:
         try:
             # Run teardown in mesh_device_fixture
