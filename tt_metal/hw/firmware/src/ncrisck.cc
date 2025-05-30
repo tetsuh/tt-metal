@@ -33,15 +33,13 @@ uint32_t noc_posted_writes_num_issued[NUM_NOCS];
 
 #if defined(ARCH_WORMHOLE)
 extern "C" uint32_t kernel_launch(uint32_t offset) {
-    // Enable GPREL optimizations.
-    asm(".reloc kernel_launch, R_RISCV_NONE, __global_pointer$");
 #else
 extern "C" [[gnu::section(".start")]]
 uint32_t _start() {
-    // Enable GPREL optimizations.
-    asm(".reloc _start, R_RISCV_NONE, __global_pointer$");
     uint32_t offset = 0;
 #endif
+    // Enable GPREL optimizations.
+    asm("0: .reloc 0b, R_RISCV_NONE, __global_pointer$");
 
     mark_stack_usage();
 #if defined(DEBUG_NULL_KERNELS) && !defined(DISPATCH_KERNEL)

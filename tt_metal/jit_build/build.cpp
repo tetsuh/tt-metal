@@ -334,7 +334,7 @@ void JitBuildState::finish_init() {
             this->link_objs_ += build_dir + "wh-iram-start.o ";
         }
     }
-    
+
     if (this->target_name_ == "brisc" or this->target_name_ == "idle_erisc") {
         this->link_objs_ += build_dir + "noc.o ";
     }

@@ -68,7 +68,7 @@ foreach(ARCH IN LISTS ARCHS)
     set(HW_OUTPUT_DIR "${PROJECT_SOURCE_DIR}/runtime/hw/toolchain/${ARCH}")
     string(TOUPPER ${ARCH} ARCH_DEFINE)
 
-    if("${ARCH}" STREQUAL "wormhole")
+    if(ARCH STREQUAL "wormhole")
         foreach(SCRIPT_TYPE IN LISTS WH_LD_SCRIPTS)
             foreach(IRAM_OPT IN LISTS IRAM_OPTIONS)
                 if(IRAM_OPT)
@@ -127,15 +127,6 @@ foreach(ARCH IN LISTS ARCHS)
     endforeach()
 endforeach()
 
-# Function appends b0 if its wormhole
-function(get_alias INPUT_STRING OUTPUT_VAR)
-    if("${INPUT_STRING}" STREQUAL "wormhole")
-        set(${OUTPUT_VAR} "wormhole_b0" PARENT_SCOPE)
-    else()
-        set(${OUTPUT_VAR} "${INPUT_STRING}" PARENT_SCOPE)
-    endif()
-endfunction()
-
 if(TT_USE_SYSTEM_SFPI)
     set(GPP_CMD "/opt/tenstorrent/sfpi/compiler/bin/riscv32-tt-elf-g++")
 else()
@@ -176,26 +167,23 @@ set(GPP_FLAGS_common
 
 # We are going to build 5 or 6 object files foreach ARCH
 foreach(ARCH IN LISTS ARCHS)
-    get_alias(${ARCH} ARCH_B0)
 
     # These are the set of object files we are to build foreach ARCH
-    set(HWOBJS
-        tmu-crt0
-        substitutes
-        tdma_xmov
-        noc
-        wh-iram-start
-        wh-iram-trampoline
+    set(HW_OBJ_SRC_PAIRS
+        tmu-crt0    "tt_metal/hw/toolchain/tmu-crt0.S"
+        substitutes "tt_metal/hw/toolchain/substitutes.cpp"
+        tdma_xmov   "tt_metal/hw/firmware/src/tdma_xmov.c"
+        noc         "tt_metal/hw/firmware/src/${ARCH}/noc.c"
     )
+    set(ARCH_ALIAS ${ARCH})
 
-    # Same order as HWOBJS
-    set(HWSRCS
-      "tt_metal/hw/toolchain/tmu-crt0.S"
-      "tt_metal/hw/toolchain/substitutes.cpp"
-      "tt_metal/hw/firmware/src/tdma_xmov.c"
-      "tt_metal/hw/firmware/src/${ARCH}/noc.c"
-      "tt_metal/hw/toolchain/wh-iram-start.S"
-      "tt_metal/hw/toolchain/wh-iram-trampoline.S")
+    if(ARCH STREQUAL "wormhole")
+        set(ARCH_ALIAS wormhole_b0)
+        list(APPEND HW_OBJ_SRC_PAIRS
+            wh-iram-start      "tt_metal/hw/toolchain/wh-iram-start.S"
+            wh-iram-trampoline "tt_metal/hw/toolchain/wh-iram-trampoline.S"
+        )
+    endif()
 
     # Set GPP_FLAGS based on ARCH
     set(GPP_FLAGS
@@ -221,36 +209,40 @@ foreach(ARCH IN LISTS ARCHS)
     )
 
     # Architecture specific include paths
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH})
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}/${ARCH_B0}_defines)
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}/noc)
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd/device/${ARCH})
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_B0}/metal/common)
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_B0}/metal/llk_io)
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk/tt_llk_${ARCH_B0}/common/inc)
-    list(APPEND GPP_INCLUDES -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk/tt_llk_${ARCH_B0}/llk_lib)
+    list(APPEND GPP_INCLUDES
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}/${ARCH_ALIAS}_defines
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/inc/${ARCH}/noc
+        -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/umd/device/${ARCH}
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_ALIAS}/metal/common
+        -I${PROJECT_SOURCE_DIR}/tt_metal/hw/ckernels/${ARCH_ALIAS}/metal/llk_io
+        -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk/tt_llk_${ARCH_ALIAS}/common/inc
+        -I${PROJECT_SOURCE_DIR}/tt_metal/third_party/tt_llk/tt_llk_${ARCH_ALIAS}/llk_lib
+    )
 
-    foreach(HWOBJ HWSRC IN ZIP_LISTS HWOBJS HWSRCS)
-        if((NOT "${ARCH}" STREQUAL "wormhole") AND "${HWOBJ}" MATCHES "^wh-iram-")
-            continue() # Skip the iteration, only for wormholw
+    set(HWOBJ "")
+    foreach(HW_PAIR IN LISTS HW_OBJ_SRC_PAIRS)
+        if(HWOBJ STREQUAL "")
+  	    set(HWOBJ ${HW_PAIR})
+	    continue()
         endif()
-
-        set(HW_OUTPUT_FILE "${HW_OBJ_DIR}/${HWOBJ}.o")
-        add_custom_command(
-            OUTPUT
-                ${HW_OUTPUT_FILE}
-            COMMAND
-                ${CMAKE_COMMAND} -E make_directory ${HW_OBJ_DIR}
-            COMMAND
-                ${GPP_CMD} ${GPP_FLAGS} ${GPP_DEFINES} ${GPP_INCLUDES} -c -o ${HW_OBJ_DIR}/${HWOBJ}.o ${PROJECT_SOURCE_DIR}/${HWSRC}
-            DEPENDS
-                ${PROJECT_SOURCE_DIR}/${HWSRC}
-                # If the compiler changes, rebuild
-                ../sfpi-version.sh
-            COMMENT "Building ${ARCH} hw lib ${HWOBJ}.o"
-            VERBATIM
-        )
-        list(APPEND OBJ_FILES ${HW_OUTPUT_FILE})
+	set(HWSRC ${HW_PAIR})
+	set(HW_OUTPUT_FILE "${HW_OBJ_DIR}/${HWOBJ}.o")
+	add_custom_command(
+          OUTPUT
+          ${HW_OUTPUT_FILE}
+          COMMAND
+          ${CMAKE_COMMAND} -E make_directory ${HW_OBJ_DIR}
+          COMMAND
+          ${GPP_CMD} ${GPP_FLAGS} ${GPP_DEFINES} ${GPP_INCLUDES} -c -o ${HW_OBJ_DIR}/${HWOBJ}.o ${PROJECT_SOURCE_DIR}/${HWSRC}
+          DEPENDS
+          ${PROJECT_SOURCE_DIR}/${HWSRC}
+          # If the compiler changes, rebuild
+          ../sfpi-version.sh
+          COMMENT "Building ${ARCH} hw lib ${HWOBJ}.o"
+          VERBATIM)
+	list(APPEND OBJ_FILES ${HW_OUTPUT_FILE})
+	set(HWOBJ "")
     endforeach()
 endforeach()
 
