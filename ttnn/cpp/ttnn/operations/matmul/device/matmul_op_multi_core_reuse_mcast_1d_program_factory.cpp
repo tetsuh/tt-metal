@@ -396,6 +396,7 @@ tt::tt_metal::operation::ProgramWithCallbacks create_program_mcast_in0(
     }
 
     in1_sender_writer_compile_time_args.push_back((std::uint32_t)(fuse_op && fused_op_signaler->is_all_gather()));
+    in1_sender_writer_compile_time_args.push_back((std::uint32_t)(fuse_op && fused_op_signaler->is_reduce_scatter()));
 
     std::vector<uint32_t> in0_receiver_compile_time_args = {
         // in0 block args
