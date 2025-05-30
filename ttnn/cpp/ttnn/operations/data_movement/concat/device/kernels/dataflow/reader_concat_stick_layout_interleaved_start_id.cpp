@@ -9,12 +9,16 @@
 // Writes to Specified Circular Buffers in L1
 // Expects n provided src_addr, src_noc_x, src_noc_y, and cb_id_in
 void kernel_main() {
+    DPRINT << "this is reader 2\n";
     const uint32_t num_pages = get_arg_val<uint32_t>(0);
     const uint32_t start_tensor = get_arg_val<uint32_t>(1);
     const uint32_t start_tensor_id = get_arg_val<uint32_t>(2);
+    DPRINT << "num_pages: " << (uint32_t)num_pages << ", start_tensor: " << (uint32_t)start_tensor
+           << ", start_tensor_id: " << (uint32_t)start_tensor_id << ENDL();
 
     constexpr uint32_t cb_id_in = get_compile_time_arg_val(0);
     constexpr uint32_t num_tensors = get_compile_time_arg_val(1);
+    DPRINT << "cb_id_in: " << (uint32_t)cb_id_in << ", num_tensors: " << (uint32_t)num_tensors << ENDL();
 
     // ublocks size defined in pages
     constexpr uint32_t ublock_size_pages = 1;
@@ -35,12 +39,33 @@ void kernel_main() {
     constexpr uint32_t page_size_per_tensor_offset = num_pages_per_block_base_offset + num_tensors;
     constexpr uint32_t page_id_per_tensor_offset = page_size_per_tensor_offset + num_tensors;
     tt_l1_ptr uint32_t* arg_ptr = (tt_l1_ptr uint32_t*)get_arg_addr(src_addr_base_idx);
-    for (uint32_t i = 0; i < num_tensors; ++i) {
+    ""
+    "
+        const InterleavedAddrGen<1>
+            s_test = {.bank_base_address = arg_ptr[0], .page_size = arg_ptr[page_size_per_tensor_offset]};
+    cb_reserve_back(cb_id_in, ublock_size_pages);
+    uint32_t l1_write_addr = get_write_ptr(cb_id_in);
+    noc_async_read_page(0, s_test, l1_write_addr);
+    noc_async_read_barrier();
+    ""
+    "
+        // volatile tt_l1_ptr uint32_t* dst_noc2 = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(l1_write_addr);
+        //     for (uint32_t value = 0; value < 32; value++) {
+        //         DPRINT << "value at " << (uint32_t)value << " is: " << (uint32_t)dst_noc2[value] << ENDL();
+        //     }
+
+        // DPRINT << "after my check\n";
+
+        for (uint32_t i = 0; i < num_tensors; ++i) {
         uint32_t src_addr = arg_ptr[i];
         is_dram[i] = (bool)arg_ptr[is_dram_base_offset + i];
         num_pages_per_block[i] = arg_ptr[num_pages_per_block_base_offset + i];
         page_id_per_tensor[i] = arg_ptr[page_id_per_tensor_offset + i];
+        DPRINT << "num_pages_per_block: " << (uint32_t)num_pages_per_block[i]
+               << ", page_id_per_tensor: " << (uint32_t)page_id_per_tensor[i] << ENDL();
         if (is_dram[i]) {
+            DPRINT << "src_addr: " << (uint32_t)src_addr
+                   << ", is_dram: true, page_size: " << (uint32_t)arg_ptr[page_size_per_tensor_offset + i] << ENDL();
             new (&dram_src_addr_gens[i]) InterleavedAddrGen<true>{
                 .bank_base_address = src_addr, .page_size = arg_ptr[page_size_per_tensor_offset + i]};
         } else {
@@ -72,9 +97,18 @@ void kernel_main() {
         curr_tensor = 0;
 #else
         if (is_dram[curr_tensor]) {
+            DPRINT << "page_id_per_tensor dram[curr_tensor] :" << (uint32_t)page_id_per_tensor[curr_tensor] << ENDL();
+            DPRINT << "l1_write_addr: " << (uint32_t)l1_write_addr << ENDL();
             noc_async_read_page(page_id_per_tensor[curr_tensor], dram_src_addr_gens[curr_tensor], l1_write_addr);
         } else {
+            DPRINT << "page_id_per_tensor l1[curr_tensor] :" << (uint32_t)page_id_per_tensor[curr_tensor] << ENDL();
+            DPRINT << "l1_write_addr: " << (uint32_t)l1_write_addr << ENDL();
             noc_async_read_page(page_id_per_tensor[curr_tensor], l1_src_addr_gens[curr_tensor], l1_write_addr);
+        }
+        noc_async_read_barrier();
+        volatile tt_l1_ptr uint32_t* dst_noc2 = reinterpret_cast<volatile tt_l1_ptr uint32_t*>(l1_write_addr);
+        for (uint32_t value = 0; value < 32; value++) {
+            DPRINT << "value at " << (uint32_t)value << " is: " << (uint32_t)dst_noc2[value] << ENDL();
         }
 
         page_id_per_tensor[curr_tensor]++;

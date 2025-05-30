@@ -110,6 +110,9 @@ std::vector<ttnn::TensorSpec> ConcatDeviceOperation::compute_output_specs(
         ttnn::Shape curr_shape = in_ref.get_logical_shape();
         shape_out[this->dim] += curr_shape[this->dim];
     }
+    if (ref_in_tensor.get_dtype() == DataType::INT32 || ref_in_tensor.get_dtype() == DataType::UINT32) {
+        printf("ref_in_tensor.get_dtype() is int\n");
+    }
 
     return {TensorSpec(
         shape_out,

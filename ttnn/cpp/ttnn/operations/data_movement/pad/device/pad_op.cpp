@@ -46,11 +46,13 @@ void Pad::validate_with_output_tensors(
         TT_FATAL((this->output_padded_shape[2] % TILE_HEIGHT == 0), "Can only pad tilized tensor with full tiles");
         TT_FATAL((this->output_padded_shape[3] % TILE_WIDTH == 0), "Can only pad tilized tensor with full tiles");
         TT_FATAL(
-            input_tensor.get_dtype() == DataType::FLOAT32 || input_tensor.get_dtype() == DataType::BFLOAT16,
+            input_tensor.get_dtype() == DataType::FLOAT32 || input_tensor.get_dtype() == DataType::BFLOAT16 ||
+                input_tensor.get_dtype() == DataType::INT32 || input_tensor.get_dtype() == DataType::UINT32,
             "Cannot pad tilized tensor with specified format");
     } else if (input_tensor.get_layout() == Layout::ROW_MAJOR) {
         TT_FATAL(
-            input_tensor.get_dtype() == DataType::FLOAT32 || input_tensor.get_dtype() == DataType::BFLOAT16,
+            input_tensor.get_dtype() == DataType::FLOAT32 || input_tensor.get_dtype() == DataType::BFLOAT16 ||
+                input_tensor.get_dtype() == DataType::INT32 || input_tensor.get_dtype() == DataType::UINT32,
             "Cannot pad RM tensor with specified format");
     }
 

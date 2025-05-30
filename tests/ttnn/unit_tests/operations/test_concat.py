@@ -17,11 +17,11 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 )
 def test_tiled_concat(device, concat_spec):
     shapes, dim = concat_spec
-    torch_input_tensors = [torch.rand(shape, dtype=torch.bfloat16) for shape in shapes]
+    torch_input_tensors = [torch.randint(1, 10, shape, dtype=torch.int32) for shape in shapes]
     torch_output_tensor = torch.concat(torch_input_tensors, dim=dim)
 
     input_tensors = [
-        ttnn.from_torch(torch_input_tensor, layout=ttnn.TILE_LAYOUT, device=device)
+        ttnn.from_torch(torch_input_tensor, dtype=ttnn.uint32, layout=ttnn.TILE_LAYOUT, device=device)
         for torch_input_tensor in torch_input_tensors
     ]
 
@@ -312,3 +312,15 @@ def test_concat_sharded_pad(device, core_grid, hw, channels1, channels2, shard_h
     )
     expected = torch.concat([torch_input_tensor1, torch_input_tensor2], dim=-1)
     assert_with_pcc(expected, ttnn.to_torch(actual), 0.9999)
+
+
+def test_tile_issue(device):
+    torch_inputs = torch.randint(1, 10, [1, 10], dtype=torch.int32)
+    torch_output_tensor = torch.concat([torch_inputs, torch_inputs, torch_inputs], 1)
+
+    ttnn_inputs = ttnn.from_torch(torch_inputs, device=device, dtype=ttnn.int32, layout=ttnn.TILE_LAYOUT)
+    output = ttnn.concat([ttnn_inputs, ttnn_inputs, ttnn_inputs], 1)
+    output = ttnn.to_torch(output)
+    print(output)
+    print(torch_output_tensor)
+    assert_with_pcc(torch_output_tensor, output, 0.9999)

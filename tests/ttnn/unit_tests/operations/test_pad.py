@@ -478,8 +478,8 @@ def test_pad_tile(shape, padding, device):
     elif len(padding) < len(shape):
         padding = _unsqueeze(padding, shape, 0)
 
-    input = torch.ones(prod(shape), dtype=torch.bfloat16).reshape(shape)
-    input_tensor = ttnn.from_torch(input, dtype=ttnn.bfloat16, device=device, layout=ttnn.TILE_LAYOUT)
+    input = torch.ones(prod(shape), dtype=torch.int32).reshape(shape)
+    input_tensor = ttnn.from_torch(input, dtype=ttnn.int32, device=device, layout=ttnn.TILE_LAYOUT)
 
     torch_padding = sum([[0, p] for p in reversed(padding)], [])
     torch_output = torch.nn.functional.pad(input, torch_padding, value=5)

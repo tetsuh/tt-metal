@@ -41,6 +41,10 @@ operation::ProgramWithCallbacks pad_rm_reader_writer(
     uint32_t pad_value_const_buffer_nbytes = pad_value_const_buffer_size * a.element_size();
     auto pad_value_const_buffer =
         tt::tt_metal::HostBuffer(std::vector<bfloat16>(pad_value_const_buffer_size, bfloat16(pad_value)));
+    if (a.get_dtype() == tt::tt_metal::DataType::UINT32 || a.get_dtype() == tt::tt_metal::DataType::INT32) {
+        pad_value_const_buffer =
+            tt::tt_metal::HostBuffer(std::vector<uint32_t>(pad_value_const_buffer_size, uint32_t(pad_value)));
+    }
     const Tensor pad_value_const_tensor =
         Tensor(
             std::move(pad_value_const_buffer),
@@ -84,7 +88,9 @@ operation::ProgramWithCallbacks pad_rm_reader_writer(
     bfloat16 bfloat_pad_value = bfloat16(pad_value);
     bfloat16 bfloat_zero = bfloat16(0.0f);
     uint32_t packed_pad_value = pack_two_bfloat16_into_uint32({bfloat_zero, bfloat_pad_value});
-
+    if (a.get_dtype() == tt::tt_metal::DataType::UINT32 || a.get_dtype() == tt::tt_metal::DataType::INT32) {
+        packed_pad_value = (uint32_t)(pad_value);
+    }
     KernelHandle reader_kernel_id = CreateKernel(
         program,
         "ttnn/cpp/ttnn/operations/data_movement/pad/device/kernels/dataflow/reader_pad_dims_rm_interleaved.cpp",
@@ -222,6 +228,9 @@ operation::ProgramWithCallbacks pad_tile(
 
     bfloat16 bfloat_pad_value = bfloat16(pad_value);
     uint32_t packed_pad_value = pack_two_bfloat16_into_uint32({bfloat_pad_value, bfloat_pad_value});
+    if (a.get_dtype() == tt::tt_metal::DataType::UINT32 || a.get_dtype() == tt::tt_metal::DataType::INT32) {
+        packed_pad_value = (uint32_t)(pad_value);
+    }
 
     uint32_t num_unpadded_Xt = a.get_padded_shape()[3] / TILE_WIDTH;
     uint32_t num_total_Xt = output_shape[3] / TILE_WIDTH;
@@ -468,6 +477,10 @@ operation::ProgramWithCallbacks pad_rm_reader_writer_multi_core(
     uint32_t pad_value_const_buffer_nbytes = pad_value_const_buffer_size * a.element_size();
     auto pad_value_const_buffer =
         tt::tt_metal::HostBuffer(std::vector<bfloat16>(pad_value_const_buffer_size, bfloat16(pad_value)));
+    if (a.get_dtype() == tt::tt_metal::DataType::UINT32 || a.get_dtype() == tt::tt_metal::DataType::INT32) {
+        pad_value_const_buffer =
+            tt::tt_metal::HostBuffer(std::vector<uint32_t>(pad_value_const_buffer_size, uint32_t(pad_value)));
+    }
     // NOTE: The const buffer is always in L1
     // TODO: make a local buffer for each core?
     const Tensor pad_value_const_tensor =
@@ -536,6 +549,9 @@ operation::ProgramWithCallbacks pad_rm_reader_writer_multi_core(
     bfloat16 bfloat_pad_value = bfloat16(pad_value);
     bfloat16 bfloat_zero = bfloat16(0.0f);
     uint32_t packed_pad_value = pack_two_bfloat16_into_uint32({bfloat_zero, bfloat_pad_value});
+    if (a.get_dtype() == tt::tt_metal::DataType::UINT32 || a.get_dtype() == tt::tt_metal::DataType::INT32) {
+        packed_pad_value = (uint32_t)(pad_value);
+    }
 
     KernelHandle reader_kernel_id = CreateKernel(
         program,
@@ -865,6 +881,9 @@ operation::ProgramWithCallbacks pad_rm_reader_writer_multi_core_v2(
 
     bfloat16 bfloat_pad_value = bfloat16(pad_value);
     uint32_t packed_pad_value = pack_two_bfloat16_into_uint32({bfloat_pad_value, bfloat_pad_value});
+    if (a.get_dtype() == tt::tt_metal::DataType::UINT32 || a.get_dtype() == tt::tt_metal::DataType::INT32) {
+        packed_pad_value = (uint32_t)(pad_value);
+    }
 
     bool src0_is_dram = src0_buffer->buffer_type() == BufferType::DRAM;
     bool dst_is_dram = dst_buffer->buffer_type() == BufferType::DRAM;
@@ -1286,6 +1305,9 @@ operation::ProgramWithCallbacks pad_rm_sharded_height_only(
 
     bfloat16 bfloat_pad_value = bfloat16(pad_value);
     uint32_t packed_pad_value = pack_two_bfloat16_into_uint32({bfloat_pad_value, bfloat_pad_value});
+    if (a.get_dtype() == tt::tt_metal::DataType::UINT32 || a.get_dtype() == tt::tt_metal::DataType::INT32) {
+        packed_pad_value = (uint32_t)(pad_value);
+    }
 
     std::vector<uint32_t> reader_ct_args = {(std::uint32_t)stick_size_padded, (std::uint32_t)shard_height_padded};
 
@@ -1425,6 +1447,10 @@ operation::ProgramWithCallbacks pad_rm_sharded_width_only(
         uint16_t bfloat_pad_value_bits = bfloat16(pad_value).to_uint16();
         padding_value_as_u32 = *reinterpret_cast<uint32_t*>(&bfloat_pad_value_bits);
     } else if (input_tensor.get_dtype() == tt::tt_metal::DataType::FLOAT32) {
+        padding_value_as_u32 = *reinterpret_cast<uint32_t*>(&pad_value);
+    } else if (
+        input_tensor.get_dtype() == tt::tt_metal::DataType::UINT32 ||
+        input_tensor.get_dtype() == tt::tt_metal::DataType::INT32) {
         padding_value_as_u32 = *reinterpret_cast<uint32_t*>(&pad_value);
     } else {
         TT_THROW("ttnn.pad: unsupported data type for pad_rm_sharded_stickwise");

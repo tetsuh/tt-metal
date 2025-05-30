@@ -144,7 +144,7 @@ tt_metal::operation::ProgramWithCallbacks s2s_tiled_concat_two_tensors_height_mu
     const auto total_num_output_tiles = get_total_num_tiles_per_shard(num_tiles_for_output_shard);
     const CBHandle cb_output = create_cb_from_tensor(cb_output_id, output, total_num_output_tiles);
 
-    const auto bf16_data_format = tt::tt_metal::datatype_to_dataformat_converter(DataType::BFLOAT16);
+    const auto bf16_data_format = tt::tt_metal::datatype_to_dataformat_converter(input_tensors[0].get_dtype());
     const auto bf16_tile_size = tt::tt_metal::detail::TileSize(bf16_data_format);
 
     const auto in0_total_tiles_width = std::get<1>(num_tiles_for_each_input_shard[0]);
@@ -734,6 +734,10 @@ tt_metal::operation::ProgramWithCallbacks concat_multi_core(
 
     uint32_t num_output_pages;
     uint32_t single_page_size;
+    printf(
+        "input_tensors[0].buffer()->alignment(): %u, output.buffer()->alignment(): %u\n",
+        input_tensors[0].buffer()->alignment(),
+        output.buffer()->alignment());
     uint32_t common_align_len = std::max(input_tensors[0].buffer()->alignment(), output.buffer()->alignment());
     if (rm_layout) {
         num_output_pages = output.volume() / output.get_padded_shape()[-1];
@@ -742,6 +746,7 @@ tt_metal::operation::ProgramWithCallbacks concat_multi_core(
         num_output_pages = output.volume() / TILE_HW;
         single_page_size = tt_metal::detail::TileSize(cb_data_format);
     }
+    printf("single_page_size: %u, num_output_pages: %u\n", single_page_size, num_output_pages);
 
     auto compute_with_storage_grid_size = device->compute_with_storage_grid_size();
     uint32_t num_cores_x = compute_with_storage_grid_size.x;
@@ -803,6 +808,7 @@ tt_metal::operation::ProgramWithCallbacks concat_multi_core(
         for (uint32_t i = 0; i < num_input_tensors; ++i) {
             auto buffer = input_tensors[i].buffer();
             src_addr[i] = buffer->address();
+            printf("is dram; %d\n", buffer->buffer_type() == tt_metal::BufferType::DRAM);
             is_dram[i] = buffer->buffer_type() == tt_metal::BufferType::DRAM;
             page_size_per_tensor[i] = buffer->page_size();
             if (dim == num_dims - 1) {
@@ -839,6 +845,7 @@ tt_metal::operation::ProgramWithCallbacks concat_multi_core(
     // Reader compile-time args
     // Data is 32 byte aligned
     bool dst_is_dram = dst_buffer->buffer_type() == tt_metal::BufferType::DRAM;
+    printf("dst_is_dram: %d\n", dst_is_dram);
     std::vector<uint32_t> reader_compile_time_args = {
         // interleaved accessor args
         (std::uint32_t)src0_cb_index,
@@ -858,6 +865,8 @@ tt_metal::operation::ProgramWithCallbacks concat_multi_core(
                                                       0};
 
     // Tilized reader
+    printf("here\n");
+    printf("rm_layout? :%d\n", rm_layout);
     tt_metal::KernelHandle unary_reader_kernel_id = tt_metal::CreateKernel(
         program,
         rm_layout ? "ttnn/cpp/ttnn/operations/data_movement/concat/device/kernels/dataflow/"
@@ -904,15 +913,20 @@ tt_metal::operation::ProgramWithCallbacks concat_multi_core(
                 curr_tensor_id = id_within_block;
                 id_within_block = 0;
             }
+            printf("page_id_per_tensor[j]: %u\n", page_id_per_tensor[j]);
         }
 
         std::vector<uint32_t> reader_kernel_args = common_reader_kernel_args;
+        printf("num_pages_per_core: %u\n", num_pages_per_core);
         reader_kernel_args[0] = num_pages_per_core;
         reader_kernel_args[1] = curr_tensor;
         reader_kernel_args[2] = curr_tensor_id;
         reader_kernel_args.insert(reader_kernel_args.end(), page_id_per_tensor.begin(), page_id_per_tensor.end());
 
         std::vector<uint32_t> writer_kernel_args;
+        printf("output.buffer()->page_size(): %lu\n", output.buffer()->page_size());
+        printf("num_pages_per_core: %u\n", num_pages_per_core);
+        printf("num_pages_written: %u\n", num_pages_written);
         if (rm_layout) {
             writer_kernel_args = {
                 dst_buffer->address(), output.buffer()->page_size(), num_pages_per_core, num_pages_written};

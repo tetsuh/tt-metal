@@ -136,6 +136,7 @@ MassagedConcat build_untilize_rm_retilize_concat(
                         queue_id)[0];
 
                     untilized_tensor = ttnn::reshape(untilized_tensor, input_tensor.get_logical_shape());
+
                     return untilized_tensor;
                 });
             return std::make_tuple(itensors, dim, groups);
@@ -144,13 +145,18 @@ MassagedConcat build_untilize_rm_retilize_concat(
                            queue_id](const ttnn::Tensor& output) -> ttnn::Tensor {
             // now we have a rm tensor, so we need ensure its's padded to tile size and re-tilize it
             if (output.get_layout() != ttnn::TILE_LAYOUT) {
-                auto padded = pad_to_tile_vol(queue_id, output, 0.0f, true, output.memory_config());
+                auto padded = pad_to_tile_vol(queue_id, output, 0, true, output.memory_config());
+                printf("padded shape : %u, %u\n", padded.get_padded_shape()[0], padded.get_padded_shape()[1]);
+                printf("padded layout tile : %d\n", padded.get_layout() == ttnn::TILE_LAYOUT);
                 concat_db_print(true, "[DEBUG] padded to tile layout, now tilizing.");
-                auto tilized =
-                    ttnn::tilize_with_val_padding(padded, padded.get_padded_shape(), 0.0f, output.memory_config());
+                auto tilized = ttnn::tilize_with_zero_padding(padded, output.memory_config());
+                printf("tilized shape: %u, %u\n", tilized.get_padded_shape()[0], tilized.get_padded_shape()[1]);
+                printf("tilized layout tile : %d\n", tilized.get_layout() == ttnn::TILE_LAYOUT);
                 concat_db_print(true, "[DEBUG] tilized");
                 // need to reshape tilized result to logical concat output shape
                 auto reshaped = ttnn::reshape(tilized, logical_output_shape, tilized.get_padded_shape());
+                printf("reshaped shape: %u, %u\n", reshaped.get_padded_shape()[0], reshaped.get_padded_shape()[1]);
+                printf("reshaped layout tile : %d\n", reshaped.get_layout() == ttnn::TILE_LAYOUT);
                 return reshaped;
             }
             concat_db_print(true, "[DEBUG] already tilized");
