@@ -271,3 +271,83 @@ def test_all_reduce_tg_llama(
         validate_all=False,
         profiler=profiler,
     )
+
+
+@skip_for_grayskull("Requires eth connected devices to run")
+@pytest.mark.parametrize(
+    "output_shape, cluster_axis, input_num_cores, input_core_range_set, output_num_cores, output_core_range_set, input_dtype, output_dtype",
+    [
+        ([1, 1, 32, 2048], 0, 24, RING_CRS, 16, NORM_CRS, ttnn.bfloat8_b, None),  # FF2/DO all reduce
+        ([1, 1, 32, 1280], 1, 24, RING_CRS, 10, QKV_CRS, ttnn.bfloat8_b, ttnn.bfloat16),  # QKV all reduce
+        ([1, 1, 32, 3584], 1, 24, RING_CRS, 28, FF1_CRS, ttnn.bfloat8_b, None),  # FF1 all reduce
+        ([1, 1, 32, 16 * 1024], 1, 32, LM_HEAD_CRS, 32, LM_HEAD_CRS, ttnn.bfloat8_b, None),  # LM head all reduce
+    ],
+    ids=[
+        "ff2",
+        "qkv",
+        "ff1",
+        "lm_head",
+    ],
+)
+@pytest.mark.parametrize(
+    "num_iters, warmup_iters",
+    [
+        (NUM_ITERATIONS, 10),
+    ],
+)
+@pytest.mark.parametrize("trace_mode", [True])
+@pytest.mark.parametrize(
+    "device_params",
+    [
+        {
+            "trace_region_size": 23887872,
+            "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
+            "fabric_config": ttnn.FabricConfig.FABRIC_1D,
+            "reliability_mode": ttnn.FabricReliabilityMode.RELAXED_SYSTEM_HEALTH_SETUP_MODE,
+        }
+    ],
+    indirect=True,
+)
+@pytest.mark.parametrize(
+    "mesh_device",
+    [
+        (8, 4),
+    ],
+    indirect=True,
+)
+def test_all_reduce_tg_llama_on_relaxed_fabric_init(
+    mesh_device,
+    output_shape,
+    cluster_axis,
+    input_dtype,
+    output_dtype,
+    input_num_cores,
+    input_core_range_set,
+    output_num_cores,
+    output_core_range_set,
+    num_iters,
+    warmup_iters,
+    trace_mode,
+    use_program_cache,
+    function_level_defaults,
+    ensure_devices_tg,
+):
+    profiler = BenchmarkProfiler()
+
+    run_all_reduce_impl(
+        mesh_device,
+        output_shape,
+        cluster_axis,
+        input_dtype,
+        None,  # num_links,
+        input_num_cores,
+        input_core_range_set,
+        output_num_cores,
+        output_core_range_set,
+        output_dtype=output_dtype,
+        num_iters=num_iters,
+        warmup_iters=warmup_iters,
+        trace_mode=trace_mode,
+        validate_all=False,
+        profiler=profiler,
+    )
