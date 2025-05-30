@@ -764,10 +764,13 @@ ShardedAccessorArgs get_sharded_accessor_args(
     shapes_and_bank_coords.insert(shapes_and_bank_coords.end(), tensor_shape.cbegin(), tensor_shape.cend());
     shapes_and_bank_coords.insert(shapes_and_bank_coords.end(), shard_shape.cbegin(), shard_shape.cend());
 
+    // std::cout << "Tensor shape: " << tensor_shape << std::endl;
+    // std::cout << "Shard shape: " << shard_shape << std::endl;
     // Pack each virtual coordinate as a 32-bit value with 16 bits for x and 16 bits for y
     for (const auto& bank_coord : bank_coords) {
         const auto virtual_coord = mesh_device.virtual_core_from_logical_core(bank_coord, bank_type);
         shapes_and_bank_coords.push_back((virtual_coord.x << 16) | (virtual_coord.y & 0xFFFF));
+        // std::cout << "Bank coordinates: " << virtual_coord.x << ", " << virtual_coord.y << std::endl;
     }
 
     return {
