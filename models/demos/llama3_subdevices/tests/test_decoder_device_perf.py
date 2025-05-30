@@ -340,7 +340,16 @@ def test_llama_demo(
     )
 
 
-def merge_device_rows(df):
+def merge_device_rows(df, selection_column="DEVICE KERNEL DURATION [ns]"):
+    """
+    Merges rows in the DataFrame that have the same operation name across different devices.
+    For collective operations, it averages the durations across devices.
+    For non-collective operations, it takes the row with the maximum duration.
+    
+    Args:
+        df (pd.DataFrame): DataFrame containing device operation data.
+        selection_column (str): The column to use for selecting the duration of the operation.
+    """
     block_by_device = defaultdict(list)
 
     for _, row in df.iterrows():
@@ -389,9 +398,9 @@ def merge_device_rows(df):
         if "AllGather" in op_name or "ReduceScatter" in op_name or "AllReduce" in op_name:
             # For collective ops, take the average duration over all rows within a block
             device_kernel_durations = [
-                d["DEVICE KERNEL DURATION [ns]"]
+                d[selection_column]
                 for _, d in blocks
-                if "DEVICE KERNEL DURATION [ns]" in d and not math.isnan(d["DEVICE KERNEL DURATION [ns]"])
+                if selection_column in d and not math.isnan(d[selection_column])
             ]
 
             average_duration = (
@@ -399,11 +408,11 @@ def merge_device_rows(df):
             )
             # Use the first block's data but update its duration with the average
             base_block = blocks[0][1].copy()
-            base_block["DEVICE KERNEL DURATION [ns]"] = average_duration
+            base_block[selection_column] = average_duration
             merged_blocks.append(base_block)
         else:
             # For non-collective ops, take the row with maximum duration
-            max_duration_block = max(blocks, key=lambda x: x[1]["DEVICE KERNEL DURATION [ns]"])
+            max_duration_block = max(blocks, key=lambda x: x[1][selection_column])
             merged_blocks.append(max_duration_block[1])
 
         global_index += 1
@@ -901,11 +910,11 @@ def test_llama_TG_perf_device_non_overlapped_dispatch(
 
     df = pd.read_csv(filename)
     df = df[df["OP TYPE"].isin(["tt_dnn_device"])]
-    df = merge_device_rows(df)
-    # Add kernel duration of an op to the dispatch time for the next op
-    df["TOTAL DISPATCH TIME [ns]"] = df["OP TO OP LATENCY [ns]"] + df["DEVICE KERNEL DURATION [ns]"].shift(
+    # Add kernel duration of an op to the dispatch time for the next op (on the same device)
+    df["TOTAL DISPATCH TIME [ns]"] = df["OP TO OP LATENCY [ns]"] + df.groupby("DEVICE ID")["DEVICE KERNEL DURATION [ns]"].shift(
         1, fill_value=0
     )
+    df = merge_device_rows(df, "TOTAL DISPATCH TIME [ns]")
     # Exclude compilaton and capture trace runs
     df_model = df[int(len(df) / 3 * 2) :]
     # Add 1 as early return means
