@@ -1141,6 +1141,12 @@ std::vector<chan_id_t> ControlPlane::get_active_fabric_eth_channels_in_direction
     return {};
 }
 
+size_t ControlPlane::get_num_available_routing_planes_in_direction(
+    FabricNodeId fabric_node_id, RoutingDirection routing_direction) const {
+    const auto& eth_chans = get_active_fabric_eth_channels_in_direction(fabric_node_id, routing_direction);
+    return eth_chans.size();
+}
+
 void ControlPlane::write_routing_tables_to_all_chips() const {
     // Configure the routing tables on the chips
     TT_ASSERT(
