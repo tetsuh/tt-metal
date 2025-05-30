@@ -12,8 +12,6 @@
 #include "tensix_types.h"
 #include "tensix.h"
 
-// #define TEST_TILE_UNIT 1
-
 namespace NAMESPACE {
 void MAIN {
     DPRINT << "TR starts" << ENDL();

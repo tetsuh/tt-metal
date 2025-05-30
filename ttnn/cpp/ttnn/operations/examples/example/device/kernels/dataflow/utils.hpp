@@ -11,8 +11,20 @@
 namespace {
 #define ALWI inline __attribute__((always_inline))
 
-ALWI uint8_t is_unaligned(const uint32_t& src_addr, const uint32_t& dst_addr) {
-    return (uint8_t)((src_addr ^ dst_addr) & ALIGN_MASK);
+ALWI void enhanced_write(const uint32_t& src_addr, const uint32_t& dst_addr, const uint32_t& size_bytes) {
+    DeviceZoneScopedN("alignment condition check");
+    const uint32_t src_offset = src_addr & ALIGN_MASK;
+    const uint32_t dst_offset = dst_addr & ALIGN_MASK;
+    const uint32_t size_offset = size_bytes & ALIGN_MASK;
+    if (src_offset == dst_offset) {
+        // check if both addresses are under same alignment condition
+        // use noc
+    } else if ((src_offset | src_offset | size_offset) == 0x0) {
+        // check if the units are 16B aligned
+        // use mover
+    } else {
+        // use memcpy
+    }
 }
 
 struct Mover {
@@ -29,10 +41,6 @@ struct Mover {
     uint read_field(uint addr) {
         volatile uint* buf = reinterpret_cast<volatile uint*>(addr);
         return buf[0];
-    }
-
-    bool sanitize(uint src_addr, uint dst_addr) {
-        return !is_unaligned(src_addr, ALIGNED_16B) and !is_unaligned(dst_addr, ALIGNED_16B);
     }
 
     void configure(uint32_t src_addr, uint32_t dst_addr, uint32_t buffer_size) {
