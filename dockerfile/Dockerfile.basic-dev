@@ -8,7 +8,7 @@ ARG UBUNTU_VERSION
 # It should not be used in 24.04.
 RUN apt-get update && apt-get install -y \
     software-properties-common \
-    && if [ "${UBUNTU_VERSION}" = "22.04" ]; then \
+    && if [ "22.04" = "22.04" ]; then \
         add-apt-repository -y ppa:mhier/libboost-latest; \
     fi \
     && apt-get update && apt-get install -y \

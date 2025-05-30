@@ -40,6 +40,7 @@ add_custom_target(
 install(
     DIRECTORY
         hello_world_compute_kernel
+        add_2_integers_in_compute
     # DESTINATION ${CMAKE_INSTALL_DOCDIR}/examples
     # FIXME(afuller): Something funky is happening when installing files into /usr/share/doc on a default Docker image.
     #                 Speculation: some dependency for magic doc handling is missing.
@@ -54,6 +55,7 @@ install(
 install(
     DIRECTORY
         hello_world_compute_kernel
+        add_2_integers_in_compute
     DESTINATION "${CMAKE_INSTALL_DATADIR}/tenstorrent/kernels"
     COMPONENT metalium-examples
     FILES_MATCHING
