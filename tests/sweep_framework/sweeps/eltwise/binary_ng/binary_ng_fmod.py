@@ -1,5 +1,4 @@
-# SPDX-FileCopyrightText: © <YEAR> Tenstorrent AI ULC
-
+# SPDX-FileCopyrightText: © 2025 Tenstorrent AI ULC
 # SPDX-License-Identifier: Apache-2.0
 
 from functools import partial
@@ -95,7 +94,7 @@ def return_mem_config(mem_config_string):
 # Each suite has a key name (in this case "suite_1") which will associate the test vectors to this specific suite of inputs.
 # Developers can create their own generator functions and pass them to the parameters as inputs.
 parameters = {
-    "yolo_check_fmod": {
+    "yolo_test_fmod": {
         "binary_op": [
             {"tt_op": "fmod", "a_high": 100, "b_high": 90, "a_low": -100, "b_low": -90},
             # {"tt_op" :"sub"},
