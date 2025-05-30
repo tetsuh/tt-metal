@@ -369,21 +369,18 @@ operation::ProgramWithCallbacks inplace_untilize_with_halo_multi_core(
     cb_indices.src_cb_id = cb_indices.get_next_cb_id();
     auto src_cb =
         create_circular_buffer(program, all_cores, cb_indices.src_cb_id, in_df, input_npages, in_page_size, src_buffer);
-    // printf("src_cb pagesize = %d, numpages = %d\n", in_page_size, input_npages);
 
     uint32_t out_cb_pagesize = out_stick_nbytes;
     uint32_t out_cb_npages = max_out_nsticks_per_core;
     cb_indices.out_cb_id = cb_indices.get_next_cb_id();
     auto out_cb = create_circular_buffer(
         program, all_cores, cb_indices.out_cb_id, out_df, out_cb_npages, out_cb_pagesize, dst_buffer);
-    // printf("out_cb pagesize = %d, numpages = %d\n", out_stick_nbytes, out_cb_npages);
 
     uint32_t pad_cb_pagesize = out_stick_nbytes;
     uint32_t pad_cb_npages = 1;
     cb_indices.pad_cb_id = cb_indices.get_next_cb_id();
     auto pad_cb =
         create_circular_buffer(program, all_cores, cb_indices.pad_cb_id, out_df, pad_cb_npages, pad_cb_pagesize);
-    // printf("pad_cb pagesize = %d, numpages = %d\n", out_stick_nbytes, pad_cb_npages);
 
     tt::DataFormat kernel_config_df = tt::DataFormat::RawUInt16;  // NOTE: UInt16 is not supported for CB types
     uint32_t config_nbytes =
@@ -401,7 +398,6 @@ operation::ProgramWithCallbacks inplace_untilize_with_halo_multi_core(
             CircularBufferConfig(output_ntiles * out_tile_size, {{cb_indices.untilize_out_cb_id, out_df}})
                 .set_page_size(cb_indices.untilize_out_cb_id, out_tile_size)
                 .set_globally_allocated_address(*dst_buffer);  // untilize into the dst buffer for in place untilize
-        // printf("untilize_out_cb pagesize = %d, numpages = %d\n", out_tile_size, output_ntiles);
         auto untilize_out_cb = CreateCircularBuffer(program, all_cores, untilize_out_cb_config);
         log_debug(
             tt::LogOp,
@@ -497,24 +493,10 @@ operation::ProgramWithCallbacks inplace_untilize_with_halo_multi_core(
             CircularBufferConfig(
                 max_ref_size * output_shard_shape[1] * out_nbytes, {{remote_temp_cb_id, kernel_config_df}})
                 .set_page_size(remote_temp_cb_id, output_shard_shape[1] * out_nbytes);
-        // printf("temp CB pagesize = %d, numpages = %d\n", output_shard_shape[1] * out_nbytes, max_ref_size);
         CBHandle remote_temp_cb = CreateCircularBuffer(program, all_cores, remote_temp_cb_config);
     }
-
-    // create the local temp CB
     int max_bandwidth_stick_size =
         device->arch() == tt::ARCH::WORMHOLE_B0 ? 512 : 1024;  // 512 for wormhole, 1024 for blackhole
-    uint32_t local_temp_cb_id = 0;
-    // printf("max_local_size = %d\n", max_local_size);
-    // printf("max_remote_size = %d\n", max_ref_size);
-    if (out_stick_nbytes <= max_bandwidth_stick_size && max_local_size > 0) {  // we will use the temp local buffer
-        local_temp_cb_id = cb_indices.get_next_cb_id();
-        auto local_temp_cb_config =
-            CircularBufferConfig(
-                2 * max_local_size * output_shard_shape[1] * out_nbytes, {{local_temp_cb_id, kernel_config_df}})
-                .set_page_size(local_temp_cb_id, max_local_size * output_shard_shape[1] * out_nbytes);
-        CBHandle local_temp_cb = CreateCircularBuffer(program, all_cores, local_temp_cb_config);
-    }
 
     // noc conversion function
     auto core_id_to_noc_coords = [is_block_sharded, transpose_mcast, device](uint32_t core_id) -> CoreCoord {
@@ -573,9 +555,6 @@ operation::ProgramWithCallbacks inplace_untilize_with_halo_multi_core(
     int32_t sync_cb_id2 = cb_indices.get_next_cb_id();
     auto sync_cb2 = create_circular_buffer(program, all_cores, sync_cb_id2, tt::DataFormat::UInt16, 1, 2);
 
-    printf("num_active_cores = %d\n", num_active_cores);
-    printf("padding_exists = %d\n", padding_exists);
-
     // reader kernel
     std::vector<uint32_t> reader_ct_args = {
         true,  // main thread
@@ -584,7 +563,6 @@ operation::ProgramWithCallbacks inplace_untilize_with_halo_multi_core(
         cb_indices.local_config_cb_id,
         cb_indices.remote_config_cb_id,
         remote_temp_cb_id,
-        local_temp_cb_id,
         cb_indices.src_cb_id,
         input_to_writer_cb_id,
         cb_indices.out_cb_id,

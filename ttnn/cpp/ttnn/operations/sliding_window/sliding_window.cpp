@@ -911,9 +911,9 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int, int> generate_i
 
         std::vector<std::vector<std::vector<uint16_t>>> flattened_config(2);
 
-        printf("in_nsticks_per_core: %d\n", in_nsticks_per_core);
-        printf("max_out_nsticks_per_core: %d\n", max_out_nsticks_per_core);
-        printf("in_out_shard_size_delta: %d\n", in_out_shard_size_delta);
+        // printf("in_nsticks_per_core: %d\n", in_nsticks_per_core);
+        // printf("max_out_nsticks_per_core: %d\n", max_out_nsticks_per_core);
+        // printf("in_out_shard_size_delta: %d\n", in_out_shard_size_delta);
         // printf("---LOCAL CONFIG---\n");
         int core = 0;
         int max_local_size = 0;
