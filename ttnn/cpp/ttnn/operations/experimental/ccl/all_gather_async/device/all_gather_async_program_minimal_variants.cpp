@@ -239,7 +239,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
             const auto& input = input_tensors[0];
             const auto& output = output_tensors[0];
 
-            auto semaphore = static_cast<const ttnn::AllGatherAsync*>(operation)->semaphore.at(ring_index);
+            auto semaphore = static_cast<const ttnn::AllGatherAsync*>(operation)->semaphore.at(0);
 
             log_trace(tt::LogOp, "DEBUG: semaphore: {}", semaphore.address());
 
