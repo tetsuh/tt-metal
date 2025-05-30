@@ -462,6 +462,11 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.23)
                 ckernels/wormhole_b0/metal/llk_api/llk_sfpu/llk_math_eltwise_unary_sfpu_alt_complex_rotate90.h
                 ckernels/wormhole_b0/metal/llk_api/llk_sfpu/llk_math_eltwise_unary_sfpu_prelu.h
                 ckernels/wormhole_b0/metal/llk_api/llk_sfpu/llk_math_eltwise_unary_sfpu_i1.h
+                ckernels/wormhole_b0/metal/llk_api/llk_sfpu/llk_math_eltwise_unary_sfpu_relu.h
+                ckernels/wormhole_b0/metal/llk_api/llk_sfpu/llk_math_eltwise_unary_sfpu_sqrt.h
+                ckernels/wormhole_b0/metal/llk_api/llk_sfpu/llk_math_eltwise_unary_sfpu_negative.h
+                ckernels/wormhole_b0/metal/llk_api/llk_sfpu/llk_math_eltwise_unary_sfpu_recip.h
+                ckernels/wormhole_b0/metal/llk_api/llk_sfpu/llk_math_eltwise_unary_sfpu_mask.h
                 inc/atomic_rwptr.h
                 inc/bit_utils.h
                 inc/blackhole/c_tensix_core.h
@@ -489,6 +494,7 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.23)
                 inc/debug/dprint.h
                 inc/debug/dprint_buffer.h
                 inc/debug/dprint_tile.h
+                inc/debug/dprint_pages.h
                 inc/debug/fw_debug.h
                 inc/debug/noc_logging.h
                 inc/debug/ring_buffer.h
@@ -509,6 +515,7 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.23)
                 inc/risc_common.h
                 inc/tensix_functions.h
                 inc/utils/utils.h
+                inc/utils/bfloat16.h
                 inc/vptr_uint.h
                 inc/wormhole/c_tensix_core.h
                 inc/wormhole/core_config.h

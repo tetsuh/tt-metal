@@ -466,6 +466,7 @@ target_link_libraries(
         TT::NN::Ops::Pool
         TT::NN::Ops::Normalization
 )
+install(TARGETS ttnncpp LIBRARY COMPONENT ttnn-runtime)
 
 if(WITH_PYTHON_BINDINGS)
     add_library(ttnn SHARED)
@@ -516,6 +517,7 @@ if(WITH_PYTHON_BINDINGS)
             Boost::algorithm
             TT::Metalium
     )
+    install(TARGETS ttnn LIBRARY COMPONENT ttnn-runtime)
 endif()
 
 if(WITH_PYTHON_BINDINGS)
@@ -550,6 +552,8 @@ else()
             COMPONENT tar
     )
 endif()
+
+add_subdirectory(test)
 
 set(FixmeOpIncDirs
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -604,3 +608,5 @@ add_subdirectory(cpp/ttnn/operations/transformer)
 add_subdirectory(cpp/ttnn/operations/uniform)
 add_subdirectory(cpp/ttnn/operations/pool)
 add_subdirectory(cpp/ttnn/operations/normalization)
+
+add_subdirectory(cpp/ttnn/deprecated)
