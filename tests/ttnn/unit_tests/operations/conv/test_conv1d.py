@@ -112,7 +112,13 @@ def run_conv(
         return_output_dim=True,
         return_weights_and_bias=True,
     )
-
+    print(
+        "shapeefwf",
+        tt_output_tensor_on_device.shape,
+        tt_output_tensor_on_device.dtype,
+        tt_output_tensor_on_device.memory_config(),
+        tt_output_tensor_on_device.layout,
+    )
     tt_output_tensor = ttnn.from_device(tt_output_tensor_on_device)
     torch_output_tensor = torch.Tensor(ttnn.to_torch(tt_output_tensor))
 
@@ -137,9 +143,12 @@ def run_conv(
 @pytest.mark.parametrize(
     "batch_size, output_channels, input_channels, input_length, kernel_size, stride, padding, groups, use_1d_systolic_array, config_override",
     (
-        (1, 5120, 5120, 32, 4, 1, 3, 5120, True, None),
-        (1, 5120, 5120, 1024, 4, 1, 3, 5120, True, None),
-        (1, 2560, 2560, 1027, 4, 1, 0, 2560, True, None),
+        (1, 256, 256, 1024, 1, 1, 0, 1, True, None),
+        (1, 256, 256, 128, 1, 1, 0, 1, True, None),
+        (8, 256, 256, 1024, 1, 1, 0, 1, True, None),
+        (8, 11, 256, 1024, 1, 1, 0, 1, True, None),
+        (8, 12, 256, 1024, 1, 1, 0, 1, True, None),
+        (8, 3, 256, 1024, 1, 1, 0, 1, True, None),
     ),
 )
 @pytest.mark.parametrize(
@@ -150,7 +159,7 @@ def run_conv(
 )
 @pytest.mark.parametrize(
     "activations_dtype",
-    [ttnn.bfloat16],
+    [ttnn.bfloat8_b],
 )
 @pytest.mark.parametrize(
     "output_dtype",
@@ -160,7 +169,7 @@ def run_conv(
 )
 @pytest.mark.parametrize("math_fidelity", [ttnn.MathFidelity.LoFi])
 @pytest.mark.parametrize("output_layout", [ttnn.TILE_LAYOUT])
-def test_conv1d_mamba(
+def test_conv1d_detr3d(
     device,
     math_fidelity,
     activations_dtype,
@@ -178,12 +187,12 @@ def test_conv1d_mamba(
     config_override,
     output_layout,
 ):
-    if activations_dtype == ttnn.bfloat8_b:
-        pytest.skip("Row major layout not compatible with bfloat8_b")
-    if groups > 5120 or input_channels > 5120 or output_channels > 5120:
-        pytest.skip("OOM")
-    if (input_channels > 2560 or output_channels > 2560) and output_dtype == ttnn.bfloat16:
-        pytest.skip("OOM")
+    # if activations_dtype == ttnn.bfloat8_b:
+    #     pytest.skip("Row major layout not compatible with bfloat8_b")
+    # if groups > 5120 or input_channels > 5120 or output_channels > 5120:
+    #     pytest.skip("OOM")
+    # if (input_channels > 2560 or output_channels > 2560) and output_dtype == ttnn.bfloat16:
+    #     pytest.skip("OOM")
 
     run_conv(
         device,
@@ -204,7 +213,7 @@ def test_conv1d_mamba(
         padded_input_channels=None,
         output_layout=output_layout,
         groups=groups,
-        auto_shard=True,
+        auto_shard=False,
     )
 
 
