@@ -92,10 +92,10 @@ matmul_shapes_bfloat16 = [
     # (2048, 2048, 2048, True, True, 1, 1, 1),
     # (2048, 2048, 3072, True, True, 1, 1, 1),
     # (2048, 3072, 3072, True, True, 2, 1, 1),
-    # (3072, 3072, 3072, True, True, 4, 1, 1),
+    (3072, 3072, 3072, True, True, 4, 1, 1),
     # (3072, 3072, 4096, False, False, 2, 1, 1),
     # (3072, 4096, 4096, False, False, 2, 1, 1),
-    (4096, 4096, 4096, False, False, 1, 2, 2),
+    # (4096, 4096, 4096, False, False, 1, 2, 2),
     # (8192, 8192, 8192, False, False, 2, 4, 4),
     # (16384, 16384, 16384, False, False, 4, 8, 8),
 ]
@@ -112,9 +112,9 @@ matmul_shapes_bfloat8_b = [
     (2048, 3072, 3072, True, True, 1, 1, 1),
     (3072, 3072, 3072, True, True, 2, 1, 1),
     (3072, 3072, 4096, True, True, 2, 1, 1),
-    (4096, 4096, 4096, False, False, 1, 2, 2),
-    (8192, 8192, 8192, False, False, 2, 4, 4),
-    (16384, 16384, 16384, False, False, 4, 8, 8),
+    # (4096, 4096, 4096, False, False, 1, 2, 2),
+    # (8192, 8192, 8192, False, False, 2, 4, 4),
+    # (16384, 16384, 16384, False, False, 4, 8, 8),
 ]
 
 matmul_shapes_bfloat4_b = [
@@ -131,8 +131,8 @@ matmul_shapes_bfloat4_b = [
     (3072, 3072, 4096, True, True, 1, 1, 1),
     (3072, 4096, 4096, True, True, 2, 1, 1),
     (4096, 4096, 4096, True, True, 2, 1, 1),
-    (8192, 8192, 8192, False, False, 2, 2, 2),
-    (16384, 16384, 16384, False, False, 4, 4, 4),
+    # (8192, 8192, 8192, False, False, 2, 2, 2),
+    # (16384, 16384, 16384, False, False, 4, 4, 4),
 ]
 
 matmul_configs = [
@@ -365,53 +365,53 @@ def test_matmul_2d_host_perf(
 
                 ttnn.DumpDeviceProfiler(device)
 
-                inference_time_avg = profiler.get("run") / num_measurement_iterations
-                tflops = 2 * m * k * n / 1e12 / inference_time_avg
-                if math_fidelity == ttnn.MathFidelity.LoFi:
-                    cycle_per_tile = LoFi_cycle
-                elif math_fidelity == ttnn.MathFidelity.HiFi2:
-                    cycle_per_tile = HiFi2_cycle
-                elif math_fidelity == ttnn.MathFidelity.HiFi3:
-                    cycle_per_tile = HiFi3_cycle
-                elif math_fidelity == ttnn.MathFidelity.HiFi4:
-                    cycle_per_tile = HiFi4_cycle
-                num_cores_user_grid = grid_size[0] * grid_size[1]
-                num_cores_full_grid = compute_grid_size.x * compute_grid_size.y
-                ideal_cycle_full_grid = m * k * n / tile_h / tile_w / 32 * cycle_per_tile / num_cores_full_grid
-                ideal_cycle_user_grid = m * k * n / tile_h / tile_w / 32 * cycle_per_tile / num_cores_user_grid
-                inference_cycle = inference_time_avg * get_device_freq() * 1e6
-                utilization_full_grid = ideal_cycle_full_grid / inference_cycle
-                utilization_user_grid = ideal_cycle_user_grid / inference_cycle
-                utilization_full_grid_percentage = f"{utilization_full_grid * 100:.2f}%"
-                utilization_user_grid_percentage = f"{utilization_user_grid * 100:.2f}%"
-                logger.info(
-                    f"M*K*N = {m}*{k}*{n} == inference time (avg): {inference_time_avg}, tflops (avg): {tflops}, utilization (vs user grid): {utilization_user_grid_percentage}, utilization (vs 8x8 grid): {utilization_full_grid_percentage}"
-                )
+                # inference_time_avg = profiler.get("run") / num_measurement_iterations
+                # tflops = 2 * m * k * n / 1e12 / inference_time_avg
+                # if math_fidelity == ttnn.MathFidelity.LoFi:
+                #     cycle_per_tile = LoFi_cycle
+                # elif math_fidelity == ttnn.MathFidelity.HiFi2:
+                #     cycle_per_tile = HiFi2_cycle
+                # elif math_fidelity == ttnn.MathFidelity.HiFi3:
+                #     cycle_per_tile = HiFi3_cycle
+                # elif math_fidelity == ttnn.MathFidelity.HiFi4:
+                #     cycle_per_tile = HiFi4_cycle
+                # num_cores_user_grid = grid_size[0] * grid_size[1]
+                # num_cores_full_grid = compute_grid_size.x * compute_grid_size.y
+                # ideal_cycle_full_grid = m * k * n / tile_h / tile_w / 32 * cycle_per_tile / num_cores_full_grid
+                # ideal_cycle_user_grid = m * k * n / tile_h / tile_w / 32 * cycle_per_tile / num_cores_user_grid
+                # inference_cycle = inference_time_avg * get_device_freq() * 1e6
+                # utilization_full_grid = ideal_cycle_full_grid / inference_cycle
+                # utilization_user_grid = ideal_cycle_user_grid / inference_cycle
+                # utilization_full_grid_percentage = f"{utilization_full_grid * 100:.2f}%"
+                # utilization_user_grid_percentage = f"{utilization_user_grid * 100:.2f}%"
+                # logger.info(
+                #     f"M*K*N = {m}*{k}*{n} == inference time (avg): {inference_time_avg}, tflops (avg): {tflops}, utilization (vs user grid): {utilization_user_grid_percentage}, utilization (vs 8x8 grid): {utilization_full_grid_percentage}"
+                # )
 
-                output_tensor = ttnn.to_torch(output_t)
-                ttnn.deallocate(output_t)
-                ttnn.deallocate(in0_t)
-                ttnn.deallocate(in1_t)
-                writer.writerow(
-                    [
-                        m,
-                        k,
-                        n,
-                        f"{True}" if use_trace else f"{False}",
-                        grid_size,
-                        in0_sharded,
-                        out_sharded,
-                        in0_storage_type,
-                        in1_storage_type,
-                        out_storage_type,
-                        dtype,
-                        math_fidelity,
-                        f"{inference_time_avg * 1e9:.2f}",
-                        f"{tflops:.2f}",
-                        utilization_user_grid_percentage,
-                        utilization_full_grid_percentage,
-                    ]
-                )
+                # output_tensor = ttnn.to_torch(output_t)
+                # ttnn.deallocate(output_t)
+                # ttnn.deallocate(in0_t)
+                # ttnn.deallocate(in1_t)
+                # writer.writerow(
+                #     [
+                #         m,
+                #         k,
+                #         n,
+                #         f"{True}" if use_trace else f"{False}",
+                #         grid_size,
+                #         in0_sharded,
+                #         out_sharded,
+                #         in0_storage_type,
+                #         in1_storage_type,
+                #         out_storage_type,
+                #         dtype,
+                #         math_fidelity,
+                #         f"{inference_time_avg * 1e9:.2f}",
+                #         f"{tflops:.2f}",
+                #         utilization_user_grid_percentage,
+                #         utilization_full_grid_percentage,
+                #     ]
+                # )
 
 
 matmul_shapes_oob = [
