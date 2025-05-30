@@ -46,7 +46,8 @@ void MAIN {
     constexpr bool at_start = get_compile_time_arg_val(3);
     dummy_init<at_start>(tt::CBIndex::c_0, tt::CBIndex::c_2, tt::CBIndex::c_16);
 #ifndef SHORT_INIT
-    reduce_init<at_start>(tt::CBIndex::c_0, tt::CBIndex::c_2, tt::CBIndex::c_16);
+    hw_start_init(tt::CBIndex::c_0, tt::CBIndex::c_2, tt::CBIndex::c_16);
+    reduce_init(tt::CBIndex::c_0, tt::CBIndex::c_2, tt::CBIndex::c_16);
 #else
     reduce_init_delta<at_start>(tt::CBIndex::c_0, tt::CBIndex::c_2, tt::CBIndex::c_16);
 #endif
@@ -80,7 +81,7 @@ void MAIN {
         }
     }
 #ifdef SHORT_INIT
-    reduce_revert_delta(tt::CBIndex::c_16);
+    reduce_revert_delta();
 #endif
 }
 }  // namespace NAMESPACE

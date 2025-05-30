@@ -276,7 +276,7 @@ void MAIN {
                 // Sum[y * dy]
                 reduce_init_delta_with_dt<false>(cb_dgamma, cb_ydyadd, cb_scaler);
                 reduce_tile(cb_ydyadd, cb_scaler, 0, 0, dst0);
-                reduce_revert_delta(cb_dgamma);
+                reduce_revert_delta();
             } else {
                 // Just copy
                 copy_tile_init_with_dt(cb_ydyadd);
@@ -302,7 +302,7 @@ void MAIN {
                 // Sum[dy]
                 reduce_init_delta_with_dt<false>(cb_dbeta, cb_dyadd, cb_scaler);
                 reduce_tile(cb_dyadd, cb_scaler, 0, 0, dst0);
-                reduce_revert_delta(cb_dbeta);
+                reduce_revert_delta();
             } else {
                 // Just copy
                 copy_tile_init_with_dt(cb_dyadd);

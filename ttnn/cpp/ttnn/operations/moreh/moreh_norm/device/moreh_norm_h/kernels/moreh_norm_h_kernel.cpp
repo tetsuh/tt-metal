@@ -133,7 +133,7 @@ void MAIN {
 
         reduce_init_delta_with_dt<false>(cb_xpowsum, cb_xpowadd, cb_one);
         reduce_tile(cb_xpowadd, cb_one, 0, 0, dst0);
-        reduce_revert_delta(cb_xpowsum);
+        reduce_revert_delta();
         tile_regs_commit();
 
         tile_regs_wait();

@@ -56,7 +56,7 @@ void MAIN {
             constexpr uint32_t bcast_scaler0 = 0;  // 0th index from bcast_scaler CB
             reduce_init_delta_with_dt<false, PoolType::MAX, REDUCE_DIM>(cb_max, cb_tmp, cb_bcast_scaler);
             reduce_tile<PoolType::MAX, REDUCE_DIM>(cb_tmp, cb_bcast_scaler, 0, bcast_scaler0, dst0);
-            reduce_revert_delta(cb_max);
+            reduce_revert_delta();
             tile_regs_commit();
 
             tile_regs_wait();

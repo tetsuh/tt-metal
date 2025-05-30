@@ -62,7 +62,7 @@ void MAIN {
             cb_reserve_back(cb_var, 1);
 
             cb_wait_front(cb_scaler_global, 1);
-            reduce_init_delta<false>(cb_stats, cb_scaler_global, cb_var);
+            reduce_init(cb_stats, cb_scaler_global, cb_var);
             tile_regs_acquire();
             // striding over cb_stats, consisting [E(X), E(X^2)] from all the distributed devices in interleaved order
             for (uint32_t w = 0; w < num_distributed_blocks; w++) {
@@ -79,7 +79,7 @@ void MAIN {
 
             pack_tile(dst0, cb_var);
             tile_regs_release();
-            reduce_revert_delta(cb_var);
+            reduce_revert_delta();
             cb_push_back(cb_var, 1);
 
             // 1/[sqrt(Var + eps)],

@@ -138,7 +138,7 @@ void MAIN {
 
         reduce_init_delta_with_dt<false, REDUCE_OP, REDUCE_DIM>(cb_reduce, cb_cal, cb_one);
         reduce_tile(cb_cal, cb_one, 0, 0, dst0);
-        reduce_revert_delta(cb_reduce);
+        reduce_revert_delta();
         tile_regs_commit();
 
         tile_regs_wait();
