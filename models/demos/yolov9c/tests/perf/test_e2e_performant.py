@@ -10,7 +10,9 @@ import torch
 from loguru import logger
 
 import ttnn
+from models.demos.yolov9c.demo.demo_utils import load_coco_class_names
 from models.demos.yolov9c.runner.performant_runner import YOLOv9PerformantRunner
+from models.experimental.yolo_evaluation.yolo_evaluation_utils import postprocess
 from models.utility_functions import run_for_wormhole_b0
 
 
@@ -54,10 +56,15 @@ def test_e2e_performant(
     # tt_inputs_host = ttnn.from_torch(torch_input_tensor, dtype=ttnn.bfloat16, layout=ttnn.ROW_MAJOR_LAYOUT)
 
     inference_times = []
-    for _ in range(10):
+    for _ in range(1):
         # tt_inputs_host = ttnn.from_torch(torch_input_tensor, dtype=ttnn.bfloat16, layout=ttnn.ROW_MAJOR_LAYOUT)
         t0 = time.time()
         out = performant_runner.run(torch_input_tensor)
+        out = ttnn.to_torch(out, dtype=torch.float32)
+        print(out)
+        names = load_coco_class_names()
+        print("Running model complete 1", out.shape)
+        results = postprocess(out, torch_input_tensor, torch_input_tensor.numpy(), (1), names)
         t1 = time.time()
         inference_times.append(t1 - t0)
 

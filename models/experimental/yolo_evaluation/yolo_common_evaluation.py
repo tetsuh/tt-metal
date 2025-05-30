@@ -4,7 +4,6 @@
 
 import json
 import os
-from datetime import datetime
 
 import cv2
 import fiftyone
@@ -121,12 +120,12 @@ def attempt_load(weights, model_path, map_location=None):
         return model
 
 
-def save_yolo_predictions_by_model(result, save_dir, image_path, model_name):
-    model_save_dir = os.path.join(save_dir, model_name)
-    os.makedirs(model_save_dir, exist_ok=True)
+def save_yolo_predictions_by_model(result, save_dir=None, image_path=None, model_name=None, orig_image=None):
+    # model_save_dir = os.path.join(save_dir, model_name)
+    # os.makedirs(model_save_dir, exist_ok=True)
 
-    image = cv2.imread(image_path)
-    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+    # image = cv2.imread(image_path)
+    # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     if model_name == "torch_model":
         bounding_box_color, label_color = (0, 255, 0), (0, 255, 0)
@@ -141,16 +140,20 @@ def save_yolo_predictions_by_model(result, save_dir, image_path, model_name):
     for box, score, cls in zip(boxes, scores, classes):
         x1, y1, x2, y2 = map(int, box)
         label = f"{names[int(cls)]} {score.item():.2f}"
-        cv2.rectangle(image, (x1, y1), (x2, y2), bounding_box_color, 3)
-        cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, label_color, 2)
+        cv2.rectangle(orig_image, (x1, y1), (x2, y2), bounding_box_color, 3)
+        cv2.putText(orig_image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, label_color, 2)
 
-    image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+    print(orig_image.shape)
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_name = f"prediction_{timestamp}.jpg"
-    output_path = os.path.join(model_save_dir, output_name)
+    image = cv2.cvtColor(orig_image, cv2.COLOR_RGB2BGR)
+    print(image.shape)
 
-    cv2.imwrite(output_path, image)
+    # timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    # output_name = f"prediction_{timestamp}.jpg"
+    # output_path = os.path.join(model_save_dir, output_name)
+
+    # cv2.imwrite(output_path, image)
+    return image
 
     logger.info(f"Predictions saved to {output_path}")
 

@@ -17,8 +17,11 @@ import ttnn
 
 
 # print("ARCH YAML   ", os.environ["WH_ARCH_YAML"])
+from models.experimental.yolo_evaluation.yolo_common_evaluation import save_yolo_predictions_by_model
 
 from models.demos.yolov9c.runner.performant_runner import YOLOv9PerformantRunner
+from models.experimental.yolo_evaluation.yolo_evaluation_utils import LoadImages, postprocess, preprocess
+from models.demos.yolov9c.demo.demo_utils import load_coco_class_names
 from ttnn.model_preprocessing import preprocess_model_parameters
 from models.utility_functions import is_wormhole_b0, torch2tt_tensor, is_blackhole
 
@@ -82,7 +85,7 @@ class Yolov9(GstBase.BaseTransform):
             num_command_queues=2,
         )
         #        self.batch_size=1
-        # ttnn.enable_program_cache(self.device)
+        self.device.enable_program_cache()
         self.model = YOLOv9PerformantRunner(
             self.device,
             self.batch_size,
@@ -92,7 +95,7 @@ class Yolov9(GstBase.BaseTransform):
             model_location_generator=None,
         )
         self.model._capture_yolov9_trace_2cqs()
-        print("########################################", batch_size)
+        print("########################################", self.batch_size)
 
     def get_dispatch_core_config(self):
         # TODO: 11059 move dispatch_core_type to device_params when all tests are updated to not use WH_ARCH_YAML env flag
@@ -136,21 +139,29 @@ class Yolov9(GstBase.BaseTransform):
             # transformed_data = prefix_bytes + original_data
             print("SUCCESS")
             print(in_map_info.data)
-            frame_data = np.frombuffer(in_map_info.data, dtype=np.uint8).reshape(320, 320, 3)
+            frame_data = np.frombuffer(in_map_info.data, dtype=np.uint8).reshape(640, 640, 3)
             frame_data = cv2.cvtColor(frame_data, cv2.COLOR_BGR2RGB)
             if type(frame_data) == np.ndarray and len(frame_data.shape) == 3:  # cv2 image
-                frame_data = torch.from_numpy(frame_data.transpose(2, 0, 1)).float().div(255.0).unsqueeze(0)
+                torch_frame_data = torch.from_numpy(frame_data.transpose(2, 0, 1)).float().div(255.0).unsqueeze(0)
             elif type(frame_data) == np.ndarray and len(frame_data.shape) == 4:
-                frame_data = torch.from_numpy(frame_data.transpose(0, 3, 1, 2)).float().div(255.0)
+                torch_frame_data = torch.from_numpy(frame_data.transpose(0, 3, 1, 2)).float().div(255.0)
 
             if self.batch_size > 1:
-                n, c, h, w = frame_data.shape
-                frame_data = frame_data.expand(self.batch_size, c, h, w)
+                n, c, h, w = torch_frame_data.shape
+                torch_frame_data = torch_frame_data.expand(self.batch_size, c, h, w)
             #            out, t = self.trace_run(frame_data)
-            print(frame_data.shape)
+            print(torch_frame_data.shape)
 
-            out = self.model.run(frame_data)
+            out = self.model.run(torch_frame_data)
+            out = ttnn.to_torch(out, dtype=torch.float32)
             print("Running model complete", out.shape)
+
+            names = load_coco_class_names()
+            print("Running model complete 1", out.shape)
+            results = postprocess(out, torch_frame_data, frame_data, names=names)[0]
+            print(results)
+            outImage = save_yolo_predictions_by_model(results, model_name="tt_model", orig_image=frame_data)
+            print(outImage)
             # conf_thresh = 0.3
             # nms_thresh = 0.4
 
@@ -167,16 +178,37 @@ class Yolov9(GstBase.BaseTransform):
                 Gst.error("Yolov9: Failed to map output buffer for writing")
                 return Gst.FlowReturn.ERROR
 
-            outbuf.unmap(out_map_info)
+            # Ensure the output buffer has enough space for the transformed image
+            required_size = outImage.nbytes
+            if outbuf.get_size() < required_size:
+                Gst.error(f"Yolov9: Output buffer too small. Required: {required_size}, Actual: {outbuf.get_size()}")
+                return Gst.FlowReturn.ERROR
+
+            # Corrected line: assign bytes to the memoryview slice
+            # This copies the byte data from outImage into the GStreamer buffer's memory
+            out_map_info.data[:] = outImage.tobytes()
+
+            # Update the output buffer's size to reflect the actual data written
+            outbuf.set_size(required_size)
+
+            # Important: Copy timestamps and other buffer properties from input to output
+            outbuf.pts = inbuf.pts
+            outbuf.dts = inbuf.dts
+            outbuf.duration = inbuf.duration
+            outbuf.offset = inbuf.offset
+            outbuf.offset_end = inbuf.offset_end
+
             return Gst.FlowReturn.OK
 
         except Exception as e:
             Gst.error(f"Yolov9: Error in transform: {e}")
-            # if "in_map_info" in locals() and in_map_info.buffer.is_mapped():
-            #    in_map_info.buffer.unmap(in_map_info)
-            # if "out_map_info" in locals() and out_map_info.buffer.is_mapped():
-            #    out_map_info.buffer.unmap(out_map_info)
             return Gst.FlowReturn.ERROR
+        finally:
+            # Ensure buffers are unmapped even if an error occurs
+            if in_map_info is not None:
+                inbuf.unmap(in_map_info)
+            if out_map_info is not None:
+                outbuf.unmap(out_map_info)
 
 
 GObject.type_register(Yolov9)

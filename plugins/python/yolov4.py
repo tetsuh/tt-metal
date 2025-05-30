@@ -81,6 +81,7 @@ class Yolov4(GstBase.BaseTransform):
         )
         #        self.batch_size=1
         # ttnn.enable_program_cache(self.device)
+        self.device.enable_program_cache()
         self.model = YOLOv4PerformantRunner(
             self.device,
             self.batch_size,
