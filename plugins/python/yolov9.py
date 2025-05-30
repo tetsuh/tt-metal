@@ -73,7 +73,6 @@ class Yolov9(GstBase.BaseTransform):
         self.device = None
 
     def initialize_device(self):
-        print("ARCH YAML in initialize  ", os.environ["WH_ARCH_YAML"])
         device_id = 0
         self.device = ttnn.CreateDevice(
             device_id,
