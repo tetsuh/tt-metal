@@ -43,12 +43,12 @@ def run_with_trace(
         input_tensor,
         dim=dim,
         cluster_axis=cluster_axis,
-        topology=all_gather_topology,
-        multi_device_global_semaphore=ccl_semaphore_handles[0],
         persistent_intermediate_buffer=persistent_intermediate_buffer,
+        multi_device_global_semaphore=ccl_semaphore_handles[0],
         persistent_output_buffer=persistent_output_tensor,
         num_links=num_links,
         memory_config=output_mem_config,
+        topology=all_gather_topology,
         subdevice_id=worker_sub_device_id,
     )
 
@@ -65,7 +65,7 @@ def run_with_trace(
                 dim=dim,
                 cluster_axis=cluster_axis,
                 persistent_intermediate_buffer=persistent_intermediate_buffer,
-                multi_device_global_semaphore=ccl_semaphore_handles[i],
+                multi_device_global_semaphore=ccl_semaphore_handles[0],
                 persistent_output_buffer=persistent_output_tensor,
                 num_links=num_links,
                 memory_config=output_mem_config,
@@ -193,6 +193,7 @@ def run_line_all_gather_on_TG_with_mesh_tensor_along_rows(
         mesh_mapper=ttnn.ReplicateTensorToMesh(mesh_device),
     )
 
+    per_chip_output_shape[0] += 2
     ttnn_persistent_intermediate_tensor = ttnn.from_torch(
         torch.zeros(per_chip_output_shape),
         tile=ttnn.Tile(tile),
@@ -202,6 +203,7 @@ def run_line_all_gather_on_TG_with_mesh_tensor_along_rows(
         memory_config=output_mem_config,
         mesh_mapper=ttnn.ReplicateTensorToMesh(mesh_device),
     )
+    per_chip_output_shape[0] -= 2
 
     sub_device_stall_group = []
     compute_grid_size = mesh_device.compute_with_storage_grid_size()
@@ -270,6 +272,7 @@ def run_line_all_gather_on_TG_with_mesh_tensor_along_rows(
         mesh_device.reset_sub_device_stall_group()
 
     # ttnn.visualize_mesh_device(mesh_device, tensor=ttnn_tensor_out)
+    print(ttnn_tensor_out.shape)
     tt_output_tensor = ttnn.to_torch(
         ttnn_tensor_out, mesh_composer=ConcatMesh2dToTensor(mesh_device, mesh_shape=mesh_shape, dims=concat_dims)
     )
@@ -311,15 +314,11 @@ def run_line_all_gather_on_TG_with_mesh_tensor_along_rows(
 @pytest.mark.parametrize(
     "num_devices, num_links, per_chip_output_shape, dim, layout, input_dtype, cluster_axis",
     [
-        (8, 4, [1, 1, 4096, 256 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b, 0),
-        # (4, 4, [1, 1, 4096, 320 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b, 1),
-        # (4, 4, [1, 1, 4096, 896 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b, 1),
-        # (4, 4, [1, 1, 4096, 32 * 4], 3, ttnn.TILE_LAYOUT, ttnn.bfloat16, 1),
+        # (8, 4, [1, 1, 8192, 256 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b, 0),
+        (4, 2, [1, 1, 128, 320 * 4], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b, 1),
+        # (4, 4, [1, 1, 8192, 896 * 4], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b, 1),
+        # (4, 2, [1, 1, 128, 32 * 4], 3, ttnn.TILE_LAYOUT, ttnn.bfloat16, 1),
         # multi link
-        # (8, 4, [1, 1, 4096, 256 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
-        # (8, 4, [1, 1, 4096, 320 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
-        # (8, 4, [1, 1, 4096, 896 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
-        # (8, 4, [1, 1, 4096, 32 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat16),
     ],
 )
 @pytest.mark.parametrize(
@@ -347,7 +346,7 @@ def test_all_gather_TG(
     use_program_cache,
     function_level_defaults,
     replication_factor,
-    num_iters=1,
+    num_iters=100,
 ):
     if len(mesh_device.get_devices()) != 32:
         pytest.skip("Not TG!")
@@ -363,6 +362,7 @@ def test_all_gather_TG(
         buffer_type,
         use_program_cache,
         function_level_defaults,
+        warmup_iters=15,
         num_iters=num_iters,
         num_all_gather_instances=replication_factor,
         cluster_axis=cluster_axis,
