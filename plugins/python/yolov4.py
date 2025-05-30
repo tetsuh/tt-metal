@@ -16,8 +16,6 @@ from gi.repository import Gst, GObject, GstBase
 import ttnn
 
 
-print("ARCH YAML   ", os.environ["WH_ARCH_YAML"])
-
 from models.demos.yolov4.runner.performant_runner import YOLOv4PerformantRunner
 from ttnn.model_preprocessing import preprocess_model_parameters
 from models.utility_functions import is_wormhole_b0, torch2tt_tensor, is_blackhole
