@@ -41,7 +41,6 @@ void copy_sticks_async_to_temp(
     const uint32_t out_base_l1_addr) {
     int i = 0;
     int length = config_data[2];
-    int remote_entry_count = 0;
 
     constexpr bool noc_orient_x = ((is_block_sharded && !is_col_major) || is_width_sharded);
     constexpr bool noc_orient_y = ((is_block_sharded && is_col_major) || is_width_sharded);
@@ -57,29 +56,28 @@ void copy_sticks_async_to_temp(
         for (uint16_t j = 0; j < length; j += 4) {
             uint16_t nsticks = config_data[i + j + 2];
             uint32_t size = nsticks * stick_nbytes;
-            if (remote_entry_count % 2 != main_thread) {
-                uint16_t src_local_idx = config_data[i + j + 0];
-                uint16_t dst_local_idx = config_data[i + j + 1];
-                uint32_t src_offset = src_local_idx * input_aligned_page_size;
-                uint32_t dst_offset = dst_local_idx * stick_nbytes;
-                uint32_t src_addr = in_base_l1_addr + src_offset;
-                uint64_t dst_addr_final = base_addr_final + dst_offset;
-                if constexpr (stick_nbytes == input_aligned_page_size) {
-                    noc_async_write(src_addr, dst_addr_temp, size);
-                    dst_addr_temp +=
-                        size;  // remote sticks from each config entry are written contiguously into the temp buffer
+            uint16_t src_local_idx = config_data[i + j + 0];
+            uint16_t dst_local_idx = config_data[i + j + 1];
+            uint32_t src_offset = src_local_idx * input_aligned_page_size;
+            uint32_t dst_offset = dst_local_idx * stick_nbytes;
+            uint32_t src_addr = in_base_l1_addr + src_offset;
+            uint64_t dst_addr_final = base_addr_final + dst_offset;
+            if constexpr (stick_nbytes == input_aligned_page_size) {
+                uint32_t half_size = size / 2;
+                if constexpr (main_thread) {
+                    noc_async_write(src_addr, dst_addr_temp, half_size);
                 } else {
-                    for (uint16_t k = 0; k < nsticks; k++) {
-                        noc_async_write(src_addr, dst_addr_temp, stick_nbytes);
-                        dst_addr_temp += stick_nbytes;
-                        src_addr += input_aligned_page_size;
-                    }
+                    noc_async_write(src_addr + half_size, dst_addr_temp + half_size, half_size);
                 }
-            } else {
-                dst_addr_temp += size;  // increment space in the temp buffer for the other data movement core
+                dst_addr_temp +=
+                    size;  // remote sticks from each config entry are written contiguously into the temp buffer
+            } else if constexpr (main_thread) {
+                for (uint16_t k = 0; k < nsticks; k++) {
+                    noc_async_write(src_addr, dst_addr_temp, stick_nbytes);
+                    dst_addr_temp += stick_nbytes;
+                    src_addr += input_aligned_page_size;
+                }
             }
-
-            remote_entry_count++;
         }
 
         i += length;
@@ -100,13 +98,12 @@ void copy_sticks_async_from_temp(
     const uint16_t my_noc_y,
     const uint32_t temp_base_l1_addr,
     const uint32_t out_base_l1_addr) {
-    if constexpr (!main_thread && padding_exists) {
+    if constexpr (!main_thread && padding_exists) {  // padding runs on the other DM core
         return;
     }
 
     int i = 0;
     int length = config_data[2];
-    int remote_entry_count = 0;
 
     uint64_t src_addr = temp_base_l1_addr;
 
@@ -122,39 +119,33 @@ void copy_sticks_async_from_temp(
         for (uint16_t j = 0; j < length; j += 4) {
             uint16_t nsticks = config_data[i + j + 2];
             uint32_t size = nsticks * stick_nbytes;
-
-            if ((remote_entry_count % 2 != main_thread) || (main_thread && padding_exists)) {
-                uint16_t dst_local_idx = config_data[i + j + 1];
-                uint32_t dst_offset = dst_local_idx * stick_nbytes;
-                uint64_t dst_addr = base_addr + dst_offset;
-                if constexpr (stick_nbytes == input_aligned_page_size) {
+            uint16_t dst_local_idx = config_data[i + j + 1];
+            uint32_t dst_offset = dst_local_idx * stick_nbytes;
+            uint64_t dst_addr = base_addr + dst_offset;
+            if constexpr (stick_nbytes == input_aligned_page_size) {
+                uint32_t half_size = size / 2;
+                if constexpr (main_thread && padding_exists) {
                     noc_async_write(src_addr, dst_addr, size);
-                    src_addr +=
-                        size;  // remote sticks from each config entry are read contiguously from the temp buffer
+                } else if constexpr (main_thread) {
+                    noc_async_write(src_addr, dst_addr, half_size);
                 } else {
-                    for (uint16_t k = 0; k < nsticks; k++) {
-                        noc_async_write(src_addr, dst_addr, stick_nbytes);
-                        dst_addr += stick_nbytes;
-                        src_addr += stick_nbytes;
-                    }
+                    noc_async_write(src_addr + half_size, dst_addr + half_size, half_size);
                 }
-            } else {
-                src_addr += size;  // increment space in the temp buffer for the other data movement core
+                src_addr += size;  // remote sticks from each config entry are read contiguously from the temp buffer
+            } else if constexpr (main_thread) {
+                for (uint16_t k = 0; k < nsticks; k++) {
+                    noc_async_write(src_addr, dst_addr, stick_nbytes);
+                    dst_addr += stick_nbytes;
+                    src_addr += stick_nbytes;
+                }
             }
-
-            remote_entry_count++;
         }
 
         i += length;
     }
 }
 
-template <
-    uint32_t stick_nbytes,
-    uint32_t input_aligned_page_size,
-    uint32_t max_bandwidth_stick_size,
-    uint32_t sycn_cb_id,
-    bool main_thread>
+template <uint32_t stick_nbytes, uint32_t input_aligned_page_size, uint32_t sycn_cb_id, bool main_thread>
 void copy_sticks_async_local(
     const tt_l1_ptr uint16_t* config_data,
     const uint16_t my_noc_x,
@@ -196,62 +187,37 @@ void copy_sticks_async_local(
                 cb_wait_front(sycn_cb_id, 1);  // wait for main thread to be ready to copy
             }
 
-            if (is_not_overlap_copy) {                       // dst and src data do not overlap, can copy big chunks
-                if (size >= 8 * max_bandwidth_stick_size) {  // experimentally determined size limit
-                    uint32_t half_size = size / 2;
-                    if constexpr (main_thread) {
-                        noc_async_write(src_addr, dst_addr, half_size);
-                    } else {
-                        noc_async_write(src_addr + half_size, dst_addr + half_size, half_size);
+            if (is_not_overlap_copy) {  // dst and src data do not overlap, can copy big chunks
+                uint32_t half_size = size / 2;
+                if constexpr (main_thread) {
+                    noc_async_write(src_addr, dst_addr, half_size);
+                } else {
+                    noc_async_write(src_addr + half_size, dst_addr + half_size, half_size);
+                }
+            } else {  // dst and src data overlaps, stick by stick copy is necessary, note front half and back half of
+                      // stick copies are orthogonal so relative order doesn't matter
+                bool is_forward_copy = dst_local_idx > dst_relative_src;
+                uint32_t half_stick = stick_nbytes / 2;
+                if (is_forward_copy) {
+                    for (int16_t k = nsticks - 1; k >= 0; k--) {
+                        if constexpr (main_thread) {
+                            noc_async_write(src_addr + k * stick_nbytes, dst_addr + k * stick_nbytes, half_stick);
+                        } else {
+                            noc_async_write(
+                                src_addr + k * stick_nbytes + half_stick,
+                                dst_addr + k * stick_nbytes + half_stick,
+                                half_stick);
+                        }
                     }
                 } else {
-                    if constexpr (main_thread) {
-                        noc_async_write(src_addr, dst_addr, size);
-                    }
-                }
-            } else {  // dst and src data overlaps, stick by stick copy is necessary
-                bool is_forward_copy = dst_local_idx > dst_relative_src;
-                if constexpr (stick_nbytes <= max_bandwidth_stick_size) {  // small sticks, use one DM core
-                    // note, for this path, we could avoid inefficient stick by stick copy by using a local temp CB
-                    // then we for cases with multiple local entries we could use double buffering to get spit
-                    // reader performance, by doing src -> temp on NC and temp -> dst on BR, but this local CB can
-                    // grow large, and multibuffering requires more space which defeats the purpose of in place halo
-                    if constexpr (main_thread) {
-                        if (is_forward_copy) {  // dst data is being moved "in front" of the source data, reverse
-                            // ordering of stick by stick copy is necessary
-                            for (int16_t k = nsticks - 1; k >= 0; k--) {
-                                noc_async_write(src_addr + k * stick_nbytes, dst_addr + k * stick_nbytes, stick_nbytes);
-                            }
+                    for (uint16_t k = 0; k < nsticks; k++) {
+                        if constexpr (main_thread) {
+                            noc_async_write(src_addr + k * stick_nbytes, dst_addr + k * stick_nbytes, half_stick);
                         } else {
-                            for (uint16_t k = 0; k < nsticks; k++) {
-                                noc_async_write(src_addr + k * stick_nbytes, dst_addr + k * stick_nbytes, stick_nbytes);
-                            }
-                        }
-                    }
-                } else {  // large sticks, use both DM cores, note front half and back half of stick copies are
-                          // orthogonal so relative order doesn't matter
-                    uint32_t half_stick = stick_nbytes / 2;
-                    if (is_forward_copy) {
-                        for (int16_t k = nsticks - 1; k >= 0; k--) {
-                            if constexpr (main_thread) {
-                                noc_async_write(src_addr + k * stick_nbytes, dst_addr + k * stick_nbytes, half_stick);
-                            } else {
-                                noc_async_write(
-                                    src_addr + k * stick_nbytes + half_stick,
-                                    dst_addr + k * stick_nbytes + half_stick,
-                                    half_stick);
-                            }
-                        }
-                    } else {
-                        for (uint16_t k = 0; k < nsticks; k++) {
-                            if constexpr (main_thread) {
-                                noc_async_write(src_addr + k * stick_nbytes, dst_addr + k * stick_nbytes, half_stick);
-                            } else {
-                                noc_async_write(
-                                    src_addr + k * stick_nbytes + half_stick,
-                                    dst_addr + k * stick_nbytes + half_stick,
-                                    half_stick);
-                            }
+                            noc_async_write(
+                                src_addr + k * stick_nbytes + half_stick,
+                                dst_addr + k * stick_nbytes + half_stick,
+                                half_stick);
                         }
                     }
                 }
@@ -316,9 +282,8 @@ void kernel_main() {
         get_compile_time_arg_val(28);  // temp buffer for in place untilize with wide tensors
     constexpr uint32_t tile_cols = get_compile_time_arg_val(29);
     constexpr uint32_t tile_rows = get_compile_time_arg_val(30);
-    constexpr uint32_t max_bandwidth_stick_size = get_compile_time_arg_val(31);
-    constexpr uint32_t sync_cb_id1 = get_compile_time_arg_val(32);
-    constexpr uint32_t sync_cb_id2 = get_compile_time_arg_val(33);
+    constexpr uint32_t sync_cb_id1 = get_compile_time_arg_val(31);
+    constexpr uint32_t sync_cb_id2 = get_compile_time_arg_val(32);
 
     constexpr uint32_t elem_nbytes = sizeof(uint16_t);
     constexpr uint16_t pad_core_id = 0xFFFF;
@@ -335,9 +300,6 @@ void kernel_main() {
     const uint32_t in_base_l1_addr = get_read_ptr(in_cb_id);
     const uint32_t out_base_l1_addr = get_write_ptr(out_cb_id);
     const uint32_t untilize_temp_l1_addr = get_read_ptr(untilize_temp_cb_id);
-
-    // DPRINT << "in_base_l1_addr: " << in_base_l1_addr << ", out_base_l1_addr: " << out_base_l1_addr
-    //        << ", untilize_temp_l1_addr: " << untilize_temp_l1_addr << ENDL();
 
     if constexpr (main_thread) {
         cb_reserve_back(src_cb_id, in_npages);
@@ -364,7 +326,6 @@ void kernel_main() {
 
     // copy remote sticks to temp buffer
     const uint32_t temp_base_l1_addr = get_write_ptr(remote_temp_cb_id);
-    // DPRINT << "temp_base_l1_addr: " << temp_base_l1_addr << ENDL();
     uint32_t remote_config_data_l1_addr = get_read_ptr(remote_config_cb_id);
     const tt_l1_ptr uint16_t* remote_config_data =
         reinterpret_cast<const tt_l1_ptr uint16_t*>(remote_config_data_l1_addr);
@@ -391,7 +352,7 @@ void kernel_main() {
     uint32_t local_config_data_l1_addr = get_read_ptr(local_config_cb_id);
     const tt_l1_ptr uint16_t* local_config_data =
         reinterpret_cast<const tt_l1_ptr uint16_t*>(local_config_data_l1_addr);
-    copy_sticks_async_local<stick_nbytes, input_aligned_page_size, max_bandwidth_stick_size, sync_cb_id1, main_thread>(
+    copy_sticks_async_local<stick_nbytes, input_aligned_page_size, sync_cb_id1, main_thread>(
         local_config_data, my_noc_x, my_noc_y, in_base_l1_addr, out_base_l1_addr, in_out_buffer_start_delta);
 
     uint32_t semaphore_addr = get_semaphore(semaphore_id);

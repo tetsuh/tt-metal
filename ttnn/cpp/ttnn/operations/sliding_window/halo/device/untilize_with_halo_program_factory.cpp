@@ -495,8 +495,6 @@ operation::ProgramWithCallbacks inplace_untilize_with_halo_multi_core(
                 .set_page_size(remote_temp_cb_id, output_shard_shape[1] * out_nbytes);
         CBHandle remote_temp_cb = CreateCircularBuffer(program, all_cores, remote_temp_cb_config);
     }
-    int max_bandwidth_stick_size =
-        device->arch() == tt::ARCH::WORMHOLE_B0 ? 512 : 1024;  // 512 for wormhole, 1024 for blackhole
 
     // noc conversion function
     auto core_id_to_noc_coords = [is_block_sharded, transpose_mcast, device](uint32_t core_id) -> CoreCoord {
@@ -588,7 +586,6 @@ operation::ProgramWithCallbacks inplace_untilize_with_halo_multi_core(
         temp_cb_id,
         ntiles_per_block,
         input_nblocks_per_core,
-        max_bandwidth_stick_size,
         sync_cb_id1,
         sync_cb_id2};
 
