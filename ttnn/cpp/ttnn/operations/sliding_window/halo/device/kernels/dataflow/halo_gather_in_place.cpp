@@ -41,6 +41,7 @@ void copy_sticks_async_to_temp(
     const uint32_t out_base_l1_addr) {
     int i = 0;
     int length = config_data[2];
+    int remote_entry_count = 0;
 
     constexpr bool noc_orient_x = ((is_block_sharded && !is_col_major) || is_width_sharded);
     constexpr bool noc_orient_y = ((is_block_sharded && is_col_major) || is_width_sharded);
@@ -56,28 +57,29 @@ void copy_sticks_async_to_temp(
         for (uint16_t j = 0; j < length; j += 4) {
             uint16_t nsticks = config_data[i + j + 2];
             uint32_t size = nsticks * stick_nbytes;
-            uint16_t src_local_idx = config_data[i + j + 0];
-            uint16_t dst_local_idx = config_data[i + j + 1];
-            uint32_t src_offset = src_local_idx * input_aligned_page_size;
-            uint32_t dst_offset = dst_local_idx * stick_nbytes;
-            uint32_t src_addr = in_base_l1_addr + src_offset;
-            uint64_t dst_addr_final = base_addr_final + dst_offset;
-            if constexpr (stick_nbytes == input_aligned_page_size) {
-                uint32_t half_size = size / 2;
-                if constexpr (main_thread) {
-                    noc_async_write(src_addr, dst_addr_temp, half_size);
+            if (remote_entry_count % 2 != main_thread) {
+                uint16_t src_local_idx = config_data[i + j + 0];
+                uint16_t dst_local_idx = config_data[i + j + 1];
+                uint32_t src_offset = src_local_idx * input_aligned_page_size;
+                uint32_t dst_offset = dst_local_idx * stick_nbytes;
+                uint32_t src_addr = in_base_l1_addr + src_offset;
+                uint64_t dst_addr_final = base_addr_final + dst_offset;
+                if constexpr (stick_nbytes == input_aligned_page_size) {
+                    noc_async_write(src_addr, dst_addr_temp, size);
+                    dst_addr_temp +=
+                        size;  // remote sticks from each config entry are written contiguously into the temp buffer
                 } else {
-                    noc_async_write(src_addr + half_size, dst_addr_temp + half_size, half_size);
+                    for (uint16_t k = 0; k < nsticks; k++) {
+                        noc_async_write(src_addr, dst_addr_temp, stick_nbytes);
+                        dst_addr_temp += stick_nbytes;
+                        src_addr += input_aligned_page_size;
+                    }
                 }
-                dst_addr_temp +=
-                    size;  // remote sticks from each config entry are written contiguously into the temp buffer
-            } else if constexpr (main_thread) {
-                for (uint16_t k = 0; k < nsticks; k++) {
-                    noc_async_write(src_addr, dst_addr_temp, stick_nbytes);
-                    dst_addr_temp += stick_nbytes;
-                    src_addr += input_aligned_page_size;
-                }
+            } else {
+                dst_addr_temp += size;  // increment space in the temp buffer for the other data movement core
             }
+
+            remote_entry_count++;
         }
 
         i += length;
@@ -98,12 +100,13 @@ void copy_sticks_async_from_temp(
     const uint16_t my_noc_y,
     const uint32_t temp_base_l1_addr,
     const uint32_t out_base_l1_addr) {
-    if constexpr (!main_thread && padding_exists) {  // padding runs on the other DM core
+    if constexpr (!main_thread && padding_exists) {
         return;
     }
 
     int i = 0;
     int length = config_data[2];
+    int remote_entry_count = 0;
 
     uint64_t src_addr = temp_base_l1_addr;
 
@@ -119,26 +122,27 @@ void copy_sticks_async_from_temp(
         for (uint16_t j = 0; j < length; j += 4) {
             uint16_t nsticks = config_data[i + j + 2];
             uint32_t size = nsticks * stick_nbytes;
-            uint16_t dst_local_idx = config_data[i + j + 1];
-            uint32_t dst_offset = dst_local_idx * stick_nbytes;
-            uint64_t dst_addr = base_addr + dst_offset;
-            if constexpr (stick_nbytes == input_aligned_page_size) {
-                uint32_t half_size = size / 2;
-                if constexpr (main_thread && padding_exists) {
+
+            if ((remote_entry_count % 2 != main_thread) || (main_thread && padding_exists)) {
+                uint16_t dst_local_idx = config_data[i + j + 1];
+                uint32_t dst_offset = dst_local_idx * stick_nbytes;
+                uint64_t dst_addr = base_addr + dst_offset;
+                if constexpr (stick_nbytes == input_aligned_page_size) {
                     noc_async_write(src_addr, dst_addr, size);
-                } else if constexpr (main_thread) {
-                    noc_async_write(src_addr, dst_addr, half_size);
+                    src_addr +=
+                        size;  // remote sticks from each config entry are read contiguously from the temp buffer
                 } else {
-                    noc_async_write(src_addr + half_size, dst_addr + half_size, half_size);
+                    for (uint16_t k = 0; k < nsticks; k++) {
+                        noc_async_write(src_addr, dst_addr, stick_nbytes);
+                        dst_addr += stick_nbytes;
+                        src_addr += stick_nbytes;
+                    }
                 }
-                src_addr += size;  // remote sticks from each config entry are read contiguously from the temp buffer
-            } else if constexpr (main_thread) {
-                for (uint16_t k = 0; k < nsticks; k++) {
-                    noc_async_write(src_addr, dst_addr, stick_nbytes);
-                    dst_addr += stick_nbytes;
-                    src_addr += stick_nbytes;
-                }
+            } else {
+                src_addr += size;  // increment space in the temp buffer for the other data movement core
             }
+
+            remote_entry_count++;
         }
 
         i += length;
