@@ -2801,7 +2801,7 @@ void Run1DFabricPacketSendTest(
                     .compile_args = worker_ct_args});
             worker_kernel_ids.push_back(worker_kernel_id);
 
-            auto build_connection_args = [use_device_init_fabric, &local_device_fabric_handle, device, &program](
+            auto build_connection_args = [&local_device_fabric_handle, device, &program](
                                              CoreCoord& worker_core,
                                              size_t link,
                                              bool is_connected_in_direction,

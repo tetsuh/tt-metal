@@ -186,7 +186,7 @@ TEST_F(T3000MultiCQFabricMeshDeviceFixture, AsyncExecutionWorksCQ0) {
         for (size_t i = 0; i < devices.size(); ++i) {
             auto device = devices[i];
             auto device_tensor = gathered_tensors[i];
-            boost::asio::post(pool, [&, i, device, num_elems, device_tensor]() mutable {
+            boost::asio::post(pool, [&, device, num_elems, device_tensor]() mutable {
                 auto output_data = std::shared_ptr<bfloat16[]>(new bfloat16[device_tensor.volume()]);
                 ttnn::read_buffer(ttnn::QueueId(op_cq_id), device_tensor, {output_data});
 
@@ -343,7 +343,7 @@ TEST_F(T3000MultiCQFabricMeshDeviceFixture, AsyncExecutionWorksCQ0CQ1) {
             auto device = devices[dev_idx];
             auto promise = std::make_shared<std::promise<void>>();
             futures.push_back(promise->get_future());
-            boost::asio::post(pool, [&, dev_idx, device, promise]() mutable {
+            boost::asio::post(pool, [&, device, promise]() mutable {
                 auto ccl_event = std::make_shared<Event>();
                 ttnn::record_event(device->command_queue(ccl_cq_id), ccl_event);
                 // Enqueue the task waiting for the operation_event to the ccl`s command queue
@@ -365,7 +365,7 @@ TEST_F(T3000MultiCQFabricMeshDeviceFixture, AsyncExecutionWorksCQ0CQ1) {
             auto device = devices[i];
             auto device_tensor = gathered_tensors[i];
 
-            boost::asio::post(pool, [&, i, device, num_elems, device_tensor]() mutable {
+            boost::asio::post(pool, [&, device, num_elems, device_tensor]() mutable {
                 auto output_data = std::shared_ptr<bfloat16[]>(new bfloat16[device_tensor.volume()]);
                 ttnn::read_buffer(ttnn::QueueId(op_cq_id), device_tensor, {output_data});
 

@@ -1338,7 +1338,7 @@ void detail::ProgramImpl::compile(IDevice* device, bool force_slow_dispatch) {
         }
     };
 
-    auto validate_kernel_placement = [&device, &force_slow_dispatch](std::shared_ptr<Kernel> kernel) {
+    auto validate_kernel_placement = [&force_slow_dispatch](std::shared_ptr<Kernel> kernel) {
         // Placement rules:
         //  Slow dispatch:
         //      - kernels cannot be on storage only cores

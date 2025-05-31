@@ -312,8 +312,6 @@ operation::ProgramWithCallbacks multi_core_group_attn_matmul(
 
                              // Params determined by out_subblock_w
                              out_subblock_w,
-                             out_subblock_h,
-                             in1_num_subblocks,
                              out_block_w,
                              in1_per_core_w,
                              in1_block_w_tile_bytes,

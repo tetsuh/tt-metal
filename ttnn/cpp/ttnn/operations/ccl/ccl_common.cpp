@@ -965,7 +965,6 @@ std::vector<TensorSlice> generate_slice_sequence_on_dim(
             worker_index * worker_slice_shape.x, 0};
 
     auto generate_slice = [forward_direction,
-                           incr,
                            &slices,
                            &tensor_shape,
                            &slice_shape,
@@ -1100,7 +1099,6 @@ std::vector<TensorSlice> generate_slice_sequence_on_dim_v2(
     auto worker_slice_start_offset = worker_slice_offset;
 
     auto generate_slice = [forward_direction,
-                           incr,
                            &slices,
                            &tensor_shape,
                            &slice_shape,

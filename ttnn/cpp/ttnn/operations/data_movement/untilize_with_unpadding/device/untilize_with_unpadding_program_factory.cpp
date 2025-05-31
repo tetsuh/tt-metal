@@ -1136,34 +1136,31 @@ operation::ProgramWithCallbacks untilize_with_unpadding_multi_core_sharded(
         }
     }
 
-    auto override_runtime_arguments_callback = [reader_kernel_id = unary_reader_kernel_id,
-                                                writer_kernel_id = unary_writer_kernel_id,
-                                                cb_src0 = cb_src0,
-                                                cb_sharded_output = cb_sharded_output,
-                                                cores](
-                                                   const void* operation,
-                                                   Program& program,
-                                                   const std::vector<Tensor>& input_tensors,
-                                                   const std::vector<std::optional<const Tensor>>&,
-                                                   const std::vector<Tensor>& output_tensors) {
-        auto src_buffer = input_tensors.at(0).buffer();
-        auto dst_buffer = output_tensors.at(0).buffer();
+    auto override_runtime_arguments_callback =
+        [writer_kernel_id = unary_writer_kernel_id, cb_src0 = cb_src0, cb_sharded_output = cb_sharded_output, cores](
+            const void* operation,
+            Program& program,
+            const std::vector<Tensor>& input_tensors,
+            const std::vector<std::optional<const Tensor>>&,
+            const std::vector<Tensor>& output_tensors) {
+            auto src_buffer = input_tensors.at(0).buffer();
+            auto dst_buffer = output_tensors.at(0).buffer();
 
-        bool src_sharded = input_tensors.at(0).memory_config().is_sharded();
-        bool out_sharded = output_tensors.at(0).memory_config().is_sharded();
+            bool src_sharded = input_tensors.at(0).memory_config().is_sharded();
+            bool out_sharded = output_tensors.at(0).memory_config().is_sharded();
 
-        UpdateDynamicCircularBufferAddress(program, cb_src0, *src_buffer);
+            UpdateDynamicCircularBufferAddress(program, cb_src0, *src_buffer);
 
-        if (out_sharded) {
-            UpdateDynamicCircularBufferAddress(program, cb_sharded_output, *dst_buffer);
-        } else {
-            auto& runtime_args_by_core = GetRuntimeArgs(program, writer_kernel_id);
-            for (const CoreCoord& core : cores) {
-                auto& runtime_args = runtime_args_by_core[core.x][core.y];
-                runtime_args[0] = dst_buffer->address();
+            if (out_sharded) {
+                UpdateDynamicCircularBufferAddress(program, cb_sharded_output, *dst_buffer);
+            } else {
+                auto& runtime_args_by_core = GetRuntimeArgs(program, writer_kernel_id);
+                for (const CoreCoord& core : cores) {
+                    auto& runtime_args = runtime_args_by_core[core.x][core.y];
+                    runtime_args[0] = dst_buffer->address();
+                }
             }
-        }
-    };
+        };
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
 }

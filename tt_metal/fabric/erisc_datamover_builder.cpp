@@ -251,7 +251,7 @@ FabricEriscDatamoverConfig::FabricEriscDatamoverConfig(
         }
     };
 
-    auto get_optimal_num_slots_for_dateline = [this, &get_optimal_num_slots](
+    auto get_optimal_num_slots_for_dateline = [&get_optimal_num_slots](
                                                   auto& ring_buffer_slot_options,
                                                   auto& ring_buffer_slot_options_dateline,
                                                   size_t num_used_sender_channels,

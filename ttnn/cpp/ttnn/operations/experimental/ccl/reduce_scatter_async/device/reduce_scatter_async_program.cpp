@@ -1952,7 +1952,7 @@ static void log_worker_command_streams(WorkerCommandStreams const& command_strea
     for (auto const&[core, cmd_stream] : command_streams.writer_cmds0) { cores.insert(core); }
     for (auto const&[core, cmd_stream] : command_streams.writer_cmds1) { cores.insert(core); }
 
-    auto get_cmd_str = [device](ttnn::ccl::cmd::CclHostLowLevelWorkerCommand const& cmd) -> std::string {
+    auto get_cmd_str = [](ttnn::ccl::cmd::CclHostLowLevelWorkerCommand const& cmd) -> std::string {
         auto print_core = [](ttnn::ccl::cmd::CclCommandCoreDescriptorArgs const& core) {
             return std::visit(
                 tt::stl::overloaded{
@@ -2314,12 +2314,6 @@ operation::ProgramWithCallbacks reduce_scatter_async_on_instantiated_edm_fabric(
         [topology_config,
          reader_rt_args_overrider_map,
          writer_rt_args_overrider_map,
-         local_input_tensor_idx,
-         local_final_output_tensor_idx,
-         input_tensor_from_remote_forward_direction_idx,
-         input_tensor_from_remote_backward_direction_idx,
-         partial_output_tensor_forward_direction_idx,
-         partial_output_tensor_backward_direction_idx,
          from_remote_sems,
          to_remote_sem,
          kernel_ids,

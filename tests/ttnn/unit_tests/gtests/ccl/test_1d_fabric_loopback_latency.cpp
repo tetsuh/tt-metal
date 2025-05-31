@@ -305,8 +305,7 @@ inline void RunPersistent1dFabricLatencyTest(
             program, kernel_path, worker_cores, tt_metal::WriterDataMovementConfig(worker_ct_args));
         worker_kernel_ids.push_back(worker_kernel_id);
 
-        auto build_connection_args = [is_ring,
-                                      use_device_init_fabric,
+        auto build_connection_args = [use_device_init_fabric,
                                       &local_device_fabric_handle,
                                       device,
                                       forward_device,

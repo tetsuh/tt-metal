@@ -1240,11 +1240,6 @@ tt::tt_metal::operation::ProgramWithCallbacks create_program_mcast_in0_in1(
          in1_receiver_other_cores,
          cb_src2,
          cb_output,
-         num_cores_with_work_r,
-         num_cores_with_work_c,
-         start_core_x,
-         start_core_y,
-         transpose_mcast,
          cores](
             const void* operation,
             tt::tt_metal::Program& program,

@@ -302,9 +302,7 @@ void dump_tensor(
             [output_file, dtype = tensor.get_dtype()](const HostStorage& storage) {
                 dump_host_storage(output_file, storage, dtype);
             },
-            [output_file, dtype = tensor.get_dtype()](const DeviceStorage& storage) {
-                TT_THROW("Device storage isn't supported");
-            },
+            [dtype = tensor.get_dtype()](const DeviceStorage& storage) { TT_THROW("Device storage isn't supported"); },
             [output_file, &strategy, dtype = tensor.get_dtype()](const MultiDeviceHostStorage& storage) {
                 auto distribute_config = get_distributed_tensor_config(strategy);
                 dump_multi_device_host_storage(output_file, storage, distribute_config, dtype);

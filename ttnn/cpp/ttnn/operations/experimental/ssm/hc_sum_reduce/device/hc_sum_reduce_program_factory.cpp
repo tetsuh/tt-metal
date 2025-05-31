@@ -135,7 +135,6 @@ operation::ProgramWithCallbacks multi_core_ssm_1d_sum_reduce(
                              all_cores = all_cores,
                              cores = cores,
                              g1_numcores = g1_numcores,
-                             g2_numcores = g2_numcores,
                              num_blocks_per_core_group_1 = num_blocks_per_core_group_1,
                              num_blocks_per_core_group_2 = num_blocks_per_core_group_2,
                              ashape = ashape](Program& program, const Tensor& a, const Tensor& output) {

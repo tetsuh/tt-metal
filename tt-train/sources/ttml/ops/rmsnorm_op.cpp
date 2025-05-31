@@ -44,7 +44,7 @@ autograd::TensorPtr rmsnorm(const autograd::TensorPtr &tensor, const autograd::T
     auto rms_a = rmsnorm_fw_result[1].value();
     auto out = autograd::create_tensor(rmsnorm_fw_result[0].value());
 
-    autograd::GradFunction grad = [B, S, C, tensor, gamma, out, rms_a, device]() {
+    autograd::GradFunction grad = [tensor, gamma, out, rms_a]() {
         auto a = tensor->get_value();  // [B,1,S,C]
         auto g = gamma->get_value();   // [1,1,1,C]
 
@@ -206,7 +206,7 @@ autograd::TensorPtr rmsnorm_composite(
 
     auto out = autograd::create_tensor(out_tensor);
 
-    autograd::GradFunction grad = [B, S, C, tensor, gamma, out, rms_a, device]() {
+    autograd::GradFunction grad = [tensor, gamma, out, rms_a]() {
         auto a = tensor->get_value();  // [B,1,S,C]
         auto g = gamma->get_value();   // [1,1,1,C]
 

@@ -154,7 +154,7 @@ TEST_F(CommandQueueEventFixture, TestEventsEnqueueRecordEventAndSynchronizeHang)
     future_event->event_id = 0xFFFF;   // Modify event_id to be a future event that isn't issued yet.
 
     // Launch Host Sync in an async thread, expected to hang, with timeout and kill signal.
-    auto future = std::async(std::launch::async, [this, future_event]() { return EventSynchronize(future_event); });
+    auto future = std::async(std::launch::async, [future_event]() { return EventSynchronize(future_event); });
 
     bool seen_expected_hang = future.wait_for(std::chrono::seconds(1)) == std::future_status::timeout;
     tt::watcher_server_set_error_flag(

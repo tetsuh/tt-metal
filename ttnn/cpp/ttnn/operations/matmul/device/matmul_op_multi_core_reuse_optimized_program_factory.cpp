@@ -418,7 +418,7 @@ tt::tt_metal::operation::ProgramWithCallbacks create_program(
     }
 
     auto override_runtime_arguments_callback =
-        [mm_kernel_in0_reader_id, mm_kernel_in1_reader_writer_id, cb_src0, cb_src1, cb_output, num_cores, cores](
+        [mm_kernel_in0_reader_id, mm_kernel_in1_reader_writer_id, cb_src0, cb_src1, cb_output, cores](
             const void* operation,
             tt::tt_metal::Program& program,
             const std::vector<Tensor>& input_tensors,

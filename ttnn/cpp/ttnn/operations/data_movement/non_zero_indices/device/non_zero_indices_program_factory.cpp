@@ -91,7 +91,7 @@ operation::ProgramWithCallbacks non_zero_indices_single_core(
 
     tt::tt_metal::SetRuntimeArgs(program, kernel_id, core, run_time_args);
 
-    auto override_runtime_args_callback = [kernel_id, core, page_size](
+    auto override_runtime_args_callback = [kernel_id, core](
                                               const void* operation,
                                               const tt::tt_metal::Program& program,
                                               const std::vector<Tensor>& input_tensors,

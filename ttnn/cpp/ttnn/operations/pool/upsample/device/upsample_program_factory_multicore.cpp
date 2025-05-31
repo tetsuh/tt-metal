@@ -275,7 +275,7 @@ operation::ProgramWithCallbacks upsample_multi_core(
         CreateKernel(program, reader_kernel_fname, all_cores, ReaderDataMovementConfig(reader_compile_time_args));
 
     // Capture config_buffer to cache this with the program
-    auto override_runtime_args_callback = [writer_kernel, cb_src0, out_cb, config_cb, config_storage, config_buffer](
+    auto override_runtime_args_callback = [cb_src0, out_cb, config_storage](
                                               const void* operation,
                                               Program& program,
                                               const std::vector<Tensor>& input_tensors,

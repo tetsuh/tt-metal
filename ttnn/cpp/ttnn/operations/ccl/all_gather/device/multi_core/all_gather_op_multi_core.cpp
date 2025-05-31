@@ -1283,9 +1283,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_multi_core_with_workers
     auto override_runtime_arguments_callback =
         [worker_sender_reader_kernel_id,
          worker_sender_writer_kernel_id,
-         worker_receiver_reader_kernel_id,
          worker_receiver_writer_kernel_id,
-         num_links,
          all_sender_worker_cores,
          all_receiver_worker_cores](
             const void* operation,

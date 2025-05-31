@@ -699,7 +699,7 @@ operation::ProgramWithCallbacks tilize_multi_core_sharded(const Tensor& input, T
     tt::tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, all_cores, {num_tiles_per_shard});
 
     auto override_runtime_arguments_callback =
-        [unary_reader_kernel_id, unary_writer_kernel_id, cb_src0, cb_output](
+        [cb_src0, cb_output](
             const void* operation,
             Program& program,
             const std::vector<Tensor>& input_tensors,

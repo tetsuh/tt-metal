@@ -546,7 +546,7 @@ tt_metal::operation::ProgramWithCallbacks s2s_concat_multi_core(
     tt_metal::SetRuntimeArgs(program, unary_reader_kernel_id, all_cores, runtime_args_0);
     tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, all_cores, runtime_args_1);
 
-    auto override_runtime_arguments_callback = [num_input_tensors, cb_dst_id, cb_inputs, cb_output](
+    auto override_runtime_arguments_callback = [num_input_tensors, cb_inputs, cb_output](
                                                    const void* operation,
                                                    Program& program,
                                                    const std::vector<Tensor>& input_tensors,

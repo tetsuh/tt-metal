@@ -317,7 +317,7 @@ tt::tt_metal::operation::ProgramWithCallbacks bilinear_multi_core(
         TT_FATAL(false, "Unsupported memory layout");
     }
 
-    auto override_runtime_args_callback = [reader_kernel, writer_kernel, cb_src0, out_cb](
+    auto override_runtime_args_callback = [cb_src0, out_cb](
                                               const void* operation,
                                               Program& program,
                                               const std::vector<Tensor>& input_tensors,

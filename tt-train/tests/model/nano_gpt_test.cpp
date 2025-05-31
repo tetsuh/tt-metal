@@ -109,7 +109,7 @@ void train_test(bool use_moreh_adamw = false, bool memory_efficient = false) {
         mask, ttml::core::create_shape({config.batch_size, num_heads, sequence_length, sequence_length}), device));
 
     std::function<BatchType(std::vector<DatasetSample> && samples)> collate_fn =
-        [sequence_length, num_heads, device, &cached_data](std::vector<DatasetSample> &&samples) {
+        [sequence_length, device, &cached_data](std::vector<DatasetSample> &&samples) {
             auto start_timer = std::chrono::high_resolution_clock::now();
             const uint32_t batch_size = samples.size();
             std::vector<uint32_t> &data = cached_data.data;

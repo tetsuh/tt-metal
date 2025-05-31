@@ -46,8 +46,8 @@ std::vector<distributed::MeshCoordinate> TensorAttributes::determine_distributio
     const int num_shards = std::visit(
         tt::stl::overloaded{
             [&mesh_shape](const HostStorage&) { return mesh_shape.mesh_size(); },
-            [&mesh_shape](const DeviceStorage& s) { return s.specs.size(); },
-            [&mesh_shape](const MultiDeviceHostStorage& s) { return s.num_buffers(); },
+            [](const DeviceStorage& s) { return s.specs.size(); },
+            [](const MultiDeviceHostStorage& s) { return s.num_buffers(); },
         },
         storage_);
 

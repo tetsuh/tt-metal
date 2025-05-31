@@ -169,14 +169,12 @@ operation::ProgramWithCallbacks multi_core_ssm_eltwise_mul(
     auto set_runtime_args = [reader_kernel_id,
                              writer_kernel_id,
                              compute_kernel_id,
-                             compute_with_storage_grid_size,
                              all_cores,
 
                              // Args to iterate across cores
                              cores,
                              num_cores,
                              g1_numcores,
-                             g2_numcores,
                              num_blocks_per_core_group_1,
                              num_blocks_per_core_group_2,
                              ashape,

@@ -352,7 +352,6 @@ operation::ProgramWithCallbacks padded_slice_rm_multi_core(
                                            unary_writer_kernel_id,
                                            output_tensor_start,
                                            actual_output_shape,
-                                           compute_with_storage_grid_size,
                                            max_read_size,
                                            iter_cores,
                                            cb_src0](
@@ -375,7 +374,6 @@ operation::ProgramWithCallbacks padded_slice_rm_multi_core(
             tt::tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, core, all_runtime_args[i].second);
             i++;
         }
-
     };
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_args_callback};

@@ -162,7 +162,7 @@ operation::ProgramWithCallbacks embedding_backward_multi_core(
         offset += reader_runtime_args[5];
     }
 
-    auto override_runtime_args_callback = [reader_kernel_id, cores, device](
+    auto override_runtime_args_callback = [reader_kernel_id, cores](
                                               const void* operation,
                                               Program& program,
                                               const std::vector<Tensor>& input_tensors,

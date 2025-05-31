@@ -833,10 +833,7 @@ operation::ProgramWithCallbacks tilize_with_val_padding_multi_core_sharded(
     const std::array writer_rt_args = {ntiles_per_core};
     tt::tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, all_cores, writer_rt_args);
 
-    auto override_runtime_arguments_callback = [reader_kernel_id = unary_reader_kernel_id,
-                                                writer_kernel_id = unary_writer_kernel_id,
-                                                cb_src0 = cb_src0,
-                                                cb_output = cb_output](
+    auto override_runtime_arguments_callback = [cb_src0 = cb_src0, cb_output = cb_output](
                                                    const void* operation,
                                                    Program& program,
                                                    const std::vector<Tensor>& input_tensors,

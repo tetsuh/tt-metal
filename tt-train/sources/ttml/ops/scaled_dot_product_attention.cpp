@@ -187,7 +187,7 @@ autograd::TensorPtr scaled_dot_product_attention(
     auto out = ttml::autograd::create_tensor(attention_qkv);
 
     ttml::autograd::GradFunction grad =
-        [scale, query, key, value, attention_weights, out, mask, batch_num, heads, seq_len, embedding_dim, groups]() {
+        [scale, query, key, value, attention_weights, out, mask, groups]() {
             constexpr auto none = tt::stl::Span<const ttnn::operations::unary::UnaryWithParam>{};
             auto dL_dout = out->get_grad();  // (B, H, S, embedding_dim)
             // dL_d(softmax(σQK+mask)) = dL_dout @ value^T

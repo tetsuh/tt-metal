@@ -1739,9 +1739,6 @@ tt::tt_metal::operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_
          writer_mcast_receiver_id = writer_mcast_receiver_id,
          cb_sharded_act = cb_sharded_act,
          cb_output = cb_output,
-         total_active_num_cores = total_active_num_cores,
-         num_cores_x = num_cores_x,
-         num_cores_y = num_cores_y,
          has_bias = has_bias,
          conv_reader_indices_storage = conv_reader_indices_storage](
             const void* operation,

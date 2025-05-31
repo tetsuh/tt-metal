@@ -565,9 +565,7 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_concat_llama_sharded(
          num_concat_worker_cores,
          cb_q_output,
          cores,
-         concat_reader_kernel_id,
-         face_h,
-         sub_tile_line_bytes](
+         concat_reader_kernel_id](
             const void* operation,
             Program& program,
             const std::vector<Tensor>& input_tensors,

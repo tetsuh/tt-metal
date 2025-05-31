@@ -710,7 +710,7 @@ operation::ProgramWithCallbacks reduce_scatter_with_workers(
         "Internal error. No EDMs were instantiated in reduce scatter.");
 
     std::function<bool(uint32_t)> is_worker_in_clockwise_direction_fn =
-        [is_linear, enable_bidirectional, num_edm_channels_per_link](std::size_t x) {
+        [is_linear, num_edm_channels_per_link](std::size_t x) {
             static constexpr std::size_t bidirectional_directions = 2;
             return is_linear
                        ? ((x % num_edm_channels_per_link) < (num_edm_channels_per_link / bidirectional_directions))

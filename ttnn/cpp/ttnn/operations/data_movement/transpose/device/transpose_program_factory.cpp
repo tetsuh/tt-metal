@@ -608,19 +608,18 @@ operation::ProgramWithCallbacks transpose_hc_multi_core_tiled_interleaved(
     override_runtime_args_mc_hc_tiled_interleaved<true>(
         program, unary_reader_kernel_id, unary_writer_kernel_id, a, output);
 
-    auto override_runtime_args_callback =
-        [unary_reader_kernel_id, unary_writer_kernel_id, compute_with_storage_grid_size](
-            const void* operation,
-            const Program& program,
-            const std::vector<Tensor>& input_tensors,
-            const std::vector<std::optional<const Tensor>>&,
-            const std::vector<Tensor>& output_tensors) {
-            auto src_tensor = input_tensors.at(0);
-            auto dst_tensor = output_tensors.at(0);
+    auto override_runtime_args_callback = [unary_reader_kernel_id, unary_writer_kernel_id](
+                                              const void* operation,
+                                              const Program& program,
+                                              const std::vector<Tensor>& input_tensors,
+                                              const std::vector<std::optional<const Tensor>>&,
+                                              const std::vector<Tensor>& output_tensors) {
+        auto src_tensor = input_tensors.at(0);
+        auto dst_tensor = output_tensors.at(0);
 
-            override_runtime_args_mc_hc_tiled_interleaved<false>(
-                program, unary_reader_kernel_id, unary_writer_kernel_id, src_tensor, dst_tensor);
-        };
+        override_runtime_args_mc_hc_tiled_interleaved<false>(
+            program, unary_reader_kernel_id, unary_writer_kernel_id, src_tensor, dst_tensor);
+    };
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_args_callback};
 }
@@ -1277,22 +1276,21 @@ operation::ProgramWithCallbacks transpose_hc_multi_core_sharded(const Tensor& a,
         );
     }
 
-    auto override_runtime_args_callback =
-        [cb_src0, cb_output, src0_single_tile_size, dst_single_tile_size, num_cores_x, num_cores_y](
-            const void* operation,
-            Program& program,
-            const std::vector<Tensor>& input_tensors,
-            const std::vector<std::optional<const Tensor>>&,
-            const std::vector<Tensor>& output_tensors) {
-            const auto& src_tensor = input_tensors.at(0);
-            const auto& dst_tensor = output_tensors.at(0);
+    auto override_runtime_args_callback = [cb_src0, cb_output](
+                                              const void* operation,
+                                              Program& program,
+                                              const std::vector<Tensor>& input_tensors,
+                                              const std::vector<std::optional<const Tensor>>&,
+                                              const std::vector<Tensor>& output_tensors) {
+        const auto& src_tensor = input_tensors.at(0);
+        const auto& dst_tensor = output_tensors.at(0);
 
-            const auto src_buffer = src_tensor.buffer();
-            const auto dst_buffer = dst_tensor.buffer();
+        const auto src_buffer = src_tensor.buffer();
+        const auto dst_buffer = dst_tensor.buffer();
 
-            UpdateDynamicCircularBufferAddress(program, cb_src0, *src_buffer);
-            UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
-        };
+        UpdateDynamicCircularBufferAddress(program, cb_src0, *src_buffer);
+        UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
+    };
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_args_callback};
 }
@@ -2166,22 +2164,21 @@ operation::ProgramWithCallbacks transpose_wh_multi_core_sharded_rm(const Tensor&
             .compile_args = compute_compile_time_args,
             .defines = compute_defines});
 
-    auto override_runtime_args_callback =
-        [reader_kernel_id, cb_src0, cb_output, src0_single_tile_size, dst_single_tile_size, num_cores_x, num_cores_y](
-            const void* operation,
-            Program& program,
-            const std::vector<Tensor>& input_tensors,
-            const std::vector<std::optional<const Tensor>>&,
-            const std::vector<Tensor>& output_tensors) {
-            const auto& src_tensor = input_tensors.at(0);
-            const auto& dst_tensor = output_tensors.at(0);
+    auto override_runtime_args_callback = [cb_src0, cb_output](
+                                              const void* operation,
+                                              Program& program,
+                                              const std::vector<Tensor>& input_tensors,
+                                              const std::vector<std::optional<const Tensor>>&,
+                                              const std::vector<Tensor>& output_tensors) {
+        const auto& src_tensor = input_tensors.at(0);
+        const auto& dst_tensor = output_tensors.at(0);
 
-            const auto src_buffer = src_tensor.buffer();
-            const auto dst_buffer = dst_tensor.buffer();
+        const auto src_buffer = src_tensor.buffer();
+        const auto dst_buffer = dst_tensor.buffer();
 
-            UpdateDynamicCircularBufferAddress(program, cb_src0, *src_buffer);
-            UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
-        };
+        UpdateDynamicCircularBufferAddress(program, cb_src0, *src_buffer);
+        UpdateDynamicCircularBufferAddress(program, cb_output, *dst_buffer);
+    };
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_args_callback};
 }

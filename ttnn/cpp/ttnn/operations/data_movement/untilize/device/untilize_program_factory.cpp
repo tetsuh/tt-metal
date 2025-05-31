@@ -184,34 +184,31 @@ operation::ProgramWithCallbacks untilize_multi_core_parallelize_column_subgrid(
         offset_within_stick += ntiles_per_core * TILE_WIDTH * output.element_size();
     }
 
-    auto override_runtime_arguments_callback = [reader_kernel_id = reader_kernel_id,
-                                                writer_kernel_id = writer_kernel_id,
-                                                cb_src0 = cb_src0,
-                                                cb_output = cb_output,
-                                                cores_with_rtargs](
-                                                   const void* operation,
-                                                   Program& program,
-                                                   const std::vector<Tensor>& input_tensors,
-                                                   const std::vector<std::optional<const Tensor>>&,
-                                                   const std::vector<Tensor>& output_tensors) {
-        auto src_buffer = input_tensors.at(0).buffer();
-        auto dst_buffer = output_tensors.at(0).buffer();
-        {
-            auto& runtime_args_by_core = GetRuntimeArgs(program, reader_kernel_id);
-            for (const CoreCoord& core : cores_with_rtargs) {
-                auto& runtime_args = runtime_args_by_core[core.x][core.y];
-                runtime_args[0] = src_buffer->address();
+    auto override_runtime_arguments_callback =
+        [reader_kernel_id = reader_kernel_id, writer_kernel_id = writer_kernel_id, cores_with_rtargs](
+            const void* operation,
+            Program& program,
+            const std::vector<Tensor>& input_tensors,
+            const std::vector<std::optional<const Tensor>>&,
+            const std::vector<Tensor>& output_tensors) {
+            auto src_buffer = input_tensors.at(0).buffer();
+            auto dst_buffer = output_tensors.at(0).buffer();
+            {
+                auto& runtime_args_by_core = GetRuntimeArgs(program, reader_kernel_id);
+                for (const CoreCoord& core : cores_with_rtargs) {
+                    auto& runtime_args = runtime_args_by_core[core.x][core.y];
+                    runtime_args[0] = src_buffer->address();
+                }
             }
-        }
 
-        {
-            auto& runtime_args_by_core = GetRuntimeArgs(program, writer_kernel_id);
-            for (const CoreCoord& core : cores_with_rtargs) {
-                auto& runtime_args = runtime_args_by_core[core.x][core.y];
-                runtime_args[0] = dst_buffer->address();
+            {
+                auto& runtime_args_by_core = GetRuntimeArgs(program, writer_kernel_id);
+                for (const CoreCoord& core : cores_with_rtargs) {
+                    auto& runtime_args = runtime_args_by_core[core.x][core.y];
+                    runtime_args[0] = dst_buffer->address();
+                }
             }
-        }
-    };
+        };
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
 }
@@ -417,34 +414,31 @@ operation::ProgramWithCallbacks untilize_multi_core_parallelize_column(
         tt::tt_metal::SetRuntimeArgs(program, unary_writer_kernel_id, core, writer_rt_args);
     }
 
-    auto override_runtime_arguments_callback = [reader_kernel_id = unary_reader_kernel_id,
-                                                writer_kernel_id = unary_writer_kernel_id,
-                                                cb_src0 = cb_src0,
-                                                cb_output = cb_output,
-                                                cores_with_rtargs](
-                                                   const void* operation,
-                                                   Program& program,
-                                                   const std::vector<Tensor>& input_tensors,
-                                                   const std::vector<std::optional<const Tensor>>&,
-                                                   const std::vector<Tensor>& output_tensors) {
-        auto src_buffer = input_tensors.at(0).buffer();
-        auto dst_buffer = output_tensors.at(0).buffer();
-        {
-            auto& runtime_args_by_core = GetRuntimeArgs(program, reader_kernel_id);
-            for (const CoreCoord& core : cores_with_rtargs) {
-                auto& runtime_args = runtime_args_by_core[core.x][core.y];
-                runtime_args[0] = src_buffer->address();
+    auto override_runtime_arguments_callback =
+        [reader_kernel_id = unary_reader_kernel_id, writer_kernel_id = unary_writer_kernel_id, cores_with_rtargs](
+            const void* operation,
+            Program& program,
+            const std::vector<Tensor>& input_tensors,
+            const std::vector<std::optional<const Tensor>>&,
+            const std::vector<Tensor>& output_tensors) {
+            auto src_buffer = input_tensors.at(0).buffer();
+            auto dst_buffer = output_tensors.at(0).buffer();
+            {
+                auto& runtime_args_by_core = GetRuntimeArgs(program, reader_kernel_id);
+                for (const CoreCoord& core : cores_with_rtargs) {
+                    auto& runtime_args = runtime_args_by_core[core.x][core.y];
+                    runtime_args[0] = src_buffer->address();
+                }
             }
-        }
 
-        {
-            auto& runtime_args_by_core = GetRuntimeArgs(program, writer_kernel_id);
-            for (const CoreCoord& core : cores_with_rtargs) {
-                auto& runtime_args = runtime_args_by_core[core.x][core.y];
-                runtime_args[0] = dst_buffer->address();
+            {
+                auto& runtime_args_by_core = GetRuntimeArgs(program, writer_kernel_id);
+                for (const CoreCoord& core : cores_with_rtargs) {
+                    auto& runtime_args = runtime_args_by_core[core.x][core.y];
+                    runtime_args[0] = dst_buffer->address();
+                }
             }
-        }
-    };
+        };
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
 }

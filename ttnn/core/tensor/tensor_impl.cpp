@@ -1165,7 +1165,7 @@ Tensor to_layout(const Tensor& tensor, Layout target_layout) {
 
     HostBuffer host_buffer = std::visit(
         tt::stl::overloaded{
-            [&convert, target_layout](const HostStorage& storage) {
+            [&convert](const HostStorage& storage) {
                 const auto input_data = host_buffer::get_as<T>(storage.buffer);
                 return HostBuffer(std::move(convert(input_data)));
             },

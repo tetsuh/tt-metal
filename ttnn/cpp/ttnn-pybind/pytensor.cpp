@@ -586,7 +586,7 @@ auto parse_external_operation(
     std::vector<Tensor> input_tensors;
     tt::stl::reflection::Attributes attributes;
 
-    auto process_name_and_value = [&function_name, &input_tensors, &attributes](const auto& name, const auto& value) {
+    auto process_name_and_value = [](const auto& name, const auto& value) {
         py::object torch = py::module_::import("torch");
         py::object ttnn = py::module_::import("ttnn");
         if (py::isinstance<Tensor>(value)) {

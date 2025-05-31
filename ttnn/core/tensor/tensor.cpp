@@ -143,7 +143,7 @@ void Tensor::deallocate_impl(bool force) {
             tt::stl::overloaded{
                 [](HostStorage&) {},
                 [](MultiDeviceHostStorage&) {},
-                [this, force, &can_deallocate](DeviceStorage& storage) {
+                [force, &can_deallocate](DeviceStorage& storage) {
                     if (can_deallocate(storage.mesh_buffer, force)) {
                         storage.mesh_buffer->deallocate();
                     } else if (can_deallocate(storage.buffer, force)) {

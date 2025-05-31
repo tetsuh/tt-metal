@@ -172,7 +172,6 @@ tt::tt_metal::operation::ProgramWithCallbacks multi_core_convert_to_hwc(const Te
                              writer_kernel_id0,
                              writer_kernel_id1,
                              total_num_sticks_kernel_0,
-                             total_num_sticks_kernel_1,
                              remote_address,
                              dram_read_stride_bytes,
                              dram_write_stride_bytes](

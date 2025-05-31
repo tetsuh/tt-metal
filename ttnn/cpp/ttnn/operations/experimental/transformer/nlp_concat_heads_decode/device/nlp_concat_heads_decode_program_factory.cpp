@@ -258,15 +258,7 @@ tt::tt_metal::operation::ProgramWithCallbacks multi_core_nlp_concat_heads_decode
     }
 
     auto override_runtime_arguments_callback =
-        [reader_kernel_id,
-         writer_kernel_id,
-         num_cores,
-         cb_q_output,
-         cores,
-         element_size,
-         sub_tile_line_bytes,
-         face_h,
-         tile_w](
+        [reader_kernel_id, writer_kernel_id, num_cores, cb_q_output, cores, sub_tile_line_bytes, face_h](
             const void* operation,
             tt::tt_metal::Program& program,
             const std::vector<Tensor>& input_tensors,

@@ -373,8 +373,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_multi_core_with_w
         [worker_sender_reader_kernel_id,
          reader_rt_args_overrider_map,
          writer_rt_args_overrider_map,
-         reader_tensor_command_map_idx,
-         writer_tensor_command_map_idx,
          worker_sender_writer_kernel_id,
          semaphore,
          sender_worker_cores](

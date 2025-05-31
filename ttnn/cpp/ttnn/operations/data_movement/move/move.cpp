@@ -18,7 +18,7 @@ namespace ttnn::operations::data_movement {
 
 bool can_deallocate(const Tensor& input_tensor) {
     return std::visit(
-        [&input_tensor](auto&& storage) {
+        [](auto&& storage) {
             using T = std::decay_t<decltype(storage)>;
             if constexpr (std::is_same_v<T, DeviceStorage>) {
                 if (storage.mesh_buffer) {

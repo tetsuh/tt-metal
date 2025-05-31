@@ -387,7 +387,6 @@ operation::ProgramWithCallbacks rotary_embedding_multi_core(
                                                 cores,
                                                 g1_numcores,
                                                 num_rows_per_core_group_1,
-                                                g2_numcores,
                                                 num_rows_per_core_group_2,
                                                 Wbytes,
                                                 Wt,

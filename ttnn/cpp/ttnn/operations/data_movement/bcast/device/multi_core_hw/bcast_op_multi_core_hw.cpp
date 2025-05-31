@@ -210,7 +210,6 @@ operation::ProgramWithCallbacks bcast_multi_core_hw(
                                                 compute_with_storage_grid_size,
                                                 cb_src0,
                                                 src0_single_tile_size,
-                                                src1_single_tile_size,
                                                 dst_single_tile_size,
                                                 cb_output,
                                                 inplace](

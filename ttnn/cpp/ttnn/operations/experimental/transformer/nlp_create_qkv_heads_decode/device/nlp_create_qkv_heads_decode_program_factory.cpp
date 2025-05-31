@@ -442,10 +442,7 @@ tt::tt_metal::operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_de
          cb_v_output,
          q_cores_vector,
          k_cores_vector,
-         element_size,
-         sub_tile_line_bytes,
          overlap_qk_coregrid,
-         slice_size,
          use_batch_offset](
             const void* operation,
             Program& program,
@@ -729,10 +726,7 @@ tt::tt_metal::operation::ProgramWithCallbacks multi_core_nlp_create_qkv_heads_de
          cb_v_output,
          q_cores_vector,
          k_cores_vector,
-         element_size,
-         sub_tile_line_bytes,
          overlap_qk_coregrid,
-         slice_size,
          use_batch_offset](
             const void* operation,
             Program& program,

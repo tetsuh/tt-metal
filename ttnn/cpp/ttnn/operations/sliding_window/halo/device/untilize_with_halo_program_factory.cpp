@@ -275,25 +275,19 @@ operation::ProgramWithCallbacks untilize_with_halo_multi_core(
         gather_config_storage0 = {};
         gather_config_storage1 = {};
     }
-    auto override_runtime_arguments_callback = [src_cb,
-                                                out_cb,
-                                                padding_config_cb,
-                                                gather_config_cb0,
-                                                gather_config_cb1,
-                                                padding_config_storage,
-                                                gather_config_storage0,
-                                                gather_config_storage1](
-                                                   const void* operation,
-                                                   Program& program,
-                                                   const std::vector<Tensor>& input_tensors,
-                                                   const std::vector<std::optional<const Tensor>>&,
-                                                   const std::vector<Tensor>& output_tensors) {
-        auto src_buffer = input_tensors.at(0).buffer();
-        auto dst_buffer = output_tensors.at(0).buffer();
+    auto override_runtime_arguments_callback =
+        [src_cb, out_cb, padding_config_storage, gather_config_storage0, gather_config_storage1](
+            const void* operation,
+            Program& program,
+            const std::vector<Tensor>& input_tensors,
+            const std::vector<std::optional<const Tensor>>&,
+            const std::vector<Tensor>& output_tensors) {
+            auto src_buffer = input_tensors.at(0).buffer();
+            auto dst_buffer = output_tensors.at(0).buffer();
 
-        UpdateDynamicCircularBufferAddress(program, src_cb, *src_buffer);
-        UpdateDynamicCircularBufferAddress(program, out_cb, *dst_buffer);
-    };
+            UpdateDynamicCircularBufferAddress(program, src_cb, *src_buffer);
+            UpdateDynamicCircularBufferAddress(program, out_cb, *dst_buffer);
+        };
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
 }
@@ -495,7 +489,7 @@ operation::ProgramWithCallbacks inplace_untilize_with_halo_multi_core(
     }
 
     // noc conversion function
-    auto core_id_to_noc_coords = [is_block_sharded, transpose_mcast, device](uint32_t core_id) -> CoreCoord {
+    auto core_id_to_noc_coords = [device](uint32_t core_id) -> CoreCoord {
         auto num_cores_x = device->compute_with_storage_grid_size().x;
         auto core_coord = CoreCoord(core_id % num_cores_x, core_id / num_cores_x);
         return device->worker_core_from_logical_core(core_coord);
@@ -617,25 +611,19 @@ operation::ProgramWithCallbacks inplace_untilize_with_halo_multi_core(
         remote_config_storage = {};
     }
     // Capture padding_config_storage, local_config_storage, remote_config_storage to cache this with the program
-    auto override_runtime_arguments_callback = [src_cb,
-                                                out_cb,
-                                                padding_config_cb,
-                                                local_config_cb,
-                                                remote_config_cb,
-                                                padding_config_storage,
-                                                local_config_storage,
-                                                remote_config_storage](
-                                                   const void* operation,
-                                                   Program& program,
-                                                   const std::vector<Tensor>& input_tensors,
-                                                   const std::vector<std::optional<const Tensor>>&,
-                                                   const std::vector<Tensor>& output_tensors) {
-        auto src_buffer = input_tensors.at(0).buffer();
-        auto dst_buffer = output_tensors.at(0).buffer();
+    auto override_runtime_arguments_callback =
+        [src_cb, out_cb, padding_config_storage, local_config_storage, remote_config_storage](
+            const void* operation,
+            Program& program,
+            const std::vector<Tensor>& input_tensors,
+            const std::vector<std::optional<const Tensor>>&,
+            const std::vector<Tensor>& output_tensors) {
+            auto src_buffer = input_tensors.at(0).buffer();
+            auto dst_buffer = output_tensors.at(0).buffer();
 
-        UpdateDynamicCircularBufferAddress(program, src_cb, *src_buffer);
-        UpdateDynamicCircularBufferAddress(program, out_cb, *dst_buffer);
-    };
+            UpdateDynamicCircularBufferAddress(program, src_cb, *src_buffer);
+            UpdateDynamicCircularBufferAddress(program, out_cb, *dst_buffer);
+        };
 
     return {.program = std::move(program), .override_runtime_arguments_callback = override_runtime_arguments_callback};
 }

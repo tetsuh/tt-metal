@@ -2295,7 +2295,7 @@ tt::tt_metal::operation::ProgramWithCallbacks create_program_gather_in0(
     }
 
     auto override_runtime_arguments_callback =
-        [mm_kernel_in0_id, mm_kernel_in1_sender_writer_id, cb_src0, cb_src1, cb_outputs, num_cores, all_cores_vec](
+        [mm_kernel_in1_sender_writer_id, cb_src0, cb_src1, cb_outputs, all_cores_vec](
             const void* operation,
             tt::tt_metal::Program& program,
             const std::vector<tt::tt_metal::Tensor>& input_tensors,

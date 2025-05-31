@@ -614,7 +614,7 @@ tt::tt_metal::operation::ProgramWithCallbacks conv3d_factory(
     }
 
     auto override_runtime_arguments_callback =
-        [num_cores, cores, grid_size, reader_kernels_id, writer_kernels_id](
+        [num_cores, cores, reader_kernels_id, writer_kernels_id](
             const void* operation,
             tt::tt_metal::Program& program,
             const std::vector<Tensor>& input_tensors,

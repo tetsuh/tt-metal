@@ -258,7 +258,7 @@ operation::ProgramWithCallbacks sharded_to_interleaved_multi_core(
         }
     }
     auto override_runtime_arguments_callback =
-        [unary_reader_kernel_id, unary_writer_kernel_id, cb_src0, cores, num_slices](
+        [unary_writer_kernel_id, cb_src0, cores, num_slices](
             const void* operation,
             Program& program,
             const std::vector<Tensor>& input_tensors,
