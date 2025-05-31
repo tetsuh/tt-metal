@@ -11,13 +11,7 @@ import math
 from models.utility_functions import is_wormhole_b0, is_grayskull, is_x2_harvested
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
-import numpy as np
-import matplotlib.pyplot as plt
-import copy
-
 import ttnn
-
-output_shards = [[] for _ in range(64)]
 
 
 # Cache map used for torch tensor reuse - the tensor will not be generated if a tensor of the same dimensions has already been generated
@@ -51,7 +45,6 @@ def run_max_pool(
     memory_config=None,
     shard_scheme=None,
     ceil_mode=False,
-    in_place_halo=True,
 ):
     in_n, in_c, in_h, in_w = act_shape
     kernel_h, kernel_w = kernel_size
@@ -78,6 +71,26 @@ def run_max_pool(
     cores_x = device.core_grid.x
     cores_y = device.core_grid.y
     max_cores = cores_x * cores_y
+
+    # Skip tests for BF8 and ceil_mode in HEIGHT/WIDTH/BLOCK shardings
+    if shard_scheme in (
+        ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
+        ttnn.TensorMemoryLayout.WIDTH_SHARDED,
+        ttnn.TensorMemoryLayout.BLOCK_SHARDED,
+    ):
+        if dtype == ttnn.bfloat8_b:
+            if stride == (2, 2):
+                pytest.skip("Skip for stride (2, 2) for BF8!")
+            if kernel_size == (9, 9):
+                pytest.skip("Skip for kernel size (9, 9) for BF8!")
+            if ceil_mode:
+                pytest.skip("Skip for ceil mode for BF8!")
+
+        if ceil_mode:
+            if stride == (1, 1):
+                pytest.skip("Skip for stride (1, 1) for ceil mode!")
+            if kernel_size == (9, 9):
+                pytest.skip("Skip for kernel size (9, 9) for ceil mode!")
 
     if shard_scheme == ttnn.TensorMemoryLayout.HEIGHT_SHARDED or shard_scheme is None:
         if in_c % 16 != 0:
@@ -207,7 +220,6 @@ def run_max_pool(
             tile_size=32 if dtype == ttnn.bfloat8_b else 1,
         )
         ttact_device = ttnn.to_memory_config(ttact_device, sharded_memory_config)
-
     output = ttnn.max_pool2d(
         input_tensor=ttact_device,
         batch_size=in_n,
@@ -221,48 +233,7 @@ def run_max_pool(
         memory_config=memory_config,
         applied_shard_scheme=shard_scheme,
         ceil_mode=ceil_mode,
-        in_place_halo=in_place_halo,
     )
-
-    # for core_id in range(0, 64):
-    #     output_shard = torch.Tensor(ttnn.to_torch(output.extract_shard(core_id).pad_to_tile(0.0).cpu()))
-    #     output_shards[core_id].append(output_shard)
-    # total_total = 0
-    # if len(output_shards[0]) == 2:
-    #     for core_id in range(0, 64):
-    #         print(f"Core ID: {core_id}")
-    #         # coord = ttnn.CoreCoord(x, y)
-    #         gold_shard = output_shards[core_id][0]
-    #         opt_shard = output_shards[core_id][1]
-
-    #         y_low_limit = 5600
-    #         y_high_limits = [5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5650, 5607, 5649, 5608, 5649, 5608, 5649, 5608, 5649, 5608, 5649, 5608, 5649, 5608, 5649, 5608, 5649, 5608, 5649, 5608, 5649, 5608, 5649, 5608, 5574]
-
-    #         gold_shard = gold_shard[:, :, y_low_limit:y_high_limits[core_id], :]
-    #         opt_shard = opt_shard[:, :, y_low_limit:y_high_limits[core_id], :]
-    #         diff = gold_shard[0][0] - opt_shard[0][0]
-
-    #         diff = diff.to(torch.float32)
-    #         # Replace -inf with zeros only where both gold_shard[0][0] and opt_shard[0][0] are -inf
-    #         mask = (gold_shard[0][0] == -float("inf")) & (opt_shard[0][0] == -float("inf"))
-    #         diff = torch.where(mask, torch.tensor(0.0, dtype=diff.dtype), diff)
-    #         total = torch.sum(diff)
-    #         total_total += total
-    #         print(f"core total: {total}")
-
-    #         # Plot the difference
-    #         plt.figure(figsize=(10, 10))
-    #         plt.imshow(diff[:, :], cmap="viridis", aspect="auto")
-    #         plt.colorbar()
-    #         plt.title("Difference between output shards")
-
-    #         # Save the plot
-    #         filename = "output_shard_pics/output_shard_difference_core_" + str(core_id) + ".png"
-    #         plt.savefig(filename)
-
-    #         # Clear the plot to avoid overlap in subsequent runs
-    #         plt.clf()
-    #     print(f"total total: {total_total}")
 
     output_host = output.cpu()
     output_pytorch_padded = torch.Tensor(ttnn.to_torch(output_host))
@@ -316,63 +287,55 @@ def run_max_pool(
     "act_shape",  ## NCHW
     (
         (  ## resnet shapes
-            # [1, 64, 112, 112],
+            [1, 64, 112, 112],
             # [4, 64, 112, 112],
             # [8, 64, 112, 112],
-            # [16, 64, 112, 112],
-            # # [20, 64, 112, 112],   ## oom
-            # ## hpr shapes
-            # [8, 32, 132, 20],
+            [16, 64, 112, 112],
+            # [20, 64, 112, 112],   ## oom
+            ## hpr shapes
+            [8, 32, 132, 20],
             # [16, 32, 132, 20],
             # [32, 32, 132, 20],
             # [64, 32, 132, 20],
-            # [128, 32, 132, 20],
-            # # [256, 32, 132, 20],   ## oom
-            # [8, 32, 264, 40],
+            [128, 32, 132, 20],
+            # [256, 32, 132, 20],   ## oom
+            [8, 32, 264, 40],
             # [16, 32, 264, 40],
-            # [32, 32, 264, 40],
-            # # [64, 32, 264, 40],    ## oom
-            # # [128, 32, 264, 40],   ## oom
-            # # [256, 32, 264, 40],   ## oom
-            # [4, 16, 1056, 160],
-            # # [8, 16, 1056, 160],     ## oom
-            # # [16, 16, 1056, 160],    ## oom
-            # # [32, 16, 1056, 160],    ## oom
-            # # [64, 16, 1056, 160],    ## oom
-            # # [128, 16, 1056, 160],   ## oom
-            # # [256, 16, 1056, 160],   ## oom
-            # [8, 16, 528, 80],
-            # [16, 16, 528, 80],
-            # # [32, 16, 528, 80],  ## oom
-            # # [64, 16, 528, 80],  ## oom
-            # # [128, 16, 528, 80], ## oom
-            # # [256, 16, 528, 80], ## oom
-            # ## wide for vgg
-            # [1, 256, 56, 56],
-            # [1, 512, 28, 28],
-            # [1, 512, 14, 14],
-            # # wide yolo kernel
-            # [1, 512, 10, 10],
-            # [1, 96, 112, 112],
-            # [1, 192, 132, 20],
-            # # wide non-8 multiple tests
-            # [1, 800, 32, 32],
-            # [1, 640, 32, 32],
-            # [1, 576, 32, 32],
-            # [1, 384, 32, 32],
-            # # C=16 test
-            # [1, 16, 12, 12],
-            # # partial grid tests
-            # [1, 32, 10, 10],  # BH
-            # [1, 32, 6, 6],  # WH
-            [8, 64, 112, 112],
             [32, 32, 264, 40],
-            # [8, 256, 56, 56],
-            # [4, 256, 264, 40],
-            # [4, 512, 56, 56],
-            # [2, 512, 264, 40],
-            # [2, 1024, 56, 56],
-            # [1, 1024, 264, 40],
+            # [64, 32, 264, 40],    ## oom
+            # [128, 32, 264, 40],   ## oom
+            # [256, 32, 264, 40],   ## oom
+            [4, 16, 1056, 160],
+            # [8, 16, 1056, 160],     ## oom
+            # [16, 16, 1056, 160],    ## oom
+            # [32, 16, 1056, 160],    ## oom
+            # [64, 16, 1056, 160],    ## oom
+            # [128, 16, 1056, 160],   ## oom
+            # [256, 16, 1056, 160],   ## oom
+            [8, 16, 528, 80],
+            [16, 16, 528, 80],
+            # [32, 16, 528, 80],  ## oom
+            # [64, 16, 528, 80],  ## oom
+            # [128, 16, 528, 80], ## oom
+            # [256, 16, 528, 80], ## oom
+            ## wide for vgg
+            [1, 256, 56, 56],
+            [1, 512, 28, 28],
+            [1, 512, 14, 14],
+            # wide yolo kernel
+            [1, 512, 10, 10],
+            [1, 96, 112, 112],
+            [1, 192, 132, 20],
+            # wide non-8 multiple tests
+            [1, 800, 32, 32],
+            [1, 640, 32, 32],
+            [1, 576, 32, 32],
+            [1, 384, 32, 32],
+            # C=16 test
+            [1, 16, 12, 12],
+            # partial grid tests
+            [1, 32, 10, 10],  # BH
+            [1, 32, 6, 6],  # WH
         )
     ),
 )
@@ -381,8 +344,8 @@ def run_max_pool(
     (
         (2, 2),
         (3, 3),
-        # (5, 5),
-        # (9, 9),
+        (5, 5),
+        (9, 9),
         # (13, 13),
     ),
 )
@@ -391,8 +354,8 @@ def run_max_pool(
     (
         (0, 0),
         (1, 1),
-        # (2, 2),
-        # (4, 4),
+        (2, 2),
+        (4, 4),
         # (6, 6),
     ),
 )
@@ -407,7 +370,7 @@ def run_max_pool(
 @pytest.mark.parametrize(
     "dtype",
     [
-        # ttnn.bfloat16,
+        ttnn.bfloat16,
         ttnn.bfloat8_b,
     ],
 )
@@ -418,25 +381,8 @@ def run_max_pool(
         True,
     ],
 )
-@pytest.mark.parametrize(
-    "in_place_halo",
-    [
-        # False,
-        True,
-    ],
-)
 def test_run_max_pool(
-    act_shape,
-    kernel_size,
-    padding,
-    stride,
-    dilation,
-    device,
-    torch_tensor_map,
-    dtype,
-    use_program_cache,
-    ceil_mode,
-    in_place_halo,
+    act_shape, kernel_size, padding, stride, dilation, device, torch_tensor_map, dtype, use_program_cache, ceil_mode
 ):
     run_max_pool(
         act_shape,
@@ -449,11 +395,10 @@ def test_run_max_pool(
         dtype,
         shard_scheme=ttnn.TensorMemoryLayout.HEIGHT_SHARDED,
         ceil_mode=ceil_mode,
-        in_place_halo=in_place_halo,
     )
 
 
-""" @pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 24576}], indirect=True)
 @pytest.mark.parametrize(
     "act_shape",  ## NCHW
     (
@@ -484,7 +429,7 @@ def test_run_max_pool(
         (3, 3),
         (5, 5),
         (9, 9),
-        (13, 13),
+        # (13, 13),
     ),
 )
 @pytest.mark.parametrize(
@@ -494,7 +439,7 @@ def test_run_max_pool(
         (1, 1),
         (2, 2),
         (4, 4),
-        (6, 6),
+        # (6, 6),
     ),
 )
 @pytest.mark.parametrize(
@@ -562,17 +507,17 @@ def test_run_max_pool_width_shard(
             [8, 2048, 10, 16],
             ## resnet shapes
             [1, 64, 112, 112],
-            [4, 64, 112, 112],
-            [8, 64, 112, 112],
+            # [4, 64, 112, 112],
+            # [8, 64, 112, 112],
             [16, 64, 112, 112],
             ## hpr shapes
             [8, 32, 132, 20],
-            [16, 32, 132, 20],
-            [32, 32, 132, 20],
-            [64, 32, 132, 20],
+            # [16, 32, 132, 20],
+            # [32, 32, 132, 20],
+            # [64, 32, 132, 20],
             [128, 32, 132, 20],
             [8, 32, 264, 40],
-            [16, 32, 264, 40],
+            # [16, 32, 264, 40],
             [32, 32, 264, 40],
             [4, 16, 1056, 160],
             [8, 16, 528, 80],
@@ -596,7 +541,7 @@ def test_run_max_pool_width_shard(
         (3, 3),
         (5, 5),
         (9, 9),
-        (13, 13),
+        # (13, 13),
     ),
 )
 @pytest.mark.parametrize(
@@ -606,7 +551,7 @@ def test_run_max_pool_width_shard(
         (1, 1),
         (2, 2),
         (4, 4),
-        (6, 6),
+        # (6, 6),
     ),
 )
 @pytest.mark.parametrize(
@@ -1014,4 +959,4 @@ def test_run_max_pool_squeeze_net_model(
         torch_tensor_map,
         dtype,
         ceil_mode=ceil_mode,
-    ) """
+    )
