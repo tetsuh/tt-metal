@@ -9,7 +9,7 @@
 #include "compile_time_args.h"
 #include "dataflow_api.h"
 
-#define ENABLE_DEBUG 1
+#define ENABLE_DEBUG 0
 
 #if ENABLE_DEBUG
 #include "debug/dprint_pages.h"
@@ -54,7 +54,7 @@ void copy_sticks_async_to_temp(
         const uint64_t base_addr_final = get_noc_addr(noc_x, noc_y, out_base_l1_addr);
         length = config_data[i + 2];
         i += 3;
-        for (uint16_t j = 0; j < length; j += 4) {
+        for (uint16_t j = 0; j < length; j += 3) {
             uint16_t nsticks = config_data[i + j + 2];
             uint32_t size = nsticks * stick_nbytes;
             if (remote_entry_count % 2 != main_thread) {
@@ -119,7 +119,7 @@ void copy_sticks_async_from_temp(
         const uint64_t base_addr = get_noc_addr(noc_x, noc_y, out_base_l1_addr);
         length = config_data[i + 2];
         i += 3;
-        for (uint16_t j = 0; j < length; j += 4) {
+        for (uint16_t j = 0; j < length; j += 3) {
             uint16_t nsticks = config_data[i + j + 2];
             uint32_t size = nsticks * stick_nbytes;
 
@@ -164,7 +164,7 @@ void copy_sticks_async_local(
     while (length) {
         length = config_data[i + 2];
         i += 3;
-        for (uint16_t j = 0; j < length; j += 4) {
+        for (uint16_t j = 0; j < length; j += 3) {
             uint16_t src_local_idx = config_data[i + j + 0];
             uint16_t dst_local_idx = config_data[i + j + 1];
             uint16_t nsticks = config_data[i + j + 2];

@@ -880,19 +880,19 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int> generate_inplac
             : max_out_nsticks_per_core - in_nsticks_per_core;  // for in place with tilized data we untilize
                                                                // directly into the output buffer so delta is zero
 
-    auto flatten_local_config = [in_place, max_out_nsticks_per_core, in_nsticks_per_core, in_out_shard_size_delta](
-                                    auto& config) -> std::vector<std::vector<std::vector<unsigned short>>> {
+    auto flatten_local_config =
+        [in_place, in_out_shard_size_delta](auto& config) -> std::vector<std::vector<std::vector<unsigned short>>> {
         // find max length
         size_t max_len = 0;
         for (const auto& [_, data] : config) {
             max_len =
                 in_place
-                    ? std::max(max_len, 4 * data.size())
+                    ? std::max(max_len, 3 * data.size())
                     : std::max(
                           max_len,
                           3 * (data.size() / 2 + 1));  // For split reader, each vector is (3 * data.size() / 2 + 1).
         }
-        max_len += in_place ? 7 : 6;  // account for the key tuple and null plug
+        max_len += 6;  // account for the key tuple and null plug
 
         std::vector<std::vector<std::vector<uint16_t>>> flattened_config(2);
 
@@ -934,8 +934,7 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int> generate_inplac
                     flat_data[0][idx1++] = src_start;
                     flat_data[0][idx1++] = dst_start;
                     flat_data[0][idx1++] = length;
-                    flat_data[0][idx1++] = 1;  // default no_wait to 1
-                    flat_data[0][2] += 4;
+                    flat_data[0][2] += 3;
                 }
                 for (int32_t i = data.size() - 1; i >= rev_i_end;
                      --i) {  // reverse direction local config in region where input / output shards overlap (for in
@@ -944,8 +943,7 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int> generate_inplac
                     flat_data[0][idx1++] = src_start;
                     flat_data[0][idx1++] = dst_start;
                     flat_data[0][idx1++] = length;
-                    flat_data[0][idx1++] = 1;  // default no_wait to 1
-                    flat_data[0][2] += 4;
+                    flat_data[0][2] += 3;
                 }
             }
 
@@ -958,9 +956,7 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int> generate_inplac
     };
 
     auto flatten_remote_config = [in_place, core_id_to_noc_coords, &device, in_out_shard_size_delta](
-                                     auto& config,
-                                     std::vector<std::vector<std::vector<uint16_t>>>& flattened_local_config)
-        -> std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int> {
+                                     auto& config) -> std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int> {
         // find max length
         size_t max_len = 0;
         for (const auto& core_config : config) {
@@ -968,23 +964,21 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int> generate_inplac
             for (const auto& [key, subdata] : core_config) {
                 curr_len +=
                     in_place
-                        ? 3 + 4 * subdata.size()
+                        ? 3 + 3 * subdata.size()
                         : 3 + (3 * (subdata.size() / 2 + 1));  // For split reader, 3 for source[nocx, nocy, length] and
                                                                // each vector is (3 * data.size() / 2 + 1).
             }
             max_len = std::max(max_len, curr_len);
         }
-        max_len += in_place ? 4 : 3;  // account for the null plug
+        max_len += 3;  // account for the null plug
 
         std::vector<std::vector<std::vector<uint16_t>>> flattened_config(2);
         int num_cores_x = device->compute_with_storage_grid_size().x;
         int num_cores_y = device->compute_with_storage_grid_size().y;
         int num_cores = num_cores_x * num_cores_y;
         CoreCoord noc_00 = core_id_to_noc_coords(0);
-        int core = 0;
         int max_ref_size = 0;
-        std::vector<int> remote_ref_low_bounds(num_cores, INT_MAX);
-        std::vector<int> remote_ref_high_bounds(num_cores, -INT_MAX);
+        int core = 0;
         for (const auto& core_config : config) {
             std::vector<std::vector<uint16_t>> flat_data(2, std::vector<uint16_t>(max_len, 0));
             uint32_t idx1 = 0, idx2 = 0;
@@ -993,7 +987,6 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int> generate_inplac
             int ref_size = 0;
             for (const auto& [key, subdata] : core_config) {
                 auto [nocx, nocy, len] = key;
-                int ref_ind = nocx - noc_00.x + (nocy - noc_00.y) * num_cores_x;
                 flat_data[0][idx1++] = nocx;
                 flat_data[0][idx1++] = nocy;
                 len_idx1 = idx1;
@@ -1003,22 +996,19 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int> generate_inplac
                 flat_data[1][idx2++] = nocy;
                 len_idx2 = idx2;
                 flat_data[1][idx2++] = 0;
+                int ref_ind = nocx - noc_00.x + (nocy - noc_00.y) * num_cores_x;
                 for (size_t i = 0; i < subdata.size(); ++i) {
                     auto [src_start, dst_start, length] = subdata[i];
                     ref_size += length;
                     if (in_place) {
                         int dst_relative_src = src_start + in_out_shard_size_delta;
-                        remote_ref_low_bounds[core] = std::min(remote_ref_low_bounds[core], dst_relative_src);
-                        remote_ref_high_bounds[core] =
-                            std::max(remote_ref_high_bounds[core], dst_relative_src + (int)length - 1);
 
                         flat_data[0][idx1++] = src_start;
                         flat_data[0][idx1++] = dst_start;
                         flat_data[0][idx1++] = length;
-                        flat_data[0][idx1++] = 1;  // default no wait to true
-                        flat_data[0][len_idx1] += 4;
+                        flat_data[0][len_idx1] += 3;
 
-                        idx1 = flat_data[0][len_idx1] ? idx1 : idx1 - 4;  // TODO: should this be 3 or 4
+                        idx1 = flat_data[0][len_idx1] ? idx1 : idx1 - 3;
                     } else {
                         if (vector_id) {
                             flat_data[0][idx1++] = src_start;
@@ -1037,10 +1027,10 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int> generate_inplac
                     }
                 }
             }
-            max_ref_size = std::max(max_ref_size, ref_size);
 
             flattened_config[0].emplace_back(std::move(flat_data[0]));
             flattened_config[1].emplace_back(std::move(flat_data[1]));
+            max_ref_size = std::max(max_ref_size, ref_size);
             core++;
         }
 
@@ -1049,7 +1039,7 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int> generate_inplac
 
     auto flattened_pad_config = flatten_pad_config(pad_config);
     auto flattened_local_config = flatten_local_config(local_config);
-    auto [flattened_remote_config, max_ref_size] = flatten_remote_config(remote_config, flattened_local_config);
+    auto [flattened_remote_config, max_ref_size] = flatten_remote_config(remote_config);
 
     auto align_config = [](auto& config, size_t align_granularity = 1, uint16_t align_value = 0) {
         size_t max_len = 0;
@@ -1084,7 +1074,6 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int> generate_inplac
         flattened_local_config[1],
         flattened_remote_config[0],
         flattened_remote_config[1]};
-
     return std::make_tuple(std::move(config), max_ref_size);
 }
 
