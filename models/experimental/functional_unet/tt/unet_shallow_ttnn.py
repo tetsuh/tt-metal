@@ -176,7 +176,6 @@ class UNetConv2D:
             output_layout=output_layout,
             reshard_if_not_optimal=reshard_if_not_optimal,
             reallocate_halo_output=reallocate_halo_output,
-            in_place=True,
         )
 
         if override_core_grid is not None:
@@ -324,8 +323,6 @@ class UNetUpblock:
             reallocate_halo_output=True,
             override_core_grid=override_core_grid,
         )
-        # if final_block:
-        #     self.conv1.conv_config.in_place = True
         self.conv2 = UNetConv2D(conv2, bn2, device, mesh_mapper=mesh_mapper)
         self.conv3 = UNetConv2D(conv3, bn3, device, mesh_mapper=mesh_mapper)
 

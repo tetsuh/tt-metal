@@ -29,7 +29,7 @@ def test_unet_perf_device(batch: int, groups: int, expected_device_perf_fps: flo
 
     inference_time_key = "AVG DEVICE KERNEL SAMPLES/S"
     post_processed_results = run_device_perf(
-        command, subdir="unet_shallow", num_iterations=1, cols=cols, batch_size=total_batch
+        command, subdir="unet_shallow", num_iterations=3, cols=cols, batch_size=total_batch
     )
     expected_perf_cols = {inference_time_key: expected_device_perf_fps}
     expected_results = check_device_perf(

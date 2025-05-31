@@ -321,7 +321,6 @@ operation::ProgramWithCallbacks inplace_untilize_with_halo_multi_core(
     const uint32_t ncores_c,
     const uint32_t max_out_nsticks_per_core,
     const uint32_t max_ref_size,
-    const uint32_t max_local_size,
     const Tensor& padding_config,
     const Tensor& local_config,
     const Tensor& remote_config,

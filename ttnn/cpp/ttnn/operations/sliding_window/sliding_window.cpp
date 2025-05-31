@@ -310,19 +310,8 @@ std::vector<ShardBoundary> generate_shard_boundaries(
         output_index_start = output_index_end + 1;
     }
 
-    int core = 0;
     for (auto& boundary : shard_boundaries) {
         log_debug(tt::LogOp, "shard_boundary={}", boundary);
-        // printf("c %d: output_start: %d, output_end: %d, input_start: %d, input_end: %d\n",
-        //        core,
-        //        boundary.output_range.start,
-        //        boundary.output_range.end,
-        //        boundary.input_range.start,
-        //        boundary.input_range.end);
-        // printf("    input delta: %d\n", boundary.input_range.end - boundary.input_range.start);
-        // printf("    output delta: %d\n", boundary.output_range.end - boundary.output_range.start);
-        // printf("%d, ", boundary.input_range.end - boundary.input_range.start);
-        core++;
     };
 
     return shard_boundaries;
@@ -758,7 +747,7 @@ HaloGatherKernelConfig generate_halo_kernel_config_tensors(
         flattened_pad_config, serialized_gather_configs0, serialized_gather_configs1, number_of_blocks_per_core};
 }
 
-std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int, int> generate_inplace_halo_kernel_config_tensors(
+std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int> generate_inplace_halo_kernel_config_tensors(
     const std::vector<PixelMetadata>& tensor_metadata,
     const std::vector<ShardBoundary>& shard_boundaries,
     bool is_block_sharded,
@@ -891,9 +880,8 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int, int> generate_i
             : max_out_nsticks_per_core - in_nsticks_per_core;  // for in place with tilized data we untilize
                                                                // directly into the output buffer so delta is zero
 
-    auto flatten_local_config =
-        [in_place, max_out_nsticks_per_core, in_nsticks_per_core, in_out_shard_size_delta](
-            auto& config) -> std::tuple<std::vector<std::vector<std::vector<unsigned short>>>, int> {
+    auto flatten_local_config = [in_place, max_out_nsticks_per_core, in_nsticks_per_core, in_out_shard_size_delta](
+                                    auto& config) -> std::vector<std::vector<std::vector<unsigned short>>> {
         // find max length
         size_t max_len = 0;
         for (const auto& [_, data] : config) {
@@ -909,7 +897,6 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int, int> generate_i
         std::vector<std::vector<std::vector<uint16_t>>> flattened_config(2);
 
         int core = 0;
-        int max_local_size = 0;
         for (const auto& [key, data] : config) {
             auto [nocx, nocy, len] = key;
             std::vector<std::vector<uint16_t>> flat_data(2, std::vector<uint16_t>(max_len, 0));
@@ -949,8 +936,6 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int, int> generate_i
                     flat_data[0][idx1++] = length;
                     flat_data[0][idx1++] = 1;  // default no_wait to 1
                     flat_data[0][2] += 4;
-
-                    max_local_size = std::max(max_local_size, (int)length);
                 }
                 for (int32_t i = data.size() - 1; i >= rev_i_end;
                      --i) {  // reverse direction local config in region where input / output shards overlap (for in
@@ -961,8 +946,6 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int, int> generate_i
                     flat_data[0][idx1++] = length;
                     flat_data[0][idx1++] = 1;  // default no_wait to 1
                     flat_data[0][2] += 4;
-
-                    max_local_size = std::max(max_local_size, (int)length);
                 }
             }
 
@@ -971,7 +954,7 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int, int> generate_i
             flattened_config[1].emplace_back(std::move(flat_data[1]));
         }
 
-        return std::make_tuple(flattened_config, max_local_size);
+        return flattened_config;
     };
 
     auto flatten_remote_config = [in_place, core_id_to_noc_coords, &device, in_out_shard_size_delta](
@@ -1065,7 +1048,7 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int, int> generate_i
     };
 
     auto flattened_pad_config = flatten_pad_config(pad_config);
-    auto [flattened_local_config, max_local_size] = flatten_local_config(local_config);
+    auto flattened_local_config = flatten_local_config(local_config);
     auto [flattened_remote_config, max_ref_size] = flatten_remote_config(remote_config, flattened_local_config);
 
     auto align_config = [](auto& config, size_t align_granularity = 1, uint16_t align_value = 0) {
@@ -1102,9 +1085,7 @@ std::tuple<std::vector<std::vector<std::vector<uint16_t>>>, int, int> generate_i
         flattened_remote_config[0],
         flattened_remote_config[1]};
 
-    // printf("max_ref_size: %d\n", max_ref_size);
-
-    return std::make_tuple(std::move(config), max_ref_size, max_local_size);
+    return std::make_tuple(std::move(config), max_ref_size);
 }
 
 std::vector<std::vector<uint16_t>> generate_sliding_window_op_config(

@@ -125,7 +125,6 @@ operation::ProgramWithCallbacks HaloDeviceOperation::create_program(
         const auto& local_config1 = std::get<0>(kernel_config)[2];
         const auto& remote_config1 = std::get<0>(kernel_config)[4];
         const auto& max_ref_size = std::get<1>(kernel_config);
-        const auto& max_local_size = std::get<2>(kernel_config);
 
         auto pad_config_tensor1 =
             sliding_window::construct_on_host_config_tensor(pad_config1, this->config_, this->parallel_config_);
@@ -159,7 +158,6 @@ operation::ProgramWithCallbacks HaloDeviceOperation::create_program(
             config_.num_cores_c,
             max_out_nsticks_per_core_,
             max_ref_size,
-            max_local_size,
             pad_config_device_tensor1,
             local_config_device_tensor1,
             remote_config_device_tensor1,
