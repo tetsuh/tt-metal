@@ -155,8 +155,9 @@ std::vector<std::vector<uint16_t>> generate_sliding_window_op_config2(
     const std::vector<uint32_t>& op_trace_metadata,
     const std::vector<ShardBoundary>& shard_boundaries,
     uint32_t stride_w,
-    uint32_t reader0_datums,
-    uint32_t reader1_datums,
+    bool has_act_block = false,
+    uint32_t reader0_datums = 0,
+    uint32_t reader1_datums = 0,
     bool pad_cores = true);
 
 std::vector<uint16_t> flatten(const std::vector<std::vector<uint16_t>>& input, uint32_t extend_with_zeroes = 0);

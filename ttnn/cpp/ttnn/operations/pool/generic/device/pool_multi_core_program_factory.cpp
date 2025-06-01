@@ -18,6 +18,7 @@ Pool2D::MultiCore::cached_program_t pool2d_multi_core_sharded_with_halo_v2_impl_
     Program& program,
     const Tensor& input,
     const Tensor& reader_indices,
+    uint32_t reader_indices_size,
     Tensor& output,
     Pool2DType pool_type,
     uint32_t in_n,
@@ -152,7 +153,7 @@ Pool2D::MultiCore::cached_program_t pool2d_multi_core_sharded_with_halo_v2_impl_
     // reader indices
     uint32_t in_reader_indices_cb_id = next_cb_index++;
     uint32_t in_reader_indices_cb_pagesize =
-        tt::round_up(out_nhw_per_core * indices_nbytes, 4);  // pagesize needs to be multiple of 4
+        tt::round_up(reader_indices_size, 4);  // pagesize needs to be multiple of 4
     uint32_t in_reader_indices_cb_npages = 1;
 
     tt::tt_metal::create_cb(
@@ -410,18 +411,6 @@ Pool2D::MultiCore::cached_program_t Pool2D::MultiCore::create(
     uint32_t out_w = output_shape[2];
 
     bool is_block_sharded = input.memory_config().memory_layout() == TensorMemoryLayout::BLOCK_SHARDED;
-
-    auto pad_metadata = sliding_window::generate_pad_metadata(sliding_window_config);
-    auto op_trace_metadata = sliding_window::generate_op_trace_metadata(sliding_window_config);
-    auto shard_boundaries = sliding_window::generate_shard_boundaries(sliding_window_config, op_trace_metadata);
-    auto top_left_indices =
-        sliding_window::generate_sliding_window_op_config(op_trace_metadata, shard_boundaries, false, true);
-    auto reader_indices =
-        sliding_window::construct_on_host_config_tensor(top_left_indices, sliding_window_config, parallel_config);
-    log_debug(tt::LogOp, "reader_indices shape: {}", reader_indices.logical_shape());
-    auto reader_indices_on_device =
-        sliding_window::move_config_tensor_to_device(reader_indices, parallel_config, is_block_sharded, input.device());
-
     auto in_n = sliding_window_config.batch_size;
     auto in_h = sliding_window_config.input_hw.first;
     auto in_w = sliding_window_config.input_hw.second;
@@ -436,10 +425,28 @@ Pool2D::MultiCore::cached_program_t Pool2D::MultiCore::create(
     auto dilation_w = sliding_window_config.dilation_hw.second;
     auto num_shards_c = sliding_window_config.num_cores_c;
 
+    auto pad_metadata = sliding_window::generate_pad_metadata(sliding_window_config);
+    auto op_trace_metadata = sliding_window::generate_op_trace_metadata(sliding_window_config);
+    auto shard_boundaries = sliding_window::generate_shard_boundaries(sliding_window_config, op_trace_metadata);
+    auto top_left_indices =
+        sliding_window::generate_sliding_window_op_config(op_trace_metadata, shard_boundaries, false, true);
+    auto top_left_indices2 =
+        sliding_window::generate_sliding_window_op_config2(op_trace_metadata, shard_boundaries, stride_w);
+
+    // tt::log_info("top_left_indices: {}", top_left_indices);
+    // tt::log_info("top_left_indices2: {}", top_left_indices2);
+
+    auto reader_indices =
+        sliding_window::construct_on_host_config_tensor(top_left_indices2, sliding_window_config, parallel_config);
+    log_debug(tt::LogOp, "reader_indices shape: {}", reader_indices.logical_shape());
+    auto reader_indices_on_device =
+        sliding_window::move_config_tensor_to_device(reader_indices, parallel_config, is_block_sharded, input.device());
+
     return pool2d_multi_core_sharded_with_halo_v2_impl_new(
         program,
         input,
         reader_indices_on_device,
+        top_left_indices2[0].size(),
         output_tensor,
         pool_type,
         in_n,

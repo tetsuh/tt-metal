@@ -962,6 +962,7 @@ tt::tt_metal::operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_
         op_trace_metadata,
         shard_boundaries,
         stride_w,
+        true,
         enable_split_reader ? act_block_h_datums_split : act_block_h_datums,
         enable_split_reader ? act_block_h_datums_split_last : 0);
 
