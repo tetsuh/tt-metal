@@ -100,6 +100,8 @@ Tensor Pool2DOp<pool_type>::invoke(
         num_cores_c = conv::get_num_cores_channels_from_parallel_config(parallel_config);
     }
 
+    tt::log_info("num_cores_nhw {} num_cores_c {}", num_cores_nhw, num_cores_c);
+
     // update the shard spec to match the output shape
     auto shard_spec = out_memory_config.shard_spec().value();
     uint32_t output_shard_width_padded =

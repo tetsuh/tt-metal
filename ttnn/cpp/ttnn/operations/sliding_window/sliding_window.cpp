@@ -1113,6 +1113,7 @@ std::vector<std::vector<uint16_t>> generate_sliding_window_op_config2(
     const std::vector<uint32_t>& op_trace_metadata,
     const std::vector<ShardBoundary>& shard_boundaries,
     uint32_t stride_w,
+    bool has_act_block,
     uint32_t reader0_datums,
     uint32_t reader1_datums,
     bool pad_cores) {
@@ -1164,7 +1165,9 @@ std::vector<std::vector<uint16_t>> generate_sliding_window_op_config2(
                 num_segments++;
                 local_top_left_indices[num_segments_ind] = num_segments;
                 num_segments = 0;
-                start_new_block = true;
+                if (has_act_block) {
+                    start_new_block = true;
+                }
                 reader0_turn = !reader0_turn;
             }
         }

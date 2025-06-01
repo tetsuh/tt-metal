@@ -685,14 +685,15 @@ tt::tt_metal::operation::ProgramWithCallbacks multi_core_optimized_conv_width_sh
         ttnn::operations::sliding_window::generate_shard_boundaries(sliding_window_config, op_trace_metadata);
 
     auto conv_sharded_input_top_left_indices = ttnn::operations::sliding_window::generate_sliding_window_op_config2(
-        op_trace_metadata, shard_boundaries, stride_w, act_block_h_datums, 0);
+        op_trace_metadata, shard_boundaries, stride_w, true, act_block_h_datums, 0);
 
     // create sharded ttnn config tensors
-    DataType indices_tt_dtype = DataType::UINT16;
+    optimized_conv_op_utils::DataType indices_tt_dtype = optimized_conv_op_utils::DataType::UINT16;
     // For 2d convs, each core in a column or row share the same specs
     CoreCoord grid_size = parallel_config.grid.bounding_box().grid_size();
 
-    bool is_block_sharded = a.memory_config().memory_layout() == TensorMemoryLayout::BLOCK_SHARDED;
+    bool is_block_sharded =
+        a.memory_config().memory_layout() == optimized_conv_op_utils::TensorMemoryLayout::BLOCK_SHARDED;
     auto conv_reader_indices_tensor = ttnn::operations::sliding_window::construct_on_host_config_tensor(
         conv_sharded_input_top_left_indices, sliding_window_config, parallel_config);
     // tt::log_info("conv_reader_indices_tensor {}", conv_reader_indices_tensor.get_logical_shape());
