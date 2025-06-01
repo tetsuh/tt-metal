@@ -67,7 +67,8 @@ void kernel_launch(uint32_t kernel_base_addr) {
     run_kernel();
     WAYPOINT("KD");
 #ifdef OVERLAPPED_DISPATCH
-    // Ensure that the previous kernel has completed before reporting this kernel as complete, to avoid mixing up the done counter.
+    // Ensure that the previous kernel has completed before reporting this kernel as complete, to avoid mixing up the
+    // done counter.
     global_program_barrier();
 #endif
 #endif
