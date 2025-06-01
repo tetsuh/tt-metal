@@ -22,7 +22,8 @@ public:
         uint32_t active_eth_ringbuffer_size);
 
     void allocate_trace_programs(std::vector<TraceNode*>& trace_nodes);
-  private:
+
+private:
     DispatchArray<WorkerConfigBufferMgr> config_buffer_mgr_;
 };
 
