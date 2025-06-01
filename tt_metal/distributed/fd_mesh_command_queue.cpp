@@ -44,7 +44,7 @@
 #include "tt_metal/impl/program/program_command_sequence.hpp"
 #include "tt_metal/impl/device/dispatch.hpp"
 #include <umd/device/types/xy_pair.h>
-#include "dispatch/simple_trace_allocator.hpp"
+#include "dispatch/ringbuffer_trace_allocator.hpp"
 
 namespace tt {
 namespace tt_metal {
@@ -925,7 +925,7 @@ void FDMeshCommandQueue::record_end() {
             hal.get_dev_addr(HalProgrammableCoreType::TENSIX, tt::tt_metal::HalL1MemAddrType::KERNEL_CONFIG);
         uint32_t worker_ringbuffer_size =
             mesh_device_->allocator()->get_config().l1_unreserved_base - worker_ringbuffer_start;
-        SimpleTraceAllocator allocator{
+        RingbufferTraceAllocator allocator{
             worker_ringbuffer_start,
             worker_ringbuffer_size,
             hal.get_dev_addr(HalProgrammableCoreType::ACTIVE_ETH, tt::tt_metal::HalL1MemAddrType::KERNEL_CONFIG),
