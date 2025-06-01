@@ -107,6 +107,23 @@ def test_demo(device, source, model_type, use_weights_from_ultralytics, use_prog
             preds = ttnn.to_torch(preds, dtype=torch.float32)
 
         results = postprocess(preds, im, im0s, batch, names)[0]
+        output = []
+        # print(results["boxes"]["xyxy"])
+        for i in range(len(results["boxes"]["xyxy"])):
+            output.append(
+                torch.concat(
+                    (
+                        results["boxes"]["xyxy"][i] / 640,
+                        results["boxes"]["conf"][i].unsqueeze(0),
+                        results["boxes"]["conf"][i].unsqueeze(0),
+                        results["boxes"]["cls"][i].unsqueeze(0),
+                    ),
+                    dim=0,
+                )
+                .numpy()
+                .tolist()
+            )
+        print(output)
         save_yolo_predictions_by_model(results, save_dir, source, model_type)
 
     logger.info("Inference done")
