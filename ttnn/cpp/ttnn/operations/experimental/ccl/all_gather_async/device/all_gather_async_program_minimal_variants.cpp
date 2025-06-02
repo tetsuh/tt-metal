@@ -374,8 +374,6 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         }
     }
     CoreRangeSet receiver_forward_core_range_set = CoreRangeSet(receiver_forward_core_ranges);
-    std::set<CoreRange> receiver_backward_core_ranges;
-    receiver_backward_core_ranges.insert(CoreRange(receiver_worker_cores[0]));
     CoreRangeSet receiver_backward_core_range_set = CoreRangeSet(receiver_backward_core_ranges);
     // L1 Scratch CB Creation
     const size_t packet_size_bytes = tt::tt_fabric::get_tt_fabric_channel_buffer_size_bytes();

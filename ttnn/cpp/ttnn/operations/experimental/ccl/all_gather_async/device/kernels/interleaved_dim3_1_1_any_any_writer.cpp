@@ -48,7 +48,8 @@ void kernel_main() {
     address_t output_address = get_arg_val<address_t>(arg_idx++);
     uint32_t input_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
     uint32_t output_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
-    uint32_t slice_num_pages = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t input_tile_id_start = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t input_tile_id_end = get_arg_val<uint32_t>(arg_idx++);
     const uint8_t out_ready_sem_noc0_x = get_arg_val<uint32_t>(arg_idx++);
     const uint8_t out_ready_sem_noc0_y = get_arg_val<uint32_t>(arg_idx++);
     uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
@@ -56,6 +57,27 @@ void kernel_main() {
     size_t out_ready_sem_backward = get_arg_val<uint32_t>(arg_idx++);
     size_t arg_for_fab = arg_idx;
     auto fabric_connection = FabricConnectionManager::build_from_args(arg_for_fab);
+
+    DPRINT << "Writer: " << "intermediate_address: " << (uint32_t)intermediate_address << "\n";
+    DPRINT << "Writer: " << "output_address: " << (uint32_t)output_address << "\n";
+    DPRINT << "Writer: " << "input_tensor_Wt: " << (uint32_t)input_tensor_Wt << "\n";
+    DPRINT << "Writer: " << "output_tensor_Wt: " << (uint32_t)output_tensor_Wt << "\n";
+    DPRINT << "Writer: " << "input_tile_id_start: " << (uint32_t)input_tile_id_start << "\n";
+    DPRINT << "Writer: " << "input_tile_id_end: " << (uint32_t)input_tile_id_end << "\n";
+    DPRINT << "Writer: " << "out_ready_sem_forward: " << (uint32_t)out_ready_sem_forward << "\n";
+    DPRINT << "Writer: " << "out_ready_sem_backward: " << (uint32_t)out_ready_sem_backward << "\n";
+    DPRINT << "Writer: " << "out_ready_sem_noc0_x: " << (uint32_t)out_ready_sem_noc0_x << "\n";
+    DPRINT << "Writer: " << "out_ready_sem_noc0_y: " << (uint32_t)out_ready_sem_noc0_y << "\n";
+
+    // compile time
+    DPRINT << "Writer: " << "my_chip_id: " << (uint32_t)my_chip_id << "\n";
+    DPRINT << "Writer: " << "cb_forward_id: " << (uint32_t)cb_forward_id << "\n";
+    DPRINT << "Writer: " << "cb_backward_id: " << (uint32_t)cb_backward_id << "\n";
+    DPRINT << "Writer: " << "packet_size_in_pages: " << (uint32_t)packet_size_in_pages << "\n";
+    DPRINT << "Writer: " << "intermediate_page_size: " << (uint32_t)intermediate_page_size << "\n";
+    DPRINT << "Writer: " << "num_targets_forward_direction: " << (uint32_t)num_targets_forward_direction << "\n";
+    DPRINT << "Writer: " << "num_targets_backward_direction: " << (uint32_t)num_targets_backward_direction << "\n";
+    DPRINT << "Writer: " << "contig_pages_advanced: " << (uint32_t)contig_pages_advanced << "\n";
 
     /* Args for overlapped all gather */
     OpSignaler op_signaler_sender;
@@ -143,7 +165,6 @@ void kernel_main() {
                 contig_pages_advanced * N_DRAM_BANKS * (intermediate_packet_id / N_DRAM_BANKS);
             uint64_t remote_noc0_dest_noc_addr =
                 get_noc_addr(intermediate_packet_first_tile_id, intermediate_addrgen, 0 /*offset*/, 0 /*noc_id*/);
-
             write_and_advance_local_read_address_for_fabric_write(
                 remote_noc0_dest_noc_addr,
                 pkt_hdr_forward,
@@ -156,6 +177,8 @@ void kernel_main() {
         }
         cb_pop_front(cb_forward_id, num_pages_to_read);
     }
+
+    DPRINT << "WRITER: Done first\n";
 
     // 2. unicast output ready semaphore forward
     uint64_t out_ready_sem_noc_addr_in_pkt_forward =
@@ -210,13 +233,16 @@ void kernel_main() {
         // In the linear case, I expect num_targets_backward_direction slices from the left, and check if I have a
         // neighbor to the right
         // In the ring case, I expect to write to the right num_forward_target times
+        DPRINT << "WRITER: backward_writes: " << backward_writes
+               << " backward_writes_expected: " << backward_writes_expected << " forward_writes: " << forward_writes
+               << " forward_writes_expected: " << forward_writes_expected << "\n";
         if ((forward_writes < forward_writes_expected) && fabric_connection.has_forward_connection()) {
-            tiles_read = 0;
+            tiles_read = input_tile_id_start;
             int slice_chip_id = my_chip_id - forward_writes - 1;
             uint32_t actual_slice_chip_id = (slice_chip_id < 0) ? ring_size + slice_chip_id : slice_chip_id;
-            tiles_to_read = slice_num_pages;
+            tiles_to_read = input_tile_id_end;
 
-            uint32_t packet_id = 0;
+            uint32_t packet_id = input_tile_id_start / contig_pages_advanced;
             while (tiles_read < tiles_to_read) {
                 uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
                 cb_wait_front(cb_forward_id, num_pages_to_read);
@@ -242,12 +268,14 @@ void kernel_main() {
                 cb_pop_front(cb_forward_id, num_pages_to_read);
             }
             // 2. unicast output ready semaphore forward
+            // DPRINT << "WRITER fwd sem inc\n";
             fabric_connection.get_forward_connection().wait_for_empty_write_slot();
             pkt_hdr_fwd->to_chip_unicast(1);
             fabric_connection.get_forward_connection().send_payload_flush_blocking_from_address(
                 packet_header_buffer_seminc_forward, sizeof(PACKET_HEADER_TYPE));
 
             forward_writes++;
+            // DPRINT << "WRITER fwd writers: " << forward_writes <<"\n";
         }
 
         // unicast backward
@@ -256,12 +284,12 @@ void kernel_main() {
         // neighbor to the left
         // In the ring case, I expect to write to the left num_backward_target times
         if ((backward_writes < backward_writes_expected) && fabric_connection.has_backward_connection()) {
-            tiles_read = 0;
+            tiles_read = input_tile_id_start;
             uint32_t slice_chip_id = my_chip_id + backward_writes + 1;
             uint32_t actual_slice_chip_id = (slice_chip_id >= ring_size) ? slice_chip_id - ring_size : slice_chip_id;
             tiles_to_read = input_tile_id_end;
 
-            uint32_t packet_id = 0;
+            uint32_t packet_id = input_tile_id_start / contig_pages_advanced;
             while (tiles_read < tiles_to_read) {
                 uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
                 cb_wait_front(cb_backward_id, num_pages_to_read);
@@ -302,4 +330,5 @@ void kernel_main() {
     }
 
     noc_async_write_barrier();
+    DPRINT << "Done WRITER.\n";
 }

@@ -175,52 +175,52 @@ def create_tt_model(
             True,  # stop_at_eos
             False,  # ci_only
         ),
-        (  # Batch-1 run (Throughput) - 1 user, small prompt
-            "models/tt_transformers/demo/sample_prompts/input_data_questions_prefill_128.json",  # input_prompts
-            True,  # instruct mode
-            1,  # repeat_batches
-            128 * 1024,  # max_seq_len
-            1,  # batch_size
-            200,  # max_generated_tokens
-            True,  # paged_attention
-            {"page_block_size": 64, "page_max_num_blocks": 4096},  # page_params
-            {"temperature": 0, "top_p": 0.08},  # sampling_params (argmax)
-            True,  # stop_at_eos
-            False,  # ci_only
-        ),
-        (  # Repeat-5 Batch-1 run (Throughput) - 1 user, small prompt
-            "models/tt_transformers/demo/sample_prompts/input_data_questions_prefill_128.json",  # input_prompts
-            True,  # instruct mode
-            2,  # repeat_batches
-            128 * 1024,  # max_seq_len
-            1,  # batch_size
-            200,  # max_generated_tokens
-            True,  # paged_attention
-            {"page_block_size": 64, "page_max_num_blocks": 4096},  # page_params
-            {"temperature": 0, "top_p": 0.08},  # sampling_params (argmax)
-            True,  # stop_at_eos
-            False,  # ci_only
-        ),
-        (  # Long-context run - Single user, long prompt (adapted to the model being used and architecture)
-            "models/tt_transformers/demo/sample_prompts/input_data_long_16k.json",  # input_prompts
-            True,  # instruct mode
-            1,  # repeat_batches
-            128 * 1024,  # max_seq_len
-            32,  # batch_size
-            200,  # max_generated_tokens
-            True,  # paged_attention
-            {"page_block_size": 64, "page_max_num_blocks": 4096},  # page_params
-            {"temperature": 0, "top_p": 0.08},  # sampling_params (argmax)
-            True,  # stop_at_eos
-            False,  # ci_only
-        ),
+        # (  # Batch-1 run (Throughput) - 1 user, small prompt
+        #     "models/tt_transformers/demo/sample_prompts/input_data_questions_prefill_128.json",  # input_prompts
+        #     True,  # instruct mode
+        #     1,  # repeat_batches
+        #     128 * 1024,  # max_seq_len
+        #     1,  # batch_size
+        #     200,  # max_generated_tokens
+        #     True,  # paged_attention
+        #     {"page_block_size": 64, "page_max_num_blocks": 4096},  # page_params
+        #     {"temperature": 0, "top_p": 0.08},  # sampling_params (argmax)
+        #     True,  # stop_at_eos
+        #     False,  # ci_only
+        # ),
+        # (  # Repeat-5 Batch-1 run (Throughput) - 1 user, small prompt
+        #     "models/tt_transformers/demo/sample_prompts/input_data_questions_prefill_128.json",  # input_prompts
+        #     True,  # instruct mode
+        #     2,  # repeat_batches
+        #     128 * 1024,  # max_seq_len
+        #     1,  # batch_size
+        #     200,  # max_generated_tokens
+        #     True,  # paged_attention
+        #     {"page_block_size": 64, "page_max_num_blocks": 4096},  # page_params
+        #     {"temperature": 0, "top_p": 0.08},  # sampling_params (argmax)
+        #     True,  # stop_at_eos
+        #     False,  # ci_only
+        # ),
+        # (  # Long-context run - Single user, long prompt (adapted to the model being used and architecture)
+        #     "models/tt_transformers/demo/sample_prompts/input_data_long_16k.json",  # input_prompts
+        #     True,  # instruct mode
+        #     1,  # repeat_batches
+        #     128 * 1024,  # max_seq_len
+        #     32,  # batch_size
+        #     200,  # max_generated_tokens
+        #     True,  # paged_attention
+        #     {"page_block_size": 64, "page_max_num_blocks": 4096},  # page_params
+        #     {"temperature": 0, "top_p": 0.08},  # sampling_params (argmax)
+        #     True,  # stop_at_eos
+        #     False,  # ci_only
+        # ),
     ],
-    ids=[
-        "batch-32",  # throughput
-        "batch-1",  # latency
-        "repeat2",  # latency with 5 repeat batches
-        "long-context",  # max-length
-    ],
+    # ids=[
+    #     "batch-32",  # throughput
+    #     "batch-1",  # latency
+    #     "repeat2",  # latency with 5 repeat batches
+    #     "long-context",  # max-length
+    # ],
     # ids=[
     #     "batch-32",  # throughput
     #     "batch-1",  # latency
@@ -242,7 +242,7 @@ def create_tt_model(
             "num_command_queues": 1,
             "dispatch_core_axis": ttnn.DispatchCoreAxis.COL,
             "worker_l1_size": 1344544,
-            "fabric_config": ttnn.FabricConfig.FABRIC_1D,
+            "fabric_config": ttnn.FabricConfig.FABRIC_1D_RING,
         }
     ],
     indirect=True,

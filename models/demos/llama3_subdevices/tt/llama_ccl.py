@@ -28,6 +28,10 @@ class TT_CCL:
         self.to_remote_semaphore_handles = []
         self.all_gather_concat_inter_tensor = self.get_all_gather_concat_inter_buffer()
 
+        self.is_6u = (
+            ttnn.GetNumPCIeDevices() == 32 and ttnn.GetNumAvailableDevices() == 32
+        )  # TODO: find better way to do this
+
         # Double buffered on each axis
         self.gather_semaphore_handles = [[], []]
         if mode == "prefill":
@@ -67,10 +71,6 @@ class TT_CCL:
                 for seqlen in self.support_seqlens:
                     self.persistent_buffers[seqlen] = {}
                     self.all_gather_buffers[seqlen] = {}
-
-        self.is_6u = (
-            ttnn.GetNumPCIeDevices() == 32 and ttnn.GetNumAvailableDevices() == 32
-        )  # TODO: find better way to do this
 
     def reset_gather_and_buffer_idx(self):
         self.gather_idx = [0, 0]
@@ -396,18 +396,18 @@ class TT_CCL:
                     dtype=ttnn.bfloat16 if key == "LAYERNORM" else ttnn.bfloat8_b,
                     memory_config=ttnn.DRAM_MEMORY_CONFIG,
                     mesh_mapper=ttnn.ReplicateTensorToMesh(self.mesh_device),
-                    cache_file_name=self.weight_cache_path / ("pb_ag_inter_" + key + str(seqlen)),
+                    cache_file_name=self.weight_cache_path / ("pb_ag_" + key + str(seqlen)),
                 )
 
                 if self.is_6u:
                     tt_output_buffer = ttnn.as_tensor(
-                        torch.zeros(shape[1]),
+                        torch.zeros(shape[0]),
                         device=self.mesh_device,
                         layout=ttnn.TILE_LAYOUT,
                         dtype=ttnn.bfloat16 if key == "LAYERNORM" else ttnn.bfloat8_b,
                         memory_config=ttnn.DRAM_MEMORY_CONFIG,
                         mesh_mapper=ttnn.ReplicateTensorToMesh(self.mesh_device),
-                        cache_file_name=self.weight_cache_path / ("pb_ag_out_" + key + str(seqlen)),
+                        cache_file_name=self.weight_cache_path / ("pb_ag_out" + key + str(seqlen)),
                     )
 
                     ag_persistent_buffers[key] = {
@@ -539,7 +539,7 @@ class TT_CCL:
     ):
         if self.mode == "prefill":
             # if self.is_6u:
-            #     return ring_reduce_scatter(
+            #     return self.ring_reduce_scatter(
             #         input_tensor_mesh,
             #         memory_config,
             #         cluster_axis,
@@ -639,7 +639,7 @@ class TT_CCL:
     def line_all_gather(self, input_tensor_mesh, dim, cluster_axis, memory_config, num_links=1, buffer_key=None):
         if self.mode == "prefill":
             if self.is_6u:
-                return ring_all_gather(
+                return self.ring_all_gather(
                     input_tensor_mesh,
                     dim,
                     cluster_axis,
@@ -701,7 +701,7 @@ class TT_CCL:
             persistent_output_buffer=persistent_buffers["output"],
             dim=dim,
             multi_device_global_semaphore=self.gather_semaphore_handles[cluster_axis][self.gather_idx[cluster_axis]],
-            num_links=num_links,
+            num_links=1,
             memory_config=memory_config,
             topology=ttnn.Topology.Ring,
             subdevice_id=self.worker_sub_device_id,

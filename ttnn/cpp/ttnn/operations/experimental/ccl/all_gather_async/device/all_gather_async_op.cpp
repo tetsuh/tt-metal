@@ -235,15 +235,15 @@ tt::tt_metal::operation::ProgramWithCallbacks AllGatherAsync::create_program_at(
     std::optional<IDevice*> forward_device = std::nullopt;
     std::optional<IDevice*> backward_device = std::nullopt;
     uint32_t device_index = 0;  // Initialize device index
-    for (uint32_t i = 0; i < this->ring_size; ++i) {
+    for (uint32_t i = 0; i < target_ring_size; ++i) {
         if (devices_to_use.at(i) == target_device) {
             device_index = i;
             if (i != 0) {
                 backward_device = devices_to_use.at(i - 1);
             } else if (topology == ttnn::ccl::Topology::Ring) {
-                backward_device = devices_to_use.at(this->ring_size - 1);
+                backward_device = devices_to_use.at(target_ring_size - 1);
             }
-            if (i != this->ring_size - 1) {
+            if (i != target_ring_size - 1) {
                 forward_device = devices_to_use.at(i + 1);
             } else if (topology == ttnn::ccl::Topology::Ring) {
                 forward_device = devices_to_use.at(0);
@@ -266,7 +266,7 @@ tt::tt_metal::operation::ProgramWithCallbacks AllGatherAsync::create_program_at(
                 output_tensors[0],
                 this->dim,
                 this->num_links,
-                this->ring_size,
+                target_ring_size,
                 device_index,
                 this->topology,
                 this->semaphore.at(0),
@@ -286,7 +286,7 @@ tt::tt_metal::operation::ProgramWithCallbacks AllGatherAsync::create_program_at(
                 output_tensors[1],
                 this->dim,
                 this->num_links,
-                this->ring_size,
+                target_ring_size,
                 device_index,
                 this->topology,
                 this->semaphore,
@@ -302,7 +302,7 @@ tt::tt_metal::operation::ProgramWithCallbacks AllGatherAsync::create_program_at(
                 output_tensors[0],
                 this->dim,
                 this->num_links,
-                this->ring_size,
+                target_ring_size,
                 device_index,
                 this->topology,
                 this->semaphore.at(0),
@@ -319,7 +319,7 @@ tt::tt_metal::operation::ProgramWithCallbacks AllGatherAsync::create_program_at(
                 output_tensors[0],
                 this->dim,
                 this->num_links,
-                this->ring_size,
+                target_ring_size,
                 device_index,
                 this->topology,
                 this->semaphore.at(0),

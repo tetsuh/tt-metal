@@ -35,13 +35,14 @@ void kernel_main() {
     ///////////////////////////////////////////////////
     // ARGS
     ///////////////////////////////////////////////////
-
+    DPRINT << "HELLO READER : in op\n";
     uint32_t arg_idx = 0;
     // Load the input tensor spec
     address_t input_tensor_address = get_arg_val<address_t>(arg_idx++);
     address_t intermediate_tensor_address = get_arg_val<address_t>(arg_idx++);
     uint32_t input_tensor_Wt = get_arg_val<uint32_t>(arg_idx++);
-    uint32_t slice_num_pages = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t input_tile_id_start = get_arg_val<uint32_t>(arg_idx++);
+    uint32_t input_tile_id_end = get_arg_val<uint32_t>(arg_idx++);
     uint32_t ring_size = get_arg_val<uint32_t>(arg_idx++);
     size_t out_ready_sem_forward = get_arg_val<uint32_t>(arg_idx++);
     size_t out_ready_sem_backward = get_arg_val<uint32_t>(arg_idx++);
@@ -52,14 +53,44 @@ void kernel_main() {
     const uint8_t signal_receiver_sem_backward_noc0_x = get_arg_val<uint32_t>(arg_idx++);
     const uint8_t signal_receiver_sem_backward_noc0_y = get_arg_val<uint32_t>(arg_idx++);
 
+    // all args, we can only print uint32_t
+    DPRINT << "Reader: " << "input_tensor_address: " << (uint32_t)input_tensor_address << "\n";
+    DPRINT << "Reader: " << "intermediate_tensor_address: " << (uint32_t)intermediate_tensor_address << "\n";
+    DPRINT << "Reader: " << "input_tensor_Wt: " << (uint32_t)input_tensor_Wt << "\n";
+    DPRINT << "Reader: " << "input_tile_id_start: " << (uint32_t)input_tile_id_start << "\n";
+    DPRINT << "Reader: " << "input_tile_id_end: " << (uint32_t)input_tile_id_end << "\n";
+    DPRINT << "Reader: " << "ring_size: " << (uint32_t)ring_size << "\n";
+    DPRINT << "Reader: " << "out_ready_sem_forward: " << (uint32_t)out_ready_sem_forward << "\n";
+    DPRINT << "Reader: " << "out_ready_sem_backward: " << (uint32_t)out_ready_sem_backward << "\n";
+    DPRINT << "Reader: " << "signal_receiver_sem_forward: " << (uint32_t)signal_receiver_sem_forward << "\n";
+    DPRINT << "Reader: " << "signal_receiver_sem_backward: " << (uint32_t)signal_receiver_sem_backward << "\n";
+    DPRINT << "Reader: " << "signal_receiver_sem_forward_noc0_x: " << (uint32_t)signal_receiver_sem_forward_noc0_x
+           << "\n";
+    DPRINT << "Reader: " << "signal_receiver_sem_forward_noc0_y: " << (uint32_t)signal_receiver_sem_forward_noc0_y
+           << "\n";
+    DPRINT << "Reader: " << "signal_receiver_sem_backward_noc0_x: " << (uint32_t)signal_receiver_sem_backward_noc0_x
+           << "\n";
+    DPRINT << "Reader: " << "signal_receiver_sem_backward_noc0_y: " << (uint32_t)signal_receiver_sem_backward_noc0_y
+           << "\n";
+
+    // // compile time
+    DPRINT << "Reader: " << "my_chip_id: " << (uint32_t)my_chip_id << "\n";
+    DPRINT << "Reader: " << "cb_forward_id: " << (uint32_t)cb_forward_id << "\n";
+    DPRINT << "Reader: " << "cb_backward_id: " << (uint32_t)cb_backward_id << "\n";
+    DPRINT << "Reader: " << "packet_size_in_pages: " << (uint32_t)packet_size_in_pages << "\n";
+    DPRINT << "Reader: " << "input_tensor_page_size: " << (uint32_t)input_tensor_page_size << "\n";
+    DPRINT << "Reader: " << "num_targets_forward_direction: " << (uint32_t)num_targets_forward_direction << "\n";
+    DPRINT << "Reader: " << "num_targets_backward_direction: " << (uint32_t)num_targets_backward_direction << "\n";
+    DPRINT << "Reader: " << "contig_pages_advanced: " << (uint32_t)contig_pages_advanced << "\n";
+
     // Push out our local slice
     constexpr bool input_tensor_is_dram = input_buffer_type == tt::tt_metal::BufferType::DRAM;
     auto input_tensor_addrgen = InterleavedAddrGenFast<input_tensor_is_dram>{
         .bank_base_address = input_tensor_address,
         .page_size = input_tensor_page_size,
         .data_format = get_dataformat(cb_forward_id)};
-    uint32_t tiles_read = 0;
-    uint32_t tiles_to_read = slice_num_pages;
+    uint32_t tiles_read = input_tile_id_start;
+    uint32_t tiles_to_read = input_tile_id_end;
     while (tiles_read < tiles_to_read) {
         uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
         cb_reserve_back(cb_forward_id, num_pages_to_read);
@@ -102,14 +133,18 @@ void kernel_main() {
     const uint32_t payload_size_bytes = input_tensor_page_size * contig_pages_advanced;
 
     while (forward_slices_received < forward_slices_expected || backward_slices_received < backward_slices_expected) {
+        DPRINT << "READER: " << forward_slices_received << " ex " << forward_slices_expected << " ; "
+               << backward_slices_received << " ; " << backward_slices_expected << "\n";
         // Do i expect more from the left?
         // In the linear case, I expect num_targets_backward_direction slices from the left
         // In the ring case, I expect num_targets_backward_direction slices from the right, (keep in mind this differs
         // for odd/even chips)
         if (backward_slices_received < backward_slices_expected) {
+            DPRINT << "Reader: backward sem wait.\n";
             while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_backward) <= backward_slices_received);
             noc_semaphore_inc(backward_receiver_semaphore_addr, 1);
             // Got it
+            DPRINT << "Reader: got backward slice.\n";
             backward_slices_received++;
 
             int backward_chip_id = my_chip_id - backward_slices_received;
@@ -121,8 +156,8 @@ void kernel_main() {
                 (topology == Topology::Ring && (backward_slices_received < (forward_writes_expected + 1)))) {
                 // read the next backward slice out of memory, and put it in CB
                 uint32_t output_tile_id_start = actual_backward_chip_id * input_tensor_Wt;
-                tiles_read = 0;
-                tiles_to_read = slice_num_pages;
+                tiles_read = input_tile_id_start;
+                tiles_to_read = input_tile_id_end;
 
                 uint32_t packet_id = input_tile_id_start / contig_pages_advanced;
                 while (tiles_read < tiles_to_read) {
@@ -153,10 +188,12 @@ void kernel_main() {
         // In the ring case, I expect num_targets_forward_direction slices from the right (keep in mind this differs for
         // odd/even chips)
         if (forward_slices_received < forward_slices_expected) {
+            DPRINT << "Reader: forward sem wait.\n";
             while (*reinterpret_cast<volatile tt_l1_ptr uint32_t*>(out_ready_sem_forward) <= forward_slices_received);
             noc_semaphore_inc(forward_receiver_semaphore_addr, 1);
             // Got it
             forward_slices_received++;
+            DPRINT << "Reader: got forward slice.\n";
             uint32_t forward_chip_id = my_chip_id + forward_slices_received;
             uint32_t actual_forward_chip_id =
                 (forward_chip_id >= ring_size) ? forward_chip_id - ring_size : forward_chip_id;
@@ -167,8 +204,8 @@ void kernel_main() {
                 (topology == Topology::Ring && (forward_slices_received < (backward_writes_expected + 1)))) {
                 // read the next forward slice out of memory, and put it in CB
                 uint32_t output_tile_id_start = actual_forward_chip_id * input_tensor_Wt;
-                tiles_read = 0;
-                tiles_to_read = slice_num_pages;
+                tiles_read = input_tile_id_start;
+                tiles_to_read = input_tile_id_end;
 
                 uint32_t packet_id = input_tile_id_start / contig_pages_advanced;
                 while (tiles_read < tiles_to_read) {
@@ -199,4 +236,5 @@ void kernel_main() {
     noc_inline_dw_write(dest_noc_addr_forward, 0);
     const uint64_t dest_noc_addr_backward = get_noc_addr(my_x[0], my_y[0], out_ready_sem_backward);
     noc_inline_dw_write(dest_noc_addr_backward, 0);
+    DPRINT << "Done reader normal.\n";
 }
