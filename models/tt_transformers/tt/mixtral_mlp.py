@@ -32,21 +32,34 @@ class TtMixtralMLP(LightweightModule):
             cache_name = lambda name: args.weight_cache_path(dtypes[name]) / (
                 f"layers.{layer_num}.feed_forward_multidevice_unsqueezed.experts.{name}"
             )
-        as_tensor = lambda name: ttnn.as_tensor(
+        
+        as_tensor = lambda name, dims: ttnn.as_tensor(
             torch_weight(name),
             dtype=dtypes[name],
             device=self.mesh_device,
-            mesh_mapper=ShardTensorToMesh(self.mesh_device, dim=0),
+            mesh_mapper=ttnn.ShardTensor2dMesh(self.mesh_device, dims=dims, mesh_shape=self.model_args.cluster_shape),
             layout=self.model_config["MLP_W_LAYOUT_TILE"],
-            memory_config=self.model_config["MLP_WEIGHTS_MEMCFG"],
-            cache_file_name=cache_name(name),
+            memory_config=self.get_mem_config(name, torch_weight),
+            # cache_file_name=cache_name(name),
         )
 
-        self.w1 = as_tensor("w1")
-        self.w2 = as_tensor("w2")
-        self.w3 = as_tensor("w3")
+        w1_w3_dims = (-2, -1)
+        w2_dims = (-1, 0)
+
+        self.w1 = as_tensor("w1", w1_w3_dims)
+        self.w2 = as_tensor("w2", w2_dims)
+        self.w3 = as_tensor("w3", w1_w3_dims)
 
         self.prefill_mlp_config = self.model_config["PREFILL_MLP_COMPUTE_CONFIG"]
+
+    def get_mem_config(self, name: str, weight) -> ttnn._ttnn.tensor.MemoryConfig:
+        num_device = self.mesh_device.get_num_devices()
+        if name == "w2":
+            _, _, hidden_dim, dim = weight(name).shape
+            return self.model_args.create_dram_sharded_mem_config((8 * hidden_dim) // num_device, dim)
+        else: 
+             _, _, dim, hidden_dim = weight(name).shape
+             return self.model_args.create_dram_sharded_mem_config(8 * dim, hidden_dim // num_device)   
 
     def forward(self, x: ttnn.Tensor, mode="decode") -> ttnn.Tensor:
         """
@@ -61,9 +74,9 @@ class TtMixtralMLP(LightweightModule):
             if seq_len >= 2048 // 2:  # Too big to compute. Set different program configs based on seqlen
                 # Reshape input to to fit on device and parallelize computation
                 x = ttnn.reshape(x, [1, seq_len // 1024, 1024, self.model_args.dim])
-                pc_1 = self.model_config["PREFILL_MLP_W1_PRG_CONFIG"]
-                pc_2 = self.model_config["PREFILL_MLP_W2_PRG_CONFIG"]
-                pc_3 = self.model_config["PREFILL_MLP_W3_PRG_CONFIG"]
+                pc_1 = self.model_config["PREFILL_MLP_W1_W3_PRG_CONFIG"](seq_len)
+                pc_2 = self.model_config["PREFILL_MLP_W2_PRG_CONFIG"](seq_len)
+                pc_3 = self.model_config["PREFILL_MLP_W1_W3_PRG_CONFIG"](seq_len)
             elif seq_len == 128:
                 pc_1 = self.model_config["PREFILL_MLP_W1_PRG_CONFIG_128"]
                 pc_2 = self.model_config["PREFILL_MLP_W2_PRG_CONFIG_128"]
@@ -72,6 +85,8 @@ class TtMixtralMLP(LightweightModule):
                 pc_1 = None
                 pc_2 = None
                 pc_3 = None
+
+            # breakpoint()
 
             w1_out = ttnn.linear(
                 x,
@@ -97,6 +112,8 @@ class TtMixtralMLP(LightweightModule):
 
             w3_out.deallocate(True)
             w1_out.deallocate(True)
+
+            breakpoint()
 
             w2_out = ttnn.linear(
                 w2_in,

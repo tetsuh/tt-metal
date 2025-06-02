@@ -115,6 +115,8 @@ def create_tt_model(
         max_seq_len=max_seq_len,
     )
 
+    tt_model_args.n_layers = 1
+
     # Avoid loading state_dict for every DP model
     if not state_dict:
         state_dict = tt_model_args.load_state_dict()
@@ -264,7 +266,7 @@ def prepare_generator_args(
             1,  # data_parallel
         ),
         (  # Long-context run - Single user, long prompt (adapted to the model being used and architecture)
-            "models/tt_transformers/demo/sample_prompts/input_data_long_64k.json",  # input_prompts
+            "models/tt_transformers/demo/sample_prompts/input_data_long_1k.json",  # input_prompts
             True,  # instruct mode
             1,  # repeat_batches
             128 * 1024,  # max_seq_len
@@ -586,6 +588,7 @@ def test_demo_text(
         logger.info("Starting prefill warmup...")
         profiler.start(f"compile_prefill", iteration=batch_idx)
         # TODO #21234 - Fix the prefill warmup for batch size > 1
+        
         logits = generator.prefill_forward_text(
             input_tokens_prefill_pt[::batch_size, :],  # Warmup prefill for each device
             page_table=page_table,

@@ -360,7 +360,9 @@ class Transformer(LightweightModule):
                 x = ttnn.to_memory_config(x, self.model_config["DECODE_RESIDUAL_MEMCFG"], activation_dtype)
             elif activation_dtype is not None and x.dtype != activation_dtype:
                 x = ttnn.typecast(x, activation_dtype)
-
+            
+            breakpoint()
+            
             x = layer(
                 x,
                 current_pos,
