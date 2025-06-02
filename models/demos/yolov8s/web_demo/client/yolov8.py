@@ -13,7 +13,6 @@ import cv2
 import numpy as np
 import orjson
 import requests
-import streamlit as st
 from streamlit_webrtc import VideoProcessorBase, webrtc_streamer
 
 # Configure the logger
@@ -62,7 +61,7 @@ class VideoProcessor(VideoProcessorBase):
                 rgb = (255, 0, 0)
             if len(box) >= 7 and class_names:
                 cls_conf = box[5]
-                cls_id = box[6]
+                cls_id = int(box[6])
                 print("%s: %f" % (class_names[cls_id], cls_conf))
                 classes = len(class_names)
                 offset = cls_id * 123457 % classes
@@ -98,7 +97,7 @@ class VideoProcessor(VideoProcessorBase):
 
         # Convert frame to PIL image and resize
         pil_image = frame.to_image()
-        pil_image = pil_image.resize((320, 320))  # Resize to target dimensions
+        pil_image = pil_image.resize((640, 640))  # Resize to target dimensions
         t1 = time.time()
 
         # Save image as JPEG in-memory with optimized settings
@@ -152,16 +151,13 @@ class VideoProcessor(VideoProcessorBase):
         return av.VideoFrame.from_ndarray(image_final, format="bgr24")
 
 
-st.sidebar.image("TT.png", use_column_width=True)
-st.sidebar.image("GS.png", use_column_width=True)
-
 webrtc_streamer(
     key="example",
-    video_transformer_factory=VideoProcessor,
+    video_processor_factory=VideoProcessor,
     media_stream_constraints={
         "video": {
-            "width": {"min": 320, "ideal": 400, "max": 960},
-            "height": {"min": 320, "ideal": 400, "max": 960},
+            "width": {"min": 640, "ideal": 400, "max": 960},
+            "height": {"min": 640, "ideal": 400, "max": 960},
             "frameRate": {"min": 1, "ideal": 50, "max": 60},
         }
     },
