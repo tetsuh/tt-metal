@@ -1,70 +1,21 @@
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_BINARY_DIR}/test/ttnn)
+
 function(setup_ttnn_test_target target_name)
     target_link_libraries(
         ${target_name}
         PUBLIC
             test_common_libs
-            ttnn
-            Metalium::Metal
-            GTest::gmock_main
+            TT::NN::CPP
     )
     target_include_directories(
         ${target_name}
         PRIVATE
-            ${UMD_HOME}
-            ${PROJECT_SOURCE_DIR}
-            ${PROJECT_SOURCE_DIR}/tt_metal
             ${PROJECT_SOURCE_DIR}/tests
             ${CMAKE_CURRENT_SOURCE_DIR}
-            "$<TARGET_PROPERTY:TT::NN::CPP,INCLUDE_DIRECTORIES>"
-    )
-    set_target_properties(
-        ${target_name}
-        PROPERTIES
-            RUNTIME_OUTPUT_DIRECTORY
-                ${PROJECT_BINARY_DIR}/test/ttnn
     )
 endfunction()
 
-set(TTNN_CCL_UNIT_TESTS_SRC
-    ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_erisc_data_mover_with_workers.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_fabric_erisc_data_mover_loopback_with_workers.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_ccl_commands.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_ccl_helpers.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_ccl_tensor_slicers.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_sharded_address_generators_new.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_sharded_address_generators.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_ccl_reduce_scatter_host_helpers.cpp
-)
-
-set(TTNN_CCL_OP_TESTS_SRC ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_persistent_fabric_ccl_ops.cpp)
-
-set(TTNN_FABRIC_EDM_SRC ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_fabric_edm.cpp)
-set(TTNN_CCL_MULTI_TENSOR_UNIT_TESTS_SRC ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_multi_tensor_ccl.cpp)
-set(TTNN_1D_FABRIC_LATENCY_TEST_SRC ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_1d_fabric_loopback_latency.cpp)
-
-set(TTNN_ACCESSOR_UNIT_TESTS_SRC
-    ${CMAKE_CURRENT_SOURCE_DIR}/accessor/test_sharded_accessor.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/accessor/test_sharded_accessor_on_device.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/accessor/test_accessor_benchmarks.cpp
-)
-
-set(TTNN_TENSOR_UNIT_TESTS_SRC
-    ${CMAKE_CURRENT_SOURCE_DIR}/tensor/common_tensor_test_utils.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tensor/test_create_tensor.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tensor/test_tensor_layout.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tensor/test_create_tensor_multi_device.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tensor/test_create_tensor_with_layout.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tensor/test_distributed_tensor.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tensor/test_mesh_tensor.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tensor/test_partition.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tensor/test_tensor_serialization.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tensor/test_tensor_sharding.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tensor/test_tensor_nd_sharding.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tensor/test_vector_conversion.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/tensor/test_xtensor_conversion.cpp
-)
-
-set(EMITC_UNIT_TESTS_SRC ${CMAKE_CURRENT_SOURCE_DIR}/emitc/test_sanity.cpp)
+# unit_tests_ttnn
 
 add_library(unit_tests_ttnn_smoke OBJECT)
 add_library(TT::NN::Test::Smoke ALIAS unit_tests_ttnn_smoke)
@@ -88,7 +39,7 @@ target_sources(
         test_sliding_window_infra.cpp
         common_test_utils.cpp
         test_generic_op.cpp
-    # test_graph_query_op_runtime.cpp
+        test_graph_query_op_runtime.cpp
 )
 target_include_directories(unit_tests_ttnn_smoke PRIVATE ${PROJECT_SOURCE_DIR}/tests)
 target_link_libraries(
@@ -117,12 +68,6 @@ target_link_libraries(
 )
 
 add_executable(unit_tests_ttnn)
-set_target_properties(
-    unit_tests_ttnn
-    PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY
-            ${PROJECT_BINARY_DIR}/test/ttnn
-)
 target_link_libraries(
     unit_tests_ttnn
     PRIVATE
@@ -130,29 +75,21 @@ target_link_libraries(
     # TT::NN::Test::Basic
 )
 
-add_executable(unit_tests_ttnn_ccl ${TTNN_CCL_UNIT_TESTS_SRC})
-add_executable(unit_tests_ttnn_ccl_ops ${TTNN_CCL_OP_TESTS_SRC})
-add_executable(unit_tests_ttnn_fabric_edm ${TTNN_FABRIC_EDM_SRC})
-add_executable(unit_tests_ttnn_ccl_multi_tensor ${TTNN_CCL_MULTI_TENSOR_UNIT_TESTS_SRC})
-add_executable(unit_tests_ttnn_1d_fabric_latency ${TTNN_1D_FABRIC_LATENCY_TEST_SRC})
-add_executable(unit_tests_ttnn_accessor ${TTNN_ACCESSOR_UNIT_TESTS_SRC})
-add_executable(unit_tests_ttnn_tensor ${TTNN_TENSOR_UNIT_TESTS_SRC})
-target_link_libraries(unit_tests_ttnn_tensor PRIVATE xtensor)
-add_executable(
-    test_ccl_multi_cq_multi_device
-    ${CMAKE_CURRENT_SOURCE_DIR}/multi_thread/test_ccl_multi_cq_multi_device.cpp
-    ${CMAKE_CURRENT_SOURCE_DIR}/multi_thread/test_utils.cpp
-)
-add_executable(unit_tests_ttnn_emitc ${EMITC_UNIT_TESTS_SRC})
+# unit_tests_ttnn_ccl
 
-target_link_libraries(
-    test_ccl_multi_cq_multi_device
+add_executable(unit_tests_ttnn_ccl)
+target_sources(
+    unit_tests_ttnn_ccl
     PRIVATE
-        Boost::asio
-        Boost::lockfree
+        ccl/test_erisc_data_mover_with_workers.cpp
+        ccl/test_fabric_erisc_data_mover_loopback_with_workers.cpp
+        ccl/test_ccl_commands.cpp
+        ccl/test_ccl_helpers.cpp
+        ccl/test_ccl_tensor_slicers.cpp
+        ccl/test_sharded_address_generators_new.cpp
+        ccl/test_sharded_address_generators.cpp
+        ccl/test_ccl_reduce_scatter_host_helpers.cpp
 )
-
-# Set up properties for all targets
 target_include_directories(unit_tests_ttnn_ccl PRIVATE ${PROJECT_SOURCE_DIR}/tests)
 target_link_libraries(
     unit_tests_ttnn_ccl
@@ -160,11 +97,85 @@ target_link_libraries(
         test_common_libs
         TT::NN::CPP
 )
+
+# unit_tests_ttnn_ccl_ops
+
+add_executable(unit_tests_ttnn_ccl_ops)
+target_sources(unit_tests_ttnn_ccl_ops PRIVATE ccl/test_persistent_fabric_ccl_ops.cpp)
 setup_ttnn_test_target(unit_tests_ttnn_ccl_ops)
+
+# unit_tests_ttnn_fabric_edm
+
+add_executable(unit_tests_ttnn_fabric_edm)
+target_sources(unit_tests_ttnn_fabric_edm PRIVATE ccl/test_fabric_edm.cpp)
 setup_ttnn_test_target(unit_tests_ttnn_fabric_edm)
+
+# unit_tests_ttnn_ccl_multi_tensor
+
+add_executable(unit_tests_ttnn_ccl_multi_tensor)
+target_sources(unit_tests_ttnn_ccl_multi_tensor PRIVATE ccl/test_multi_tensor_ccl.cpp)
 setup_ttnn_test_target(unit_tests_ttnn_ccl_multi_tensor)
+
+# unit_tests_ttnn_1d_fabric_latency
+
+add_executable(unit_tests_ttnn_1d_fabric_latency)
+target_sources(unit_tests_ttnn_1d_fabric_latency PRIVATE ccl/test_1d_fabric_loopback_latency.cpp)
 setup_ttnn_test_target(unit_tests_ttnn_1d_fabric_latency)
+
+# unit_tests_ttnn_accessor
+
+add_executable(unit_tests_ttnn_accessor)
+target_sources(
+    unit_tests_ttnn_accessor
+    PRIVATE
+        accessor/test_sharded_accessor.cpp
+        accessor/test_sharded_accessor_on_device.cpp
+        accessor/test_accessor_benchmarks.cpp
+)
 setup_ttnn_test_target(unit_tests_ttnn_accessor)
+
+# unit_tests_ttnn_tensor
+
+add_executable(unit_tests_ttnn_tensor)
+target_sources(
+    unit_tests_ttnn_tensor
+    PRIVATE
+        tensor/common_tensor_test_utils.cpp
+        tensor/test_create_tensor.cpp
+        tensor/test_tensor_layout.cpp
+        tensor/test_create_tensor_multi_device.cpp
+        tensor/test_create_tensor_with_layout.cpp
+        tensor/test_distributed_tensor.cpp
+        tensor/test_mesh_tensor.cpp
+        tensor/test_partition.cpp
+        tensor/test_tensor_serialization.cpp
+        tensor/test_tensor_sharding.cpp
+        tensor/test_tensor_nd_sharding.cpp
+        tensor/test_vector_conversion.cpp
+        tensor/test_xtensor_conversion.cpp
+)
 setup_ttnn_test_target(unit_tests_ttnn_tensor)
+target_link_libraries(unit_tests_ttnn_tensor PRIVATE xtensor)
+
+# test_ccl_multi_cq_multi_device
+
+add_executable(test_ccl_multi_cq_multi_device)
+target_sources(
+    test_ccl_multi_cq_multi_device
+    PRIVATE
+        multi_thread/test_ccl_multi_cq_multi_device.cpp
+        multi_thread/test_utils.cpp
+)
 setup_ttnn_test_target(test_ccl_multi_cq_multi_device)
+target_link_libraries(
+    test_ccl_multi_cq_multi_device
+    PRIVATE
+        Boost::asio
+        Boost::lockfree
+)
+
+# unit_tests_ttnn_emitc
+
+add_executable(unit_tests_ttnn_emitc)
+target_sources(unit_tests_ttnn_emitc PRIVATE emitc/test_sanity.cpp)
 setup_ttnn_test_target(unit_tests_ttnn_emitc)
