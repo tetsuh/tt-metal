@@ -23,8 +23,8 @@ void FabricRouterVC::GenerateDependentConfigs() {
         "Fabric Router VC requires upstream.size() == downstream.size()");
     const auto& control_plane = tt::tt_metal::MetalContext::instance().get_control_plane();
     TT_FATAL(
-        tt::tt_metal::MetalContext::instance().get_fabric_config() != FabricConfig::DISABLED && control_plane,
-        "Control plane is nullptr. Is fabric initialized yet?");
+        tt::tt_metal::MetalContext::instance().get_fabric_config() != FabricConfig::DISABLED,
+        "Control plane not available. Is fabric initialized yet?");
 
     // Zip upstream and downstream kernels together
     for (int i = 0; i < upstream_kernels_.size(); ++i) {
@@ -35,15 +35,15 @@ void FabricRouterVC::GenerateDependentConfigs() {
         // Downstream can be PREFETCH_D or DISPATCH_H
         // 4 Combinations
         const auto& src_fabric_node_id =
-            control_plane->get_fabric_node_id_from_physical_chip_id(us_kernel->GetDeviceId());
+            control_plane.get_fabric_node_id_from_physical_chip_id(us_kernel->GetDeviceId());
         const auto& dst_fabric_node_id =
-            control_plane->get_fabric_node_id_from_physical_chip_id(ds_kernel->GetDeviceId());
+            control_plane.get_fabric_node_id_from_physical_chip_id(ds_kernel->GetDeviceId());
         auto src_mesh_id = src_fabric_node_id.mesh_id;
         auto src_chip_id = src_fabric_node_id.chip_id;
         auto dst_mesh_id = dst_fabric_node_id.mesh_id;
         auto dst_chip_id = dst_fabric_node_id.chip_id;
         const auto& router_chans =
-            control_plane->get_forwarding_eth_chans_to_chip(src_fabric_node_id, dst_fabric_node_id);
+            control_plane.get_forwarding_eth_chans_to_chip(src_fabric_node_id, dst_fabric_node_id);
         TT_ASSERT(
             !router_chans.empty(),
             "No routers for (mesh {}, chip {}) to (mesh {}, chip{})",
@@ -56,7 +56,7 @@ void FabricRouterVC::GenerateDependentConfigs() {
                 us_kernel->GetDeviceId(), *router_chans.begin());
 
         const auto& router_chans_rev =
-            control_plane->get_forwarding_eth_chans_to_chip(dst_fabric_node_id, src_fabric_node_id);
+            control_plane.get_forwarding_eth_chans_to_chip(dst_fabric_node_id, src_fabric_node_id);
         TT_ASSERT(
             !router_chans_rev.empty(),
             "No routers for return path (mesh {}, chip {}) to (mesh {}, chip{})",
