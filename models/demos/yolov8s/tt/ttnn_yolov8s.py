@@ -16,7 +16,7 @@ try:
 except ModuleNotFoundError:
     use_signpost = False
 
-with open("/home/ttuser/ssinghal/tt-metal/models/demos/yolov8s/tt/configs.json", "r") as file:
+with open("models/demos/yolov8s/tt/configs.json", "r") as file:
     configs = json.load(file)
 
 conv_config = configs["conv_config"]

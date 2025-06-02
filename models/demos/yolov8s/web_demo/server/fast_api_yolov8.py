@@ -70,7 +70,8 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
-    model.release()
+    # model.release()
+    model.release_yolov8s_trace_2cqs_inference()
 
 
 def process_output(output):

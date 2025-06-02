@@ -303,7 +303,7 @@ def postprocess(preds, img, orig_imgs, batch=None, names=None):
             results.append(Results(orig_img, path=img_path, names=names, boxes=pred))
     else:
         for pred, orig_img in zip(preds, orig_imgs):
-            pred[:, :4] = scale_boxes(img.shape[2:], pred[:, :4], orig_img.shape)
+            # pred[:, :4] = scale_boxes(img.shape[2:], pred[:, :4], orig_img.shape)
             results.append(Results(orig_img, names=names, boxes=pred))
 
     return results
