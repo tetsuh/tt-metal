@@ -907,41 +907,9 @@ template <
     uint8_t sender_channel_index,
     uint8_t RECEIVER_NUM_BUFFERS,
     uint8_t SENDER_NUM_BUFFERS,
-    size_t NUM_SENDER_CHANNELS,
-    size_t NUM_RECEIVER_CHANNELS,
-    size_t MAX_NUM_SENDER_CHANNELS>
-FORCE_INLINE void run_sender_channel_step(
-    std::array<tt::tt_fabric::EthChannelBuffer<SENDER_NUM_BUFFERS>, NUM_SENDER_CHANNELS>& local_sender_channels,
-    std::array<tt::tt_fabric::EdmChannelWorkerInterface<SENDER_NUM_BUFFERS>, NUM_SENDER_CHANNELS>&
-        local_sender_channel_worker_interfaces,
-    std::array<OutboundReceiverChannelPointers<RECEIVER_NUM_BUFFERS>, NUM_RECEIVER_CHANNELS>&
-        outbound_to_receiver_channel_pointers,
-    std::array<tt::tt_fabric::EthChannelBuffer<RECEIVER_NUM_BUFFERS>, NUM_RECEIVER_CHANNELS>& remote_receiver_channels,
-    std::array<volatile tt::tt_fabric::EdmFabricSenderChannelCounters*, MAX_NUM_SENDER_CHANNELS>&
-        sender_channel_counters_ptrs,
-    std::array<PacketHeaderRecorder, MAX_NUM_SENDER_CHANNELS>& sender_channel_packet_recorders,
-    std::array<bool, NUM_SENDER_CHANNELS>& channel_connection_established) {
-    if constexpr (is_sender_channel_serviced[sender_channel_index]) {
-        run_sender_channel_step_impl<enable_packet_header_recording, VC_RECEIVER_CHANNEL, sender_channel_index>(
-            local_sender_channels[sender_channel_index],
-            local_sender_channel_worker_interfaces[sender_channel_index],
-            outbound_to_receiver_channel_pointers[VC_RECEIVER_CHANNEL],
-            remote_receiver_channels[VC_RECEIVER_CHANNEL],
-            sender_channel_counters_ptrs[sender_channel_index],
-            sender_channel_packet_recorders[sender_channel_index],
-            channel_connection_established[sender_channel_index]);
-    }
-}
-
-template <
-    bool enable_packet_header_recording,
-    uint8_t VC_RECEIVER_CHANNEL,
-    uint8_t sender_channel_index,
-    uint8_t RECEIVER_NUM_BUFFERS,
-    uint8_t SENDER_NUM_BUFFERS,
     size_t NUM_RECEIVER_CHANNELS,
     size_t NUM_SENDER_CHANNELS>
-FORCE_INLINE void run_sender_channel_step_v2(
+FORCE_INLINE void run_sender_channel_step(
     SenderContexts<RECEIVER_NUM_BUFFERS, SENDER_NUM_BUFFERS, NUM_SENDER_CHANNELS, NUM_RECEIVER_CHANNELS>&
         sender_contexts) {
     if constexpr (is_sender_channel_serviced[sender_channel_index]) {
@@ -956,30 +924,31 @@ FORCE_INLINE void run_sender_channel_step_v2(
     }
 }
 
-// template <
-//     bool enable_packet_header_recording,
-//     uint8_t VC_RECEIVER_CHANNEL,
-//     uint8_t sender_channel_index,
-//     uint8_t RECEIVER_NUM_BUFFERS,
-//     uint8_t SENDER_NUM_BUFFERS,
-//     size_t NUM_SENDER_CHANNELS>
-// FORCE_INLINE void run_sender_channel_step(
-//     std::array<SenderContext<RECEIVER_NUM_BUFFERS, SENDER_NUM_BUFFERS>, NUM_SENDER_CHANNELS>& sender_context
-// ) {
-//     if constexpr (is_sender_channel_serviced[sender_channel_index]) {
-//         run_sender_channel_step_impl<enable_packet_header_recording, VC_RECEIVER_CHANNEL, sender_channel_index>(
-//         sender_context);
-//     }
-// }
+template <uint8_t OFFSET, uint8_t RECEIVER_NUM_BUFFERS, uint8_t SENDER_NUM_BUFFERS>
+struct ReceiverContext {
+    tt::tt_fabric::EthChannelBuffer<RECEIVER_NUM_BUFFERS> local_receiver_channel;
+    ReceiverChannelPointers<RECEIVER_NUM_BUFFERS> channel_pointers;
+    WriteTransactionIdTracker<RECEIVER_NUM_BUFFERS, NUM_TRANSACTION_IDS, OFFSET> channel_trid_tracker;
+};
 
-// template <typename WriteTridTracker, uint8_t RECEIVER_NUM_BUFFERS, uint8_t SENDER_NUM_BUFFERS>
-// struct ReceiverContext {
-//     tt::tt_fabric::EthChannelBuffer<RECEIVER_NUM_BUFFERS> local_receiver_channel;
-//     std::array<tt::tt_fabric::EdmToEdmSender<SENDER_NUM_BUFFERS>, NUM_USED_RECEIVER_CHANNELS>
-//     downstream_edm_interface; ReceiverChannelPointers<RECEIVER_NUM_BUFFERS> receiver_channel_pointers;
-//     WriteTridTracker receiver_channel_trid_tracker;
-//     std::array<uint8_t, num_eth_ports>& port_direction_table;
-// };
+template <uint8_t OFFSET1, uint8_t OFFSET2, uint8_t RECEIVER_NUM_BUFFERS, uint8_t SENDER_NUM_BUFFERS>
+struct ReceiverContexts {
+    std::array<uint8_t, num_eth_ports> port_direction_table;
+    std::array<tt::tt_fabric::EdmToEdmSender<SENDER_NUM_BUFFERS>, NUM_USED_RECEIVER_CHANNELS>
+        downstream_edm_noc_interfaces;
+    ReceiverContext<OFFSET1, RECEIVER_NUM_BUFFERS, SENDER_NUM_BUFFERS> context_0;
+    ReceiverContext<OFFSET2, RECEIVER_NUM_BUFFERS, SENDER_NUM_BUFFERS> context_1;
+
+    // Helper method to access contexts by index
+    template <uint8_t channel>
+    auto& get_context() {
+        if constexpr (channel == 0) {
+            return context_0;
+        } else {
+            return context_1;
+        }
+    }
+};
 
 template <uint8_t receiver_channel, typename WriteTridTracker, uint8_t RECEIVER_NUM_BUFFERS, uint8_t SENDER_NUM_BUFFERS>
 void run_receiver_channel_step_impl(
@@ -1108,23 +1077,19 @@ void run_receiver_channel_step_impl(
 
 template <
     uint8_t receiver_channel,
-    typename WriteTridTracker,
+    uint8_t OFFSET1,
+    uint8_t OFFSET2,
     uint8_t RECEIVER_NUM_BUFFERS,
-    uint8_t SENDER_NUM_BUFFERS,
-    size_t NUM_RECEIVER_CHANNELS>
+    uint8_t SENDER_NUM_BUFFERS>
 FORCE_INLINE void run_receiver_channel_step(
-    std::array<tt::tt_fabric::EthChannelBuffer<RECEIVER_NUM_BUFFERS>, NUM_RECEIVER_CHANNELS>& local_receiver_channels,
-    std::array<tt::tt_fabric::EdmToEdmSender<SENDER_NUM_BUFFERS>, NUM_USED_RECEIVER_CHANNELS>& downstream_edm_interface,
-    std::array<ReceiverChannelPointers<RECEIVER_NUM_BUFFERS>, NUM_RECEIVER_CHANNELS>& receiver_channel_pointers,
-    WriteTridTracker& receiver_channel_trid_tracker,
-    std::array<uint8_t, num_eth_ports>& port_direction_table) {
+    ReceiverContexts<OFFSET1, OFFSET2, RECEIVER_NUM_BUFFERS, SENDER_NUM_BUFFERS>& receiver_contexts) {
     if (is_receiver_channel_serviced[receiver_channel]) {
         run_receiver_channel_step_impl<receiver_channel>(
-            local_receiver_channels[receiver_channel],
-            downstream_edm_interface,
-            receiver_channel_pointers[receiver_channel],
-            receiver_channel_trid_tracker,
-            port_direction_table);
+            receiver_contexts.template get_context<receiver_channel>().local_receiver_channel,
+            receiver_contexts.downstream_edm_noc_interfaces,
+            receiver_contexts.template get_context<receiver_channel>().channel_pointers,
+            receiver_contexts.template get_context<receiver_channel>().channel_trid_tracker,
+            receiver_contexts.port_direction_table);
     }
 }
 
@@ -1185,22 +1150,14 @@ template <
     uint8_t SENDER_NUM_BUFFERS,
     size_t NUM_SENDER_CHANNELS,
     size_t MAX_NUM_SENDER_CHANNELS,
-    size_t MAX_NUM_RECEIVER_CHANNELS>
+    size_t MAX_NUM_RECEIVER_CHANNELS,
+    uint8_t OFFSET1,
+    uint8_t OFFSET2>
 void run_fabric_edm_main_loop(
-    std::array<tt::tt_fabric::EthChannelBuffer<RECEIVER_NUM_BUFFERS>, NUM_RECEIVER_CHANNELS>& local_receiver_channels,
-    std::array<tt::tt_fabric::EdmToEdmSender<SENDER_NUM_BUFFERS>, NUM_USED_RECEIVER_CHANNELS>&
-        downstream_edm_noc_interfaces,
-    std::array<tt::tt_fabric::EthChannelBuffer<SENDER_NUM_BUFFERS>, NUM_SENDER_CHANNELS>& remote_sender_channels,
     volatile tt::tt_fabric::TerminationSignal* termination_signal_ptr,
-    std::array<volatile tt::tt_fabric::EdmFabricReceiverChannelCounters*, MAX_NUM_RECEIVER_CHANNELS>
-        receiver_channel_counters_ptrs,
-    std::array<PacketHeaderRecorder, MAX_NUM_RECEIVER_CHANNELS>& receiver_channel_packet_recorders,
-    WriteTransactionIdTracker<RECEIVER_NUM_BUFFERS, NUM_TRANSACTION_IDS, 0>& receiver_channel_0_trid_tracker,
-    WriteTransactionIdTracker<RECEIVER_NUM_BUFFERS, NUM_TRANSACTION_IDS, NUM_TRANSACTION_IDS>&
-        receiver_channel_1_trid_tracker,
-    std::array<uint8_t, num_eth_ports>& port_direction_table,
     SenderContexts<RECEIVER_NUM_BUFFERS, SENDER_NUM_BUFFERS, NUM_SENDER_CHANNELS, NUM_RECEIVER_CHANNELS>&
-        sender_contexts) {
+        sender_contexts,
+    ReceiverContexts<OFFSET1, OFFSET2, RECEIVER_NUM_BUFFERS, SENDER_NUM_BUFFERS>& receiver_contexts) {
     size_t did_nothing_count = 0;
     *termination_signal_ptr = tt::tt_fabric::TerminationSignal::KEEP_RUNNING;
 
@@ -1231,35 +1188,23 @@ void run_fabric_edm_main_loop(
 
             // There are some cases, mainly for performance, where we don't want to switch between sender channels
             // so we interoduce this to provide finer grain control over when we disable the automatic switching
-            run_sender_channel_step_v2<enable_packet_header_recording, VC0_RECEIVER_CHANNEL, 0>(sender_contexts);
+            run_sender_channel_step<enable_packet_header_recording, VC0_RECEIVER_CHANNEL, 0>(sender_contexts);
 
             if constexpr (!dateline_connection) {
-                run_receiver_channel_step<0>(
-                    local_receiver_channels,
-                    downstream_edm_noc_interfaces,
-                    receiver_channel_pointers,
-                    receiver_channel_0_trid_tracker,
-                    port_direction_table);
+                run_receiver_channel_step<0>(receiver_contexts);
             }
             if constexpr (enable_ring_support) {
-                run_receiver_channel_step<1>(
-                    local_receiver_channels,
-                    downstream_edm_noc_interfaces,
-                    receiver_channel_pointers,
-                    receiver_channel_1_trid_tracker,
-                    port_direction_table);
+                run_receiver_channel_step<1>(receiver_contexts);
             }
 
-            run_sender_channel_step_v2<enable_packet_header_recording, VC0_RECEIVER_CHANNEL, 1>(sender_contexts);
+            run_sender_channel_step<enable_packet_header_recording, VC0_RECEIVER_CHANNEL, 1>(sender_contexts);
             if constexpr (is_2d_fabric) {
-                run_sender_channel_step_v2<enable_packet_header_recording, VC0_RECEIVER_CHANNEL, 2>(sender_contexts);
-                run_sender_channel_step_v2<enable_packet_header_recording, VC0_RECEIVER_CHANNEL, 3>(sender_contexts);
+                run_sender_channel_step<enable_packet_header_recording, VC0_RECEIVER_CHANNEL, 2>(sender_contexts);
+                run_sender_channel_step<enable_packet_header_recording, VC0_RECEIVER_CHANNEL, 3>(sender_contexts);
             }
             if constexpr (enable_ring_support && !dateline_connection) {
-                run_sender_channel_step_v2<
-                    enable_packet_header_recording,
-                    VC1_RECEIVER_CHANNEL,
-                    NUM_SENDER_CHANNELS - 1>(sender_contexts);
+                run_sender_channel_step<enable_packet_header_recording, VC1_RECEIVER_CHANNEL, NUM_SENDER_CHANNELS - 1>(
+                    sender_contexts);
             }
         }
 
@@ -1524,31 +1469,7 @@ void kernel_main() {
 
     SenderContexts<RECEIVER_NUM_BUFFERS, SENDER_NUM_BUFFERS, NUM_SENDER_CHANNELS, NUM_RECEIVER_CHANNELS>
         sender_contexts;
-
-    std::array<PacketHeaderRecorder, MAX_NUM_SENDER_CHANNELS> sender_channel_packet_recorders{
-        PacketHeaderRecorder(
-            reinterpret_cast<volatile uint32_t*>(sender_0_completed_packet_header_cb_address),
-            sender_0_completed_packet_header_cb_size_headers),
-        PacketHeaderRecorder(
-            reinterpret_cast<volatile uint32_t*>(sender_1_completed_packet_header_cb_address),
-            sender_1_completed_packet_header_cb_size_headers),
-        PacketHeaderRecorder(
-            reinterpret_cast<volatile uint32_t*>(sender_2_completed_packet_header_cb_address),
-            sender_2_completed_packet_header_cb_size_headers),
-        PacketHeaderRecorder(
-            reinterpret_cast<volatile uint32_t*>(sender_3_completed_packet_header_cb_address),
-            sender_3_completed_packet_header_cb_size_headers),
-        PacketHeaderRecorder(
-            reinterpret_cast<volatile uint32_t*>(sender_4_completed_packet_header_cb_address),
-            sender_4_completed_packet_header_cb_size_headers)
-    };
-    std::array<PacketHeaderRecorder, MAX_NUM_RECEIVER_CHANNELS> receiver_channel_packet_recorders{
-        PacketHeaderRecorder(
-            reinterpret_cast<volatile uint32_t*>(receiver_0_completed_packet_header_cb_address),
-            receiver_0_completed_packet_header_cb_size_headers),
-        PacketHeaderRecorder(
-            reinterpret_cast<volatile uint32_t*>(receiver_1_completed_packet_header_cb_address),
-            receiver_1_completed_packet_header_cb_size_headers)};
+    ReceiverContexts<0, NUM_TRANSACTION_IDS, RECEIVER_NUM_BUFFERS, SENDER_NUM_BUFFERS> receiver_contexts;
 
     static_assert(SENDER_NUM_BUFFERS > 0, "compile time argument [1]: SENDER_NUM_BUFFERS must be > 0");
     static_assert(RECEIVER_NUM_BUFFERS > 0, "compile time argument [2]: RECEIVER_NUM_BUFFERS must be > 0");
@@ -1795,32 +1716,33 @@ void kernel_main() {
                     *reinterpret_cast<volatile uint32_t* const>(local_sem_address_for_acks) = 0;
                     *reinterpret_cast<volatile uint32_t* const>(teardown_sem_address) = 0;
                 }
-                new (&downstream_edm_noc_interfaces[edm_index]) tt::tt_fabric::EdmToEdmSender<SENDER_NUM_BUFFERS>(
-                    // persistent_mode -> hardcode to false for 1D because for 1D, EDM -> EDM
-                    // connections we must always use semaphore lookup
-                    // For 2D, downstream_edm_vc0_semaphore_id is an address.
-                    is_2d_fabric,
-                    0,  // Unused in routers. Used by workers to get edm direction for 2D.
-                    (downstream_edm_vc0_noc_x >> (edm_index * 8)) & 0xFF,
-                    (downstream_edm_vc0_noc_y >> (edm_index * 8)) & 0xFF,
-                    downstream_edm_vc0_buffer_base_address,
-                    SENDER_NUM_BUFFERS,
-                    downstream_edm_vc0_semaphore_id,
-                    downstream_edm_vc0_worker_registration_id,
-                    downstream_edm_vc0_worker_location_info_address,
-                    channel_buffer_size,
+                new (&receiver_contexts.downstream_edm_noc_interfaces[edm_index])
+                    tt::tt_fabric::EdmToEdmSender<SENDER_NUM_BUFFERS>(
+                        // persistent_mode -> hardcode to false for 1D because for 1D, EDM -> EDM
+                        // connections we must always use semaphore lookup
+                        // For 2D, downstream_edm_vc0_semaphore_id is an address.
+                        is_2d_fabric,
+                        0,  // Unused in routers. Used by workers to get edm direction for 2D.
+                        (downstream_edm_vc0_noc_x >> (edm_index * 8)) & 0xFF,
+                        (downstream_edm_vc0_noc_y >> (edm_index * 8)) & 0xFF,
+                        downstream_edm_vc0_buffer_base_address,
+                        SENDER_NUM_BUFFERS,
+                        downstream_edm_vc0_semaphore_id,
+                        downstream_edm_vc0_worker_registration_id,
+                        downstream_edm_vc0_worker_location_info_address,
+                        channel_buffer_size,
 #ifdef FABRIC_2D
-                    local_sender_channel_connection_buffer_index_id[edm_index],
+                        local_sender_channel_connection_buffer_index_id[edm_index],
 #else
-                    local_sender_channel_1_connection_buffer_index_id,
+                        local_sender_channel_1_connection_buffer_index_id,
 #endif
-                    reinterpret_cast<volatile uint32_t* const>(local_sem_address_for_acks),
-                    reinterpret_cast<volatile uint32_t* const>(teardown_sem_address),
-                    downstream_vc0_noc_interface_buffer_index_local_addr,  // keep common, since its a scratch noc read
-                                                                           // dest.
-                    receiver_channel_forwarding_data_cmd_buf_ids[0],
-                    receiver_channel_forwarding_sync_cmd_buf_ids[0]);
-                downstream_edm_noc_interfaces[edm_index]
+                        reinterpret_cast<volatile uint32_t* const>(local_sem_address_for_acks),
+                        reinterpret_cast<volatile uint32_t* const>(teardown_sem_address),
+                        downstream_vc0_noc_interface_buffer_index_local_addr,  // keep common, since its a scratch noc
+                                                                               // read dest.
+                        receiver_channel_forwarding_data_cmd_buf_ids[0],
+                        receiver_channel_forwarding_sync_cmd_buf_ids[0]);
+                receiver_contexts.downstream_edm_noc_interfaces[edm_index]
                     .template setup_edm_noc_cmd_buf<
                         tt::tt_fabric::edm_to_downstream_noc,
                         tt::tt_fabric::forward_and_local_write_noc_vc>();
@@ -1844,7 +1766,7 @@ void kernel_main() {
                 *reinterpret_cast<volatile uint32_t* const>(local_sem_address_for_acks) = 0;
                 *reinterpret_cast<volatile uint32_t* const>(teardown_sem_address) = 0;
             }
-            new (&downstream_edm_noc_interfaces[NUM_USED_RECEIVER_CHANNELS - 1])
+            new (&receiver_contexts.downstream_edm_noc_interfaces[NUM_USED_RECEIVER_CHANNELS - 1])
                 tt::tt_fabric::EdmToEdmSender<SENDER_NUM_BUFFERS>(
                     // persistent_mode -> hardcode to false because for EDM -> EDM
                     //  connections we must always use semaphore lookup
@@ -1868,29 +1790,27 @@ void kernel_main() {
                     downstream_vc1_noc_interface_buffer_index_local_addr,
                     receiver_channel_forwarding_data_cmd_buf_ids[1],
                     receiver_channel_forwarding_sync_cmd_buf_ids[1]);
-            downstream_edm_noc_interfaces[NUM_USED_RECEIVER_CHANNELS - 1]
+            receiver_contexts.downstream_edm_noc_interfaces[NUM_USED_RECEIVER_CHANNELS - 1]
                 .template setup_edm_noc_cmd_buf<
                     tt::tt_fabric::edm_to_downstream_noc,
                     tt::tt_fabric::forward_and_local_write_noc_vc>();
         }
     }
-    for (uint8_t i = 0; i < NUM_RECEIVER_CHANNELS; i++) {
-        new (&local_receiver_channels[i]) tt::tt_fabric::EthChannelBuffer<RECEIVER_NUM_BUFFERS>(
-            local_receiver_buffer_addresses[i],
+    new (&receiver_contexts.get_context<0>().local_receiver_channel)
+        tt::tt_fabric::EthChannelBuffer<RECEIVER_NUM_BUFFERS>(
+            remote_receiver_buffer_addresses[0],
             channel_buffer_size,
             sizeof(PACKET_HEADER_TYPE),
             eth_transaction_ack_word_addr,  // Unused, otherwise probably need to have unique ack word per channel
-            receiver_channel_base_id + i);
-    }
-
-    for (uint8_t i = 0; i < NUM_SENDER_CHANNELS; i++) {
-        new (&remote_sender_channels[i]) tt::tt_fabric::EthChannelBuffer<SENDER_NUM_BUFFERS>(
-            remote_sender_buffer_addresses[i],
+            receiver_channel_base_id);
+    new (&receiver_contexts.get_context<1>().local_receiver_channel)
+        tt::tt_fabric::EthChannelBuffer<RECEIVER_NUM_BUFFERS>(
+            remote_receiver_buffer_addresses[1],
             channel_buffer_size,
             sizeof(PACKET_HEADER_TYPE),
-            0,  // For sender channels there is no eth_transaction_ack_word_addr because they don't send acks
-            i);
-    }
+            eth_transaction_ack_word_addr,  // Unused, otherwise probably need to have unique ack word per channel
+            receiver_channel_base_id);
+
     init_local_sender_channel_worker_interfaces(
         local_sender_connection_live_semaphore_addresses,
         local_sender_connection_info_addresses,
@@ -1962,7 +1882,7 @@ void kernel_main() {
     // us at the wrong time, we might be in base context.
     if constexpr (!is_2d_fabric) {
         if (has_downstream_edm_vc0_buffer_connection) {
-            for (auto& downstream_edm_noc_interface : downstream_edm_noc_interfaces) {
+            for (auto& downstream_edm_noc_interface : receiver_contexts.downstream_edm_noc_interfaces) {
                 downstream_edm_noc_interface.template open<true, tt::tt_fabric::worker_handshake_noc>();
                 *downstream_edm_noc_interface.from_remote_buffer_slot_rdptr_ptr = 0;
                 ASSERT(*downstream_edm_noc_interface.from_remote_buffer_slot_rdptr_ptr == 0);
@@ -2009,8 +1929,9 @@ void kernel_main() {
         while (has_downstream_edm) {
             if (has_downstream_edm & 0x1) {
                 // open connections with available downstream edms
-                downstream_edm_noc_interfaces[edm_index].template open<true, tt::tt_fabric::worker_handshake_noc>();
-                *downstream_edm_noc_interfaces[edm_index].from_remote_buffer_slot_rdptr_ptr = 0;
+                receiver_contexts.downstream_edm_noc_interfaces[edm_index]
+                    .template open<true, tt::tt_fabric::worker_handshake_noc>();
+                *receiver_contexts.downstream_edm_noc_interfaces[edm_index].from_remote_buffer_slot_rdptr_ptr = 0;
             }
             edm_index++;
             has_downstream_edm >>= 1;
@@ -2027,13 +1948,13 @@ void kernel_main() {
                 connect_ring = (has_downstream_edm_vc0_buffer_connection & (0x1 << eth_chan_directions::NORTH)) != 0;
             }
             if (connect_ring) {
-                downstream_edm_noc_interfaces[NUM_USED_RECEIVER_CHANNELS - 1]
+                receiver_contexts.downstream_edm_noc_interfaces[NUM_USED_RECEIVER_CHANNELS - 1]
                     .template open<true, tt::tt_fabric::worker_handshake_noc>();
-                *downstream_edm_noc_interfaces[NUM_USED_RECEIVER_CHANNELS - 1].from_remote_buffer_slot_rdptr_ptr = 0;
+                *receiver_contexts.downstream_edm_noc_interfaces[NUM_USED_RECEIVER_CHANNELS - 1]
+                     .from_remote_buffer_slot_rdptr_ptr = 0;
             }
         }
     }
-    std::array<uint8_t, num_eth_ports> port_direction_table;
 #if defined(FABRIC_2D) && defined(DYNAMIC_ROUTING_ENABLED)
     tt_l1_ptr fabric_router_l1_config_t* routing_table =
         reinterpret_cast<tt_l1_ptr fabric_router_l1_config_t*>(eth_l1_mem::address_map::FABRIC_ROUTER_CONFIG_BASE);
@@ -2042,7 +1963,7 @@ void kernel_main() {
         auto forwarding_channel = routing_table->port_direction.directions[i];
         if (forwarding_channel != INVALID_DIRECTION) {
             // A valid port/eth channel was found for this direction. Specify the port to direction lookup
-            port_direction_table[forwarding_channel] = i;
+            receiver_contexts.port_direction_table[forwarding_channel] = i;
         }
     }
 #endif
@@ -2061,17 +1982,7 @@ void kernel_main() {
         SENDER_NUM_BUFFERS,
         NUM_SENDER_CHANNELS,
         MAX_NUM_SENDER_CHANNELS,
-        MAX_NUM_RECEIVER_CHANNELS>(
-        local_receiver_channels,
-        downstream_edm_noc_interfaces,
-        remote_sender_channels,
-        termination_signal_ptr,
-        {receiver_0_channel_counters_ptr, receiver_1_channel_counters_ptr},
-        receiver_channel_packet_recorders,
-        receiver_channel_0_trid_tracker,
-        receiver_channel_1_trid_tracker,
-        port_direction_table,
-        sender_contexts);
+        MAX_NUM_RECEIVER_CHANNELS>(termination_signal_ptr, sender_contexts, receiver_contexts);
 
     if constexpr (persistent_mode) {
         // we force these values to a non-zero value so that if we run the fabric back to back,
@@ -2088,8 +1999,8 @@ void kernel_main() {
     }
 
     // make sure all the noc transactions are acked before re-init the noc counters
-    receiver_channel_0_trid_tracker.all_buffer_slot_transactions_acked();
-    receiver_channel_1_trid_tracker.all_buffer_slot_transactions_acked();
+    receiver_contexts.get_context<0>().channel_trid_tracker.all_buffer_slot_transactions_acked();
+    receiver_contexts.get_context<1>().channel_trid_tracker.all_buffer_slot_transactions_acked();
 
     // re-init the noc counters as the noc api used is not incrementing them
     ncrisc_noc_counters_init();
