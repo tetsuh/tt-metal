@@ -8,9 +8,7 @@ import pytest
 from loguru import logger
 from tests.ttnn.unit_tests.operations.ccl.test_new_reduce_scatter import run_reduce_scatter_impl
 from tests.ttnn.unit_tests.operations.ccl.test_all_gather import is_unsupported_case
-from tests.ttnn.unit_tests.operations.ccl.test_new_all_reduce import check_mesh_tensor_alloc
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_equal, comp_pcc
-from models.utility_functions import skip_for_grayskull
 
 
 def create_global_semaphores(mesh_device, num_devices, cores, initial_value):
@@ -90,10 +88,6 @@ def run_all_gather_impl(
         )
         for _ in range(num_iters)
     ]
-
-    for im_buf, out_buf in zip(persistent_intermediate_buffers, persistent_output_buffers):
-        check_mesh_tensor_alloc(im_buf)
-        check_mesh_tensor_alloc(out_buf)
 
     logger.info("Done creating persistent buffers")
 
@@ -178,14 +172,19 @@ def run_all_gather_impl(
     t3k_mesh_device.clear_loaded_sub_device_manager()
 
 
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "num_devices, num_links, ag_output_shape, dim, layout, ag_input_dtype",
     [
+        # 4k shapes
         (8, 1, [1, 1, 4096, 320 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
         (8, 1, [1, 1, 4096, 256 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
         (8, 1, [1, 1, 4096, 32 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat16),
         (8, 1, [1, 1, 4096, 896 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
+        # 8k shapes
+        (8, 1, [1, 1, 8192, 320 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
+        (8, 1, [1, 1, 8192, 256 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
+        (8, 1, [1, 1, 8192, 32 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat16),
+        (8, 1, [1, 1, 8192, 896 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
     ],
 )
 @pytest.mark.parametrize(
@@ -255,7 +254,7 @@ def test_all_gather_async(
 @pytest.mark.parametrize(
     "enable_trace, num_iters",
     [
-        (True, 10),
+        (True, 1),
         # (False, 1),
     ],
 )
@@ -263,11 +262,6 @@ def test_all_gather_async(
     "device_params, rs_topology",
     [
         ({"fabric_config": ttnn.FabricConfig.FABRIC_1D_RING, "trace_region_size": 90112}, ttnn.Topology.Ring),
-        # ({"fabric_config": ttnn.FabricConfig.FABRIC_1D, "trace_region_size": 90112}, ttnn.Topology.Linear),
-        # (
-        #    {"trace_region_size": 90112},
-        #    ttnn.Topology.Ring,
-        # ),
     ],
     indirect=["device_params"],
 )

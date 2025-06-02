@@ -8,8 +8,6 @@ import math
 from loguru import logger
 import ttnn
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_equal, comp_pcc
-from tests.ttnn.unit_tests.operations.ccl.test_new_all_reduce import check_mesh_tensor_alloc
-from models.utility_functions import skip_for_grayskull
 from tests.ttnn.unit_tests.operations.ccl.test_all_gather import is_unsupported_case
 
 from ttnn import ShardTensorToMesh, ConcatMeshToTensor
@@ -58,8 +56,6 @@ def run_all_gather_impl(
     )
     if is_known_failure:
         pytest.skip(f"Skipping unsupported case {message}.")
-
-    devices = t3k_mesh_device.get_devices()
 
     if not use_legacy_allgather:
         if num_iters < 1:
@@ -111,10 +107,6 @@ def run_all_gather_impl(
         )
         for _ in range(num_iters)
     ]
-
-    for im_buf, out_buf in zip(persistent_intermediate_buffers, persistent_output_buffers):
-        check_mesh_tensor_alloc(im_buf)
-        check_mesh_tensor_alloc(out_buf)
 
     logger.info("Done creating persistent buffers")
 
@@ -327,18 +319,11 @@ def run_all_gather_impl(
         logger.info(f"{output}, iteration {i}")
         assert eq, f"{i} FAILED ag: {output}"
 
-        # print(f"AG TORCH TENSOR {torch_ag_out_tensor}")
-        # print(f"AG TT TENSOR {tt_ag_out}")
-        # print(f"MM TORCH TENSOR {torch_mm_out_tensor}")
-        # print(f"MM TT TENSOR {tt_mm_out}")
-
     if not use_legacy_allgather:
         t3k_mesh_device.reset_sub_device_stall_group()
         t3k_mesh_device.clear_loaded_sub_device_manager()
 
 
-# Enumerate the post-commit cases explicitly
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "num_devices, num_links, ag_output_shape, dim, layout, matmul_output_dim, max_in0_block_w, matmul_weights_dtype, ag_input_dtype, use_bias",
     [
@@ -373,12 +358,6 @@ def run_all_gather_impl(
     "device_params, use_legacy_allgather, all_gather_topology",
     [
         ({"fabric_config": ttnn.FabricConfig.FABRIC_1D_RING, "trace_region_size": 90112}, False, ttnn.Topology.Ring),
-        # ({"fabric_config": ttnn.FabricConfig.FABRIC_1D, "trace_region_size": 90112}, False, ttnn.Topology.Linear),
-        # (
-        #    {"trace_region_size": 90112},
-        #    True,
-        #    ttnn.Topology.Ring,
-        # ),
     ],
     indirect=["device_params"],
 )

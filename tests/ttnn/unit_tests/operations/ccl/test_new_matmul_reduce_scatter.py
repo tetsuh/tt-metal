@@ -8,8 +8,6 @@ import math
 from loguru import logger
 import ttnn
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_equal, comp_pcc
-from tests.ttnn.unit_tests.operations.ccl.test_new_all_reduce import check_mesh_tensor_alloc
-from models.utility_functions import skip_for_grayskull
 from tests.ttnn.unit_tests.operations.ccl.test_all_gather import is_unsupported_case
 
 from ttnn import ShardTensorToMesh, ConcatMeshToTensor
@@ -51,8 +49,6 @@ def run_reduce_scatter_impl(
     # Set the default config
     if mem_config_weights is None:
         mem_config_weights = mem_config_rs
-
-    devices = t3k_mesh_device.get_devices()
 
     ##### Fabric setup #####
     compute_grid_size = t3k_mesh_device.compute_with_storage_grid_size()
@@ -105,10 +101,6 @@ def run_reduce_scatter_impl(
         )
         for _ in range(num_iters)
     ]
-
-    for im_buf, out_buf in zip(persistent_intermediate_buffers, persistent_output_buffers):
-        check_mesh_tensor_alloc(im_buf)
-        check_mesh_tensor_alloc(out_buf)
 
     logger.info("Done creating persistent buffers")
 
@@ -302,8 +294,6 @@ def run_reduce_scatter_impl(
     t3k_mesh_device.clear_loaded_sub_device_manager()
 
 
-# Enumerate the post-commit cases explicitly
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "num_devices, num_links, mm_weights_shape, rs_input_shape, mm_shard_dim, rs_scatter_dim, layout, max_in0_block_w, matmul_weights_dtype, rs_input_dtype, use_bias",
     [

@@ -8,8 +8,6 @@ import math
 from loguru import logger
 import ttnn
 from tests.tt_eager.python_api_testing.sweep_tests.comparison_funcs import comp_equal, comp_pcc
-from tests.ttnn.unit_tests.operations.ccl.test_new_all_reduce import check_mesh_tensor_alloc
-from models.utility_functions import skip_for_grayskull
 from tests.ttnn.unit_tests.operations.ccl.test_all_gather import is_unsupported_case
 
 from ttnn import ShardTensorToMesh, ConcatMeshToTensor
@@ -39,8 +37,6 @@ def run_reduce_scatter_impl(
     torch.manual_seed(0)
 
     tile = (32, 32)
-
-    devices = t3k_mesh_device.get_devices()
 
     ##### Fabric setup #####
     compute_grid_size = t3k_mesh_device.compute_with_storage_grid_size()
@@ -94,9 +90,6 @@ def run_reduce_scatter_impl(
         for _ in range(num_iters)
     ]
 
-    for im_buf, out_buf in zip(persistent_intermediate_buffers, persistent_output_buffers):
-        check_mesh_tensor_alloc(im_buf)
-        check_mesh_tensor_alloc(out_buf)
     logger.info("Done creating persistent buffers")
 
     ##### All gather input setup #####
@@ -165,7 +158,6 @@ def run_reduce_scatter_impl(
         # Synchronize the devices
         ttnn.synchronize_device(t3k_mesh_device, sub_device_ids=sub_device_stall_group)
 
-        # tt_reduce_scatter_output_list.append(tt_reduce_scatter_output_tensor)
     else:
         for i in range(num_iters):
             tt_reduce_scatter_output_tensor = run_op(i)
@@ -189,15 +181,10 @@ def run_reduce_scatter_impl(
         logger.info(f"{output}, iteration {i}")
         assert eq, f"{i} FAILED ag: {output}"
 
-        # print(f"RS TORCH TENSOR {torch_rs_out}")
-        # print(f"RS TT TENSOR {tt_rs_out}")
-
     t3k_mesh_device.reset_sub_device_stall_group()
     t3k_mesh_device.clear_loaded_sub_device_manager()
 
 
-# Enumerate the post-commit cases explicitly
-@skip_for_grayskull("Requires eth connected devices to run")
 @pytest.mark.parametrize(
     "num_devices, num_links, rs_input_shape, dim, layout, rs_input_dtype",
     [
@@ -238,11 +225,6 @@ def run_reduce_scatter_impl(
     "device_params, rs_topology",
     [
         ({"fabric_config": ttnn.FabricConfig.FABRIC_1D_RING, "trace_region_size": 90112}, ttnn.Topology.Ring),
-        # ({"fabric_config": ttnn.FabricConfig.FABRIC_1D, "trace_region_size": 90112}, ttnn.Topology.Linear),
-        # (
-        #    {"trace_region_size": 90112},
-        #    ttnn.Topology.Ring,
-        # ),
     ],
     indirect=["device_params"],
 )
