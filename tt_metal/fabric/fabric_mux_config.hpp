@@ -110,7 +110,8 @@ struct FabricMuxConfig {
         auto num_total_channels = num_full_size_channels + num_header_only_channels;
 
         this->full_size_channel_size_bytes = num_buffers_full_size_channel * buffer_size_bytes_full_size_channel;
-        this->header_only_channel_size_bytes = num_buffers_header_only_channel * sizeof(tt::tt_fabric::PacketHeader);
+        this->header_only_channel_size_bytes =
+            num_buffers_header_only_channel * tt::tt_fabric::get_tt_fabric_packet_header_size_bytes();
 
         this->memory_map_start_address = base_l1_address;
 
@@ -140,7 +141,7 @@ struct FabricMuxConfig {
         if (channel_type == FabricMuxChannelType::FULL_SIZE_CHANNEL) {
             return this->buffer_size_bytes_full_size_channel;
         } else if (channel_type == FabricMuxChannelType::HEADER_ONLY_CHANNEL) {
-            return sizeof(tt::tt_fabric::PacketHeader);
+            return tt::tt_fabric::get_tt_fabric_packet_header_size_bytes();
         } else {
             TT_THROW("Unexpected channel type: {}", channel_type);
         }

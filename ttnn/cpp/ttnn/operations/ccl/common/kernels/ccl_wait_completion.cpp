@@ -13,7 +13,7 @@
 
 void kernel_main() {
     constexpr size_t num_signals_to_wait_for = get_compile_time_arg_val(0);
-    constexpr size_t send_termination_signals = get_compile_time_arg_val(1);
+    constexpr size_t send_termination_signals = false;
     std::array<volatile uint32_t*, num_signals_to_wait_for> sem_addrs;
     std::array<size_t, num_signals_to_wait_for> expected_sem_counts;
     std::array<size_t, num_signals_to_wait_for> current_sem_counts;
@@ -51,17 +51,5 @@ void kernel_main() {
         }
     }
 
-    DPRINT << "DONE RECEIVING SEMINCS. SHUTTING DOWN FABRIC\n";
-
-    if (send_termination_signals) {
-        size_t num_termination_signals = get_arg_val<uint32_t>(arg_idx++);
-        for (size_t i = 0; i < num_termination_signals; ++i) {
-            uint32_t termination_addr = get_arg_val<uint32_t>(arg_idx++);
-            uint32_t noc_x = get_arg_val<uint32_t>(arg_idx++);
-            uint32_t noc_y = get_arg_val<uint32_t>(arg_idx++);
-            DPRINT << "SENDING TERMINATION SIGNAL TO " << (uint32_t)noc_x << " " << (uint32_t)noc_y << " " << (uint32_t)termination_addr << "\n";
-            noc_semaphore_inc(get_noc_addr(noc_x, noc_y, termination_addr), 1);
-        }
-    }
     DPRINT << "DRAIN DONE\n";
 }

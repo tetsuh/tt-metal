@@ -15,7 +15,6 @@
 #include "ttnn/operations/ccl/shared_with_host/hetergeneous_data_structs.hpp"
 #include <tt-metalium/program.hpp>
 #include "ttnn/tensor/types.hpp"
-#include "tt_metal/fabric/erisc_datamover_builder_helper.hpp"
 #include "cpp/ttnn/operations/ccl/common/host/ccl_command_stream_builders.hpp"
 
 namespace ttnn {
@@ -57,14 +56,19 @@ std::vector<ttnn::Tensor> unpad_output_tensor(
     const ttnn::SmallVector<uint32_t>& unpad_elements,
     const int dim);
 
+enum class LineDirection : uint8_t {
+    FORWARD,
+    BACKWARD
+};
+
 class LineTopology {
    public:
     LineTopology(
         size_t line_size,
         size_t line_index);
 
-    bool is_first_device_in_line(ttnn::ccl::EdmLineFabricOpInterface::Direction direction) const;
-    bool is_last_device_in_line(ttnn::ccl::EdmLineFabricOpInterface::Direction direction) const;
+    bool is_first_device_in_line(LineDirection direction) const;
+    bool is_last_device_in_line(LineDirection direction) const;
 
     bool is_at_end_of_line() const;
 
@@ -72,7 +76,7 @@ class LineTopology {
 
     size_t line_index() const;
 
-    size_t get_distance_to_end_of_line(ttnn::ccl::EdmLineFabricOpInterface::Direction direction) const;
+    size_t get_distance_to_end_of_line(LineDirection direction) const;
 
     ttnn::ccl::Topology topology() const;
 

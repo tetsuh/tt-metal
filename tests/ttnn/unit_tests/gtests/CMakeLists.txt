@@ -21,7 +21,6 @@ set(TTNN_UNIT_TESTS_SRC
 )
 
 set(TTNN_CCL_UNIT_TESTS_SRC
-    ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_erisc_data_mover_with_workers.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_fabric_erisc_data_mover_loopback_with_workers.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_ccl_commands.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/ccl/test_ccl_helpers.cpp

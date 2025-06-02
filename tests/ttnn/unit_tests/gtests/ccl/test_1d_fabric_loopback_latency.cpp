@@ -258,15 +258,8 @@ inline void RunPersistent1dFabricLatencyTest(
 
         std::optional<ttnn::ccl::EdmLineFabricOpInterface> local_device_fabric_handle;
         if (!use_device_init_fabric) {
-            local_device_fabric_handle =
-                ttnn::ccl::EdmLineFabricOpInterface::build_program_builder_worker_connection_fabric(
-                    device,
-                    forward_device,
-                    backward_device,
-                    &program,
-                    enable_persistent_fabric_mode,
-                    num_links,
-                    topology);
+            local_device_fabric_handle = ttnn::ccl::LineDirection::build_program_builder_worker_connection_fabric(
+                device, forward_device, backward_device, &program, enable_persistent_fabric_mode, num_links, topology);
         }
 
         // reserve CB
@@ -314,7 +307,7 @@ inline void RunPersistent1dFabricLatencyTest(
                                       &program,
                                       &worker_core_logical](
                                          bool is_connected_in_direction,
-                                         ttnn::ccl::EdmLineFabricOpInterface::Direction direction,
+                                         ttnn::ccl::LineDirection direction,
                                          std::vector<uint32_t>& rt_args_out) {
             rt_args_out.push_back(is_connected_in_direction);
             if (!use_device_init_fabric) {
@@ -335,8 +328,7 @@ inline void RunPersistent1dFabricLatencyTest(
                 if (is_connected_in_direction) {
                     tt::tt_fabric::append_fabric_connection_rt_args(
                         device->id(),
-                        direction == ttnn::ccl::EdmLineFabricOpInterface::FORWARD ? forward_device->id()
-                                                                                  : backward_device->id(),
+                        direction == ttnn::ccl::LineDirection::FORWARD ? forward_device->id() : backward_device->id(),
                         0,
                         program,
                         {worker_core_logical},
@@ -434,8 +426,8 @@ inline void RunPersistent1dFabricLatencyTest(
             rt_args.push_back(std::abs(static_cast<int>(i) - static_cast<int>(latency_writer_index)));
         }
 
-        build_connection_args(has_forward_connection, ttnn::ccl::EdmLineFabricOpInterface::FORWARD, rt_args);
-        build_connection_args(has_backward_connection, ttnn::ccl::EdmLineFabricOpInterface::BACKWARD, rt_args);
+        build_connection_args(has_forward_connection, ttnn::ccl::LineDirection::FORWARD, rt_args);
+        build_connection_args(has_backward_connection, ttnn::ccl::LineDirection::BACKWARD, rt_args);
         tt_metal::SetRuntimeArgs(program, worker_kernel_id, worker_core_logical, rt_args);
 
         program_device_index++;

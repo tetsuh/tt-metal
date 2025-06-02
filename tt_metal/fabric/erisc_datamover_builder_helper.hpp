@@ -6,7 +6,7 @@
 
 #include "tt_metal/fabric/erisc_datamover_builder.hpp"
 
-#include "tt-metal/fabric/fabric_edm_types.hpp"
+#include "tt_metal/fabric/fabric_edm_types.hpp"
 #include "ttnn/distributed/types.hpp"
 
 namespace tt::tt_metal::tt_fabric {
@@ -28,7 +28,7 @@ public:
         bool enable_persistent_mode,
         std::optional<size_t> desired_num_links = std::nullopt,
         bool build_in_worker_connection_mode = false,
-        Topology topology = Topology::Linear,
+        tt::tt_fabric::Topology topology = tt::tt_fabric::Topology::Linear,
         bool is_galaxy = false);
 
     // Invocable per chip if we want to collectively build the fabric by building this separately per chip
@@ -41,14 +41,14 @@ public:
         bool enable_persistent_mode,
         std::optional<size_t> desired_num_links,
         bool build_in_worker_connection_mode = false,
-        Topology topology = Topology::Linear);
+        tt::tt_fabric::Topology topology = tt::tt_fabric::Topology::Linear);
 
     static EdmLineFabricOpInterface build_program_builder_worker_connection_fabric(
         const std::vector<tt::tt_metal::IDevice*>& device_sequence,
         const std::vector<tt::tt_metal::Program*>& program_sequence,
         bool enable_persistent_mode,
         std::optional<size_t> desired_num_links = std::nullopt,
-        Topology topology = Topology::Linear);
+        tt::tt_fabric::Topology topology = tt::tt_fabric::Topology::Linear);
     static EdmLineFabricOpInterface build_program_builder_worker_connection_fabric(
         tt::tt_metal::IDevice* local_device,
         tt::tt_metal::IDevice* forward_device,
@@ -56,7 +56,7 @@ public:
         tt::tt_metal::Program* program,
         bool enable_persistent_mode,
         std::optional<size_t> desired_num_links = std::nullopt,
-        Topology topology = Topology::Linear);
+        tt::tt_fabric::Topology topology = tt::tt_fabric::Topology::Linear);
 
     // Will create a connection adapter for a worker which can be used to pass args to the worker kernel talking to the
     // corresponding fabric endpoint. This interface will guarantee unique connections only so requesting more unique
@@ -127,19 +127,11 @@ void initialize_edm_fabric(
     distributed::MeshDevice* mesh_device,
     bool wrap_fabric_around_mesh = false,
     std::optional<size_t> context_switch_interval_override = std::nullopt,
-    Topology topology = Topology::Linear);
+    tt::tt_fabric::Topology topology = tt::tt_fabric::Topology::Linear);
 void teardown_edm_fabric(
-    distributed::MeshDevice* mesh_device, bool wrap_fabric_around_mesh = false, Topology topology = Topology::Linear);
-
-tt::tt_metal::KernelHandle generate_edm_kernel_impl(
-    Program& program,
-    const IDevice* device,
-    const EDMBuilder& edm_builder,
-    const std::string& kernel_path,
-    const CoreCoord& eth_core,
-    tt::tt_metal::DataMovementProcessor risc_id,
-    tt::tt_metal::NOC noc_id,
-    std::optional<tt::tt_metal::KernelBuildOptLevel> opt_level = std::nullopt);
+    distributed::MeshDevice* mesh_device,
+    bool wrap_fabric_around_mesh = false,
+    tt::tt_fabric::Topology topology = tt::tt_fabric::Topology::Linear);
 
 tt::tt_metal::KernelHandle generate_edm_kernel(
     Program& program,

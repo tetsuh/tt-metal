@@ -24,8 +24,6 @@ void kernel_main() {
     constexpr uint32_t total_pages_to_send = get_compile_time_arg_val(1);
     constexpr uint32_t page_size = get_compile_time_arg_val(2);
     constexpr uint32_t num_buffers_per_channel = get_compile_time_arg_val(3);
-    constexpr ttnn::ccl::EriscDataMoverTerminationMode termination_mode =
-        static_cast<ttnn::ccl::EriscDataMoverTerminationMode>(get_compile_time_arg_val(4));
 
     ccl::edm::WorkerToEdmSender<termination_mode> sender(
         ttnn::ccl::WorkerXY(eth_sender_noc_x, eth_sender_noc_y),

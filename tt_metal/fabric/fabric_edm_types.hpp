@@ -29,32 +29,32 @@ struct coord_t {
     uint32_t y;
 };
 
-enum SendStatus : uint8_t {
-    // Indicates that the sender was able to send the payload
-    // but was not able to send the channel_sync_t at the end of the
-    // buffer
-    //
-    // This enum should only ever be returned if we are sending less than
-    // a full packet/buffer of data AND when we are trying to send the
-    // channel_sync_t at the end of the buffer (which must be as a separate
-    // command) but the eth_tx_cmd_q is busy for that second message
-    //
-    // Receiving this value indicates we
-    // MUST:
-    // - Eventually send the channel_sync_t before advancing to the next buffer
-    // MUST NOT:
-    // - Advance to the next buffer index
-    // - Forward the other sender channel's data (if it has any)
-    SENT_PAYLOAD_ONLY,
+// enum SendStatus : uint8_t {
+//     // Indicates that the sender was able to send the payload
+//     // but was not able to send the channel_sync_t at the end of the
+//     // buffer
+//     //
+//     // This enum should only ever be returned if we are sending less than
+//     // a full packet/buffer of data AND when we are trying to send the
+//     // channel_sync_t at the end of the buffer (which must be as a separate
+//     // command) but the eth_tx_cmd_q is busy for that second message
+//     //
+//     // Receiving this value indicates we
+//     // MUST:
+//     // - Eventually send the channel_sync_t before advancing to the next buffer
+//     // MUST NOT:
+//     // - Advance to the next buffer index
+//     // - Forward the other sender channel's data (if it has any)
+//     SENT_PAYLOAD_ONLY,
 
-    // Indicates both the payload and the channel sync were sent successfully
-    SENT_PAYLOAD_AND_SYNC,
+//     // Indicates both the payload and the channel sync were sent successfully
+//     SENT_PAYLOAD_AND_SYNC,
 
-    // Indicates no data was sent because the eth_tx_cmd_q was busy
-    NOT_SENT,
+//     // Indicates no data was sent because the eth_tx_cmd_q was busy
+//     NOT_SENT,
 
-    ERROR,
-};
+//     ERROR,
+// };
 
 struct EDMChannelWorkerLocationInfo {
     uint32_t worker_semaphore_address;

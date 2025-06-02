@@ -13,8 +13,6 @@
 #include "cpp/ttnn/operations/ccl/shared_with_host/sharded_tensor_addr_gen.hpp"
 #include "cpp/ttnn/operations/ccl/sharding_addrgen_helper.hpp"
 #include <tt-metalium/core_coord.hpp>
-#include "tt_metal/fabric/erisc_datamover_builder.hpp"
-#include "cpp/ttnn/operations/ccl/common/host/ccl_worker_builder.hpp"
 #include <tt-metalium/sub_device.hpp>
 #include <tt-metalium/fabric.hpp>
 
@@ -426,7 +424,7 @@ LlamaReduceScatterDeviceOperation::LlamaReduceScatterAdd::create_at(
     constexpr uint32_t buffering_factor = 2;
     // Allocate space for the client interface
     static constexpr auto num_packet_headers_storable = 8;
-    static constexpr auto packet_header_size_bytes = sizeof(tt::tt_fabric::PacketHeader);
+    const auto packet_header_size_bytes = tt::tt_fabric::get_tt_fabric_packet_header_size_bytes();
     tt::tt_metal::CircularBufferConfig packet_header_cb_config =
         tt::tt_metal::CircularBufferConfig(
             num_packet_headers_storable * packet_header_size_bytes * buffering_factor,
@@ -686,10 +684,8 @@ LlamaReduceScatterDeviceOperation::LlamaReduceScatterAdd::create_at(
 
     uint32_t link_idx = 0;
 
-    bool forward_fabric_connection =
-        !(line_topology.is_first_device_in_line(ttnn::ccl::EdmLineFabricOpInterface::Direction::BACKWARD));
-    bool backward_fabric_connection =
-        !(line_topology.is_last_device_in_line(ttnn::ccl::EdmLineFabricOpInterface::Direction::BACKWARD));
+    bool forward_fabric_connection = !(line_topology.is_first_device_in_line(ttnn::ccl::LineDirection::BACKWARD));
+    bool backward_fabric_connection = !(line_topology.is_last_device_in_line(ttnn::ccl::LineDirection::BACKWARD));
 
     for (auto core : all_cores) {
         std::vector<uint32_t> writer_runtime_args = {

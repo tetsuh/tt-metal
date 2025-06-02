@@ -49,7 +49,7 @@ public:
 private:
     std::unordered_map<mesh_id_t, bool> check_for_wrap_around_mesh() const;
     tt::tt_fabric::Topology get_topology() const;
-    size_t get_packet_header_size_bytes() const;
+    size_t get_tt_fabric_packet_header_size_bytes() const;
     size_t get_max_payload_size_bytes() const;
 
     bool initialized_ = false;

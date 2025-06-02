@@ -440,7 +440,7 @@ void run_mux_test_variant(FabricMuxFixture* fixture, TestConfig test_config) {
 
     size_t buffer_size_bytes_full_size_channel =
         sizeof(tt::tt_fabric::PacketHeader) + test_config.packet_payload_size_bytes;
-    size_t buffer_size_bytes_header_only_channel = sizeof(tt::tt_fabric::PacketHeader);
+    size_t buffer_size_bytes_header_only_channel = tt::tt_fabric::get_tt_fabric_packet_header_size_bytes();
 
     for (auto i = 0; i < devices.size(); i++) {
         program_handles[i] = tt_metal::CreateProgram();

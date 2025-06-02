@@ -7,6 +7,7 @@
 #include <tt-metalium/device.hpp>
 #include "tt_metal/fabric/erisc_datamover_builder.hpp"
 #include "tt_metal/fabric/fabric_edm_packet_header.hpp"
+#include <tt-metalium/fabric.hpp>
 #include <tt-metalium/hal.hpp>
 #include <tt-metalium/host_api.hpp>
 #include <tt-metalium/math.hpp>
@@ -18,6 +19,7 @@
 #include <iterator>
 #include <numeric>
 #include <optional>
+
 #include <unordered_set>
 #include <variant>
 #include <vector>
@@ -217,7 +219,7 @@ FabricEriscDatamoverConfig::FabricEriscDatamoverConfig(
                 .size() == this->num_used_sender_channels,
         "FabricEriscDatamoverConfig was constructed with illegal buffer index address");
 
-    const size_t min_buffer_size = sizeof(tt::tt_fabric::PacketHeader);
+    const size_t min_buffer_size = tt::tt_fabric::get_tt_fabric_packet_header_size_bytes();
     TT_FATAL(
         channel_buffer_size_bytes >= min_buffer_size,
         "FabricEriscDatamoverConfig was constructed with `channel_buffer_size_bytes` argument set smaller than "

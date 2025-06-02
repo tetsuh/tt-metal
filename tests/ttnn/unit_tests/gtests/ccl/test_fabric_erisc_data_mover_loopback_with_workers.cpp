@@ -347,8 +347,7 @@ TEST(WorkerCclCommandProcessingKernelFabricUnicastMode, MultiInputReader_SingleP
 
         page_size,
         TwoInputReaderKernelWriteMode::FABRIC_UNICAST,
-        dest_args,
-        true);
+        dest_args);
 
     ASSERT_TRUE(pass);
 }

@@ -330,7 +330,7 @@ int main(int argc, char** argv) {
 
     test_params.buffer_size_bytes_full_size_channel =
         sizeof(tt::tt_fabric::PacketHeader) + test_params.packet_payload_size_bytes;
-    test_params.buffer_size_bytes_header_only_channel = sizeof(tt::tt_fabric::PacketHeader);
+    test_params.buffer_size_bytes_header_only_channel = tt::tt_fabric::get_tt_fabric_packet_header_size_bytes();
 
     // for now, just use one device for running benchmarks
     auto* control_plane = tt::tt_metal::MetalContext::instance().get_cluster().get_control_plane();

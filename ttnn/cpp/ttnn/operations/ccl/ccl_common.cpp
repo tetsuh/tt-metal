@@ -8,7 +8,6 @@
 #include <cmath>
 
 #include "ccl_host_datastructures.hpp"
-#include "tt_metal/fabric/erisc_datamover_builder.hpp"
 #include "ttnn/operations/data_movement/slice/slice.hpp"
 #include "ttnn/operations/data_movement/concat/concat.hpp"
 
@@ -26,19 +25,19 @@ void SyncModeSpec::add_signal(uint32_t sem_id, uint32_t wait_count) {
 
 LineTopology::LineTopology(size_t line_size, size_t line_index) : _line_size(line_size), _line_index(line_index) {}
 
-bool LineTopology::is_first_device_in_line(ttnn::ccl::EdmLineFabricOpInterface::Direction direction) const {
-    if (direction == ttnn::ccl::EdmLineFabricOpInterface::Direction::FORWARD) {
+bool LineTopology::is_first_device_in_line(ttnn::ccl::LineDirection direction) const {
+    if (direction == ttnn::ccl::LineDirection::FORWARD) {
         return _line_index == 0;
     } else {
-        TT_ASSERT(direction == ttnn::ccl::EdmLineFabricOpInterface::Direction::BACKWARD);
+        TT_ASSERT(direction == ttnn::ccl::LineDirection::BACKWARD);
         return _line_index == _line_size - 1;
     }
 }
-bool LineTopology::is_last_device_in_line(ttnn::ccl::EdmLineFabricOpInterface::Direction direction) const {
-    if (direction == ttnn::ccl::EdmLineFabricOpInterface::Direction::BACKWARD) {
+bool LineTopology::is_last_device_in_line(ttnn::ccl::LineDirection direction) const {
+    if (direction == ttnn::ccl::LineDirection::BACKWARD) {
         return _line_index == 0;
     } else {
-        TT_ASSERT(direction == ttnn::ccl::EdmLineFabricOpInterface::Direction::FORWARD);
+        TT_ASSERT(direction == ttnn::ccl::LineDirection::FORWARD);
         return _line_index == _line_size - 1;
     }
 }
@@ -49,8 +48,8 @@ size_t LineTopology::line_size() const { return _line_size; }
 
 size_t LineTopology::line_index() const { return _line_index; }
 
-size_t LineTopology::get_distance_to_end_of_line(ttnn::ccl::EdmLineFabricOpInterface::Direction direction) const {
-    if (direction == ttnn::ccl::EdmLineFabricOpInterface::Direction::FORWARD) {
+size_t LineTopology::get_distance_to_end_of_line(ttnn::ccl::LineDirection direction) const {
+    if (direction == ttnn::ccl::LineDirection::FORWARD) {
         return (_line_size - _line_index) - 1;
     } else {
         return _line_index;
@@ -355,82 +354,6 @@ tt::tt_metal::KernelHandle generate_edm_kernel_impl(
     log_trace(tt::LogOp, "{}", ss.str());
 
     return eth_sender_kernel;
-}
-
-tt::tt_metal::KernelHandle generate_edm_kernel(
-    Program& program,
-    const IDevice* device,
-    const tt::tt_fabric::FabricEriscDatamoverBuilder& edm_builder,
-    const CoreCoord& eth_core,
-    const tt::tt_metal::DataMovementProcessor risc_id,
-    tt::tt_metal::NOC noc_id) {
-    return generate_edm_kernel_impl(
-        program,
-        device,
-        edm_builder,
-        "tt_metal/fabric/impl/kernels/edm_fabric/fabric_erisc_datamover.cpp",
-        eth_core,
-        risc_id,
-        noc_id,
-        tt::tt_metal::KernelBuildOptLevel::O3);
-}
-
-tt::tt_metal::KernelHandle generate_edm_kernel(
-    Program& program,
-    const IDevice* device,
-    const ccl::EriscDatamoverBuilder& edm_builder,
-    const CoreCoord& eth_core,
-    const tt::tt_metal::DataMovementProcessor risc_id,
-    tt::tt_metal::NOC noc_id) {
-    return generate_edm_kernel_impl(
-        program,
-        device,
-        edm_builder,
-        "ttnn/cpp/ttnn/operations/ccl/kernels/edm/erisc_datamover.cpp",
-        eth_core,
-        risc_id,
-        noc_id);
-}
-
-ccl::EriscDatamoverBuilder create_erisc_datamover_builder(
-    std::size_t num_channels,
-    uint32_t page_size,
-    size_t num_buffers_per_channel,
-    ccl::EriscDataMoverBufferSharingMode buffer_sharing_mode,
-    ccl::EriscDataMoverTerminationMode termination_mode) {
-    ccl::EriscDatamoverConfig config;
-    TT_ASSERT(num_channels > 0);
-    std::vector<uint32_t> edm_sem_addresses(num_channels, 0);
-    std::vector<uint32_t> edm_buffer_addresses(num_channels, 0);
-
-    uint32_t edm_sem_addr = config.get_semaphores_base_address(num_channels);
-    uint32_t edm_buffer_addr = config.get_buffers_base_address(num_channels);
-    TT_ASSERT(edm_sem_addr > 0);
-    TT_ASSERT(edm_buffer_addr > 0);
-    const uint32_t channel_buffer_size =
-        config.compute_buffer_size(num_channels, num_buffers_per_channel, page_size);
-    for (std::size_t c = 0; c < num_channels; ++c) {
-        edm_sem_addresses.at(c) = edm_sem_addr;
-        edm_sem_addr += ccl::EriscDatamoverConfig::semaphore_size;
-        TT_ASSERT(edm_buffer_addr % EriscDatamoverConfig::get_eth_word_size() == 0);
-        edm_buffer_addresses.at(c) = edm_buffer_addr;
-        log_trace(tt::LogOp, " edm_buffer_addresses({}) = {}", c, edm_buffer_addr);
-        edm_buffer_addr += num_buffers_per_channel *
-                           (channel_buffer_size + (ccl::EriscDatamoverConfig::enable_merged_payload_and_channel_sync
-                                                       ? ccl::EriscDatamoverConfig::get_eth_channel_sync_size_bytes()
-                                                       : 0));
-        TT_ASSERT((c == 0) || (edm_buffer_addresses.back() != edm_buffer_addresses.front()));
-        TT_ASSERT((c == 0) || (edm_sem_addresses.back() != edm_sem_addresses.front()));
-    }
-
-    return ccl::EriscDatamoverBuilder(
-        channel_buffer_size,
-        config.get_edm_handshake_address(),
-        edm_sem_addresses,
-        edm_buffer_addresses,
-        buffer_sharing_mode,
-        termination_mode,
-        num_buffers_per_channel);
 }
 
 template <class DERIVED_SLICER_T>
@@ -1491,10 +1414,8 @@ std::tuple<size_t, size_t, bool> get_forward_backward_configuration(
     size_t num_targets_backward = 0;
     if (topology == Topology::Linear) {
         LineTopology line_topology(ring_size, ring_index);
-        num_targets_forward =
-            line_topology.get_distance_to_end_of_line(ttnn::ccl::EdmLineFabricOpInterface::Direction::FORWARD);
-        num_targets_backward =
-            line_topology.get_distance_to_end_of_line(ttnn::ccl::EdmLineFabricOpInterface::Direction::BACKWARD);
+        num_targets_forward = line_topology.get_distance_to_end_of_line(ttnn::ccl::LineDirection::FORWARD);
+        num_targets_backward = line_topology.get_distance_to_end_of_line(ttnn::ccl::LineDirection::BACKWARD);
     } else if (topology == ccl::Topology::Ring) {
         // TODO: Commonize
         num_targets_forward = tt::div_up(ring_size - 1, 2);

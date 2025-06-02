@@ -56,7 +56,7 @@ tt::tt_fabric::Topology FabricContext::get_topology() const {
     return tt::tt_fabric::Topology::Linear;
 }
 
-size_t FabricContext::get_packet_header_size_bytes() const {
+size_t FabricContext::get_tt_fabric_packet_header_size_bytes() const {
     if (this->topology_ == Topology::Mesh) {
         return (this->fabric_config_ == tt::tt_metal::FabricConfig::FABRIC_2D_DYNAMIC)
                    ? sizeof(tt::tt_fabric::MeshPacketHeader)
@@ -84,7 +84,7 @@ FabricContext::FabricContext(tt::tt_metal::FabricConfig fabric_config) {
     this->wrap_around_mesh_ = this->check_for_wrap_around_mesh();
     this->topology_ = this->get_topology();
 
-    this->packet_header_size_bytes_ = this->get_packet_header_size_bytes();
+    this->packet_header_size_bytes_ = this->get_tt_fabric_packet_header_size_bytes();
     this->max_payload_size_bytes_ = this->get_max_payload_size_bytes();
     this->channel_buffer_size_bytes_ = this->packet_header_size_bytes_ + this->max_payload_size_bytes_;
 
