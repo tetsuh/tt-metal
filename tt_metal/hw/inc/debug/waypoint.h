@@ -55,6 +55,6 @@ inline void write_debug_waypoint(volatile tt_l1_ptr uint32_t* debug_waypoint) {
 
 #else  // !WATCHER_ENABLED
 
-#define WAYPOINT(x)
+#define WAYPOINT(x) asm volatile("add t1,t1,zero\nadd t1,t1,zero" ::: "t1")
 
 #endif  // WATCHER_ENABLED

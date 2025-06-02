@@ -134,6 +134,7 @@ void MAIN {
     // in1 num blocks w is the outer loop. Output blocks are computed in col major order.
     for (uint32_t in1_block_w_i = 0; in1_block_w_i < in1_num_blocks_w; ++in1_block_w_i) {
         for (uint32_t in0_block_h_i = 0; in0_block_h_i < in0_num_blocks_h; ++in0_block_h_i) {
+            // DPRINT << "in1_block_w_i=" << in1_block_w_i << ", in0_block_h_i=" << in0_block_h_i << ENDL();
 #ifdef PRE_TILIZE
             reconfig_data_format_srca(in1_cb_id, in0_pretilize_cb_id);
 
@@ -191,6 +192,7 @@ void MAIN {
                         tilized_in0_cb_id);
 #endif
 
+                    WAYPOINT("WP1");
                     mm_block_init_short_with_dt(
                         mm_in0_cb_id,
                         in1_cb_id,
@@ -220,17 +222,20 @@ void MAIN {
                 for (uint32_t in0_subblock_i = 0; in0_subblock_i < in0_num_subblocks; ++in0_subblock_i) {
                     uint32_t in1_index_subblock_offset = 0;
                     for (uint32_t in1_subblock_i = 0; in1_subblock_i < in1_num_subblocks; ++in1_subblock_i) {
+                        WAYPOINT("WP2");
                         if (enable_reload) {
                             // Reconfigure input
                             copy_tile_to_dst_init_short_with_dt(in1_cb_id, matmul_partials_cb);
                             cb_wait_front(matmul_partials_cb, out_subblock_num_tiles);
                             tile_regs_acquire();
 
+                            WAYPOINT("WP3");
                             uint32_t start_dst_index = 0;
                             uint32_t start_tile_index = 0;
                             copy_block_matmul_partials(
                                 matmul_partials_cb, start_tile_index, start_dst_index, out_subblock_num_tiles);
 
+                            WAYPOINT("WP3");
                             cb_pop_front(matmul_partials_cb, out_subblock_num_tiles);
                             // Reconfigure srcA back
                             mm_block_init_short_with_dt(
@@ -252,6 +257,7 @@ void MAIN {
                         uint32_t in0_index = in0_index_subblock_offset;  // offset into in0 block
                         uint32_t in1_index = in1_index_subblock_offset;  // offset into in1 block
                         // inner dim that we accumulate is the inner dim of in0/in1, which is in0_block_w
+                        WAYPOINT("INNW");
                         for (uint32_t inner_dim_idx = 0; inner_dim_idx < in0_block_w; inner_dim_idx++) {
                             // matmul outer product of (out_subblock_h x out_subblock_w) tiles that fill dst
                             // accumulation is done by iterating matmul_block across inner dim
@@ -270,6 +276,7 @@ void MAIN {
                             in1_index += in1_block_w;  // to stride down by 1 need to stride by in_per_core_w (should be
                                                        // called in1_block_w)
                         }
+                        WAYPOINT("INND");
 
 #if not defined FUSE_BIAS and defined SFPU_OP_INIT_ACTIVATION
                         if (last_out) {
@@ -278,9 +285,11 @@ void MAIN {
                             }
                         }
 #endif
+                        WAYPOINT("WP4");
                         tile_regs_commit();
                         cb_reserve_back(curr_matmul_out_cb, out_subblock_num_tiles);
                         tile_regs_wait();
+                        WAYPOINT("WP5");
 
 #ifdef PACKER_L1_ACC
                         // no accumulation for first iteration, last iteration
@@ -300,9 +309,11 @@ void MAIN {
                         }
 #endif
 
+                        WAYPOINT("WP6");
                         uint32_t start_dst_index = 0;
                         matmul_pack_tile(start_dst_index, curr_matmul_out_cb, out_subblock_num_tiles);
 
+                        WAYPOINT("WP7");
                         tile_regs_release();
                         cb_push_back(curr_matmul_out_cb, out_subblock_num_tiles);
 
@@ -310,12 +321,14 @@ void MAIN {
                     }  // for in1_num_subblocks
                     in0_index_subblock_offset += in0_subblock_num_tiles;
                 }
+                WAYPOINT("WP8");
                 if (curr_matmul_out_cb == matmul_partials_cb) {
                     if constexpr (!partials_cb_uses_output) {
                         UNPACK(get_local_cb_interface(matmul_partials_cb).fifo_rd_ptr = partials_cb_read_ptr;)
                         PACK(get_local_cb_interface(matmul_partials_cb).fifo_wr_ptr = partials_cb_write_ptr;)
                     }
                 }
+                WAYPOINT("WP9");
 #ifdef PACKER_L1_ACC
 #ifdef FUSE_BIAS
                 if (in0_block_w_i < in0_num_blocks_w - 1) {
