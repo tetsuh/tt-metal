@@ -191,7 +191,9 @@ RunTimeOptions::RunTimeOptions() {
         this->disable_relaxed_memory_ordering = true;
     }
 
-    if (getenv("TT_METAL_ENABLE_GATHERING")) {
+    if (getenv("TT_METAL_DISABLE_GATHERING")) {
+        this->enable_gathering = false;
+    } else {
         this->enable_gathering = true;
     }
 
