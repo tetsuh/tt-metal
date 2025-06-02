@@ -69,6 +69,7 @@ class Yolov9(GstBase.BaseTransform):
         super().__init__()
         # Initialize properties from defaults if not set otherwise
         # self.batch_size = __gproperties__["batch-size"][3] # Default value
+        self.batch_size = 1
         self.model = None
         self.device = None
 
@@ -82,7 +83,7 @@ class Yolov9(GstBase.BaseTransform):
             num_command_queues=2,
         )
         #        self.batch_size=1
-        # ttnn.enable_program_cache(self.device)
+        self.device.enable_program_cache()
         self.model = YOLOv9PerformantRunner(
             self.device,
             self.batch_size,
@@ -92,7 +93,7 @@ class Yolov9(GstBase.BaseTransform):
             model_location_generator=None,
         )
         self.model._capture_yolov9_trace_2cqs()
-        print("########################################", batch_size)
+        print("########################################", self.batch_size)
 
     def get_dispatch_core_config(self):
         # TODO: 11059 move dispatch_core_type to device_params when all tests are updated to not use WH_ARCH_YAML env flag
@@ -136,7 +137,8 @@ class Yolov9(GstBase.BaseTransform):
             # transformed_data = prefix_bytes + original_data
             print("SUCCESS")
             print(in_map_info.data)
-            frame_data = np.frombuffer(in_map_info.data, dtype=np.uint8).reshape(320, 320, 3)
+            frame_data1 = np.frombuffer(in_map_info.data, dtype=np.uint8).reshape(640, 640, 4)
+            frame_data = frame_data1[:, :, :3].copy()
             frame_data = cv2.cvtColor(frame_data, cv2.COLOR_BGR2RGB)
             if type(frame_data) == np.ndarray and len(frame_data.shape) == 3:  # cv2 image
                 frame_data = torch.from_numpy(frame_data.transpose(2, 0, 1)).float().div(255.0).unsqueeze(0)

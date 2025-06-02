@@ -89,6 +89,7 @@ class Yolov4(GstBase.BaseTransform):
             resolution=(640, 640),
             model_location_generator=None,
         )
+        self.device.enable_program_cache()
         print("########################################", batch_size)
 
     def get_dispatch_core_config(self):
