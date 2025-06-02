@@ -58,7 +58,7 @@ autograd::TensorPtr DistributedGPTBlock::operator()(const autograd::TensorPtr& i
     x = (*m_ln2)(x);
     x = (*m_mlp)(x);
     x = ops::add(x, residual);
-
+    ttml::autograd::ctx().get_profiler().dump_results(&ttml::autograd::ctx().get_device());
     return x;
 }
 

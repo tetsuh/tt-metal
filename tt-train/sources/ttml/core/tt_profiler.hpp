@@ -1,0 +1,29 @@
+// SPDX-FileCopyrightText: (c) 2024 Tenstorrent AI ULC
+//
+// SPDX-License-Identifier: Apache-2.0
+
+#pragma once
+#include <core/ttnn_all_includes.hpp>
+namespace ttml::core {
+class TTProfiler {
+public:
+    TTProfiler();
+    ~TTProfiler() = default;
+    TTProfiler(const TTProfiler&) = delete;
+    TTProfiler& operator=(const TTProfiler&) = delete;
+    TTProfiler(TTProfiler&&) = delete;
+    TTProfiler& operator=(TTProfiler&&) = delete;
+    void dump_results(
+        ttnn::distributed::MeshDevice* device,
+        tt::tt_metal::ProfilerDumpState dump_state = tt::tt_metal::ProfilerDumpState::NORMAL) const;
+
+    void call_device_noop(ttnn::distributed::MeshDevice* device, int count = 1) const;
+
+    [[nodiscard]] bool is_enabled() const;
+    void enable();
+    void disable();
+
+private:
+    bool m_enabled = true;
+};
+}  // namespace ttml::core

@@ -83,7 +83,7 @@ autograd::TensorPtr DistributedLlamaBlock::operator()(
     auto x = (*m_mlp_norm)(h);
     x = (*m_mlp)(x);
     x = ops::add(x, residual);
-
+    ttml::autograd::ctx().get_profiler().dump_results(&ttml::autograd::ctx().get_device());
     return x;
 }
 

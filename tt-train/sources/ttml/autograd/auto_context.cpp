@@ -94,4 +94,7 @@ void AutoContext::initialize_distributed_context(int argc, char** argv) {
     m_distributed_context = DistributedContext::get_current_world();
 }
 
+const core::TTProfiler& AutoContext::get_profiler() const {
+    return m_profiler;
+}
 }  // namespace ttml::autograd

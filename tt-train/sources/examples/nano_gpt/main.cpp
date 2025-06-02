@@ -463,6 +463,7 @@ int main(int argc, char **argv) {
     app.add_option("-n,--name", run_name, "Run name")->default_val(run_name);
     app.add_option("-s,--save_and_exit", save_and_exit_path, "Save and exit (path to dumped msgpack)")
         ->default_val(save_and_exit_path);
+
     CLI11_PARSE(app, argc, argv);
 
     if (ddp && enable_tp) {
@@ -866,7 +867,7 @@ int main(int argc, char **argv) {
             auto loss = ttml::ops::cross_entropy_loss(output, target);
             loss = gradient_accumulator_helper.scale(loss);
             float loss_float = get_loss_value(loss);
-            tt::tt_metal::detail::DumpDeviceProfileResults(device->get_devices()[0]);
+            ttml::autograd::ctx().get_profiler().dump_results(device);
             loss->backward();
             ttml::autograd::ctx().reset_graph();
 
@@ -954,8 +955,8 @@ int main(int argc, char **argv) {
     if (enable_wandb) {
         wandbcpp::finish();
     }
-    tt::tt_metal::detail::DumpDeviceProfileResults(
-        device->get_devices()[0], tt::tt_metal::ProfilerDumpState::CLOSE_DEVICE_SYNC);
+
+    ttml::autograd::ctx().get_profiler().dump_results(device, tt::tt_metal::ProfilerDumpState::CLOSE_DEVICE_SYNC);
     ttml::autograd::ctx().close_device();
     return 0;
 }
