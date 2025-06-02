@@ -14,22 +14,16 @@ void kernel_main() {
     // them
     constexpr uint32_t window_outer = get_compile_time_arg_val(3);
     constexpr uint32_t window_inner = get_compile_time_arg_val(4);
-    constexpr uint32_t act_block_h_datums = get_compile_time_arg_val(5);
-    constexpr uint32_t act_block_num_tiles = get_compile_time_arg_val(6);
-    constexpr uint32_t weight_size_w = get_compile_time_arg_val(8);
-    constexpr uint32_t conv_act_size_w_padded = get_compile_time_arg_val(9);
-    constexpr uint32_t act_block_w_extra_align_bytes = get_compile_time_arg_val(10);
-    constexpr uint32_t act_num_blocks_h = get_compile_time_arg_val(11);
-    constexpr uint32_t act_block_h_datums_last_block = get_compile_time_arg_val(20);
+    constexpr uint32_t act_block_num_tiles = get_compile_time_arg_val(5);
+    constexpr uint32_t weight_size_w = get_compile_time_arg_val(7);
+    constexpr uint32_t conv_act_size_w_padded = get_compile_time_arg_val(8);
+    constexpr uint32_t act_block_w_extra_align_bytes = get_compile_time_arg_val(9);
+    constexpr uint32_t act_num_blocks_h = get_compile_time_arg_val(10);
 
-    constexpr uint32_t act_block_h_datums_read_last_block =
-        act_block_h_datums_last_block > act_block_h_datums ? act_block_h_datums / 2 : act_block_h_datums_last_block / 2;
-    constexpr uint32_t act_block_h_datums_second_reader = get_compile_time_arg_val(21);
-    constexpr uint32_t act_block_h_datums_second_reader_read = act_block_h_datums_second_reader / 2;
-    constexpr bool needs_act_block_zero_out = get_compile_time_arg_val(22) == 1;
-    constexpr uint32_t cb_id_act = get_compile_time_arg_val(23);
-    constexpr uint32_t cb_id_sharded_act = get_compile_time_arg_val(24);
-    constexpr uint32_t cb_reader_indices = get_compile_time_arg_val(25);
+    constexpr bool needs_act_block_zero_out = get_compile_time_arg_val(19) == 1;
+    constexpr uint32_t cb_id_act = get_compile_time_arg_val(20);
+    constexpr uint32_t cb_id_sharded_act = get_compile_time_arg_val(21);
+    constexpr uint32_t cb_reader_indices = get_compile_time_arg_val(22);
 
     uint32_t i = 0;
     uint32_t noop = get_arg_val<uint32_t>(i);
@@ -44,8 +38,6 @@ void kernel_main() {
     }
 
     constexpr uint32_t window_outer_offset = conv_act_size_w_padded * conv_act_c_read_bytes * dilation_h;
-
-    constexpr uint32_t act_block_h_datums_read = act_block_h_datums / 2;  // Extra /2 because of packed uint16 reads
 
     // LOOP TO FILL READER INDICES
     volatile tt_l1_ptr uint32_t* packed_reader_indices_ptr =
@@ -78,7 +70,6 @@ void kernel_main() {
         uint32_t reader_offset = act_l1_read_addr;
         uint32_t start_reader_offset = reader_offset;
         for (uint32_t outer = 0; outer < window_outer; outer++) {
-            // Reset reader_idx to finish act_block_h_datums
             reader_idx = start_reader_idx;
 
             cb_reserve_back(cb_id_act, act_block_num_tiles);

@@ -819,7 +819,6 @@ tt::tt_metal::operation::ProgramWithCallbacks multi_core_optimized_conv_width_sh
     };
 
     activation_kernel_compile_args = {
-        (uint32_t)stride_h,
         (uint32_t)stride_w,
         (uint32_t)dilation_h,
         (uint32_t)dilation_w,
@@ -827,7 +826,6 @@ tt::tt_metal::operation::ProgramWithCallbacks multi_core_optimized_conv_width_sh
         (uint32_t)conv_act_c_read_bytes,
         (uint32_t)filter_h,  // Input filter window height
         (uint32_t)filter_w,  // Input filter window width
-        (uint32_t)act_block_h_datums,
         (uint32_t)act_block_num_tiles,
         (uint32_t)input_num_cores,
         (uint32_t)num_blocks_act_h_per_core,
@@ -842,7 +840,6 @@ tt::tt_metal::operation::ProgramWithCallbacks multi_core_optimized_conv_width_sh
         (uint32_t)output_num_cores,
         (uint32_t)all_reader_cores.size(),
         (uint32_t)cb_indices.act_cb,
-        (uint32_t)cb_indices.weight_cb,
         (uint32_t)cb_indices.sharded_act_cb,
         (uint32_t)cb_indices.cb_for_reader_indices,
         (uint32_t)cb_indices.cb_for_l1_array,
