@@ -2,6 +2,7 @@
 
 # SPDX-License-Identifier: Apache-2.0
 
+import math
 import ttnn
 import torch
 import pytest
@@ -15,6 +16,20 @@ def create_global_semaphores(mesh_device, num_devices, cores, initial_value):
     # create global semaphore handles
     ccl_semaphore_handles = [ttnn.create_global_semaphore(mesh_device, cores, initial_value) for _ in range(2)]
     return ccl_semaphore_handles
+
+
+def padded_shape(output_shape, tile):
+    output_tiles_shape = (math.ceil(output_shape[2] / tile[0]), math.ceil(output_shape[3] / tile[1]))
+    output_tile_num = output_tiles_shape[0] * output_tiles_shape[1]
+    padded_output_tile_num = math.ceil(output_tile_num / 48) * 48
+
+    padded_shape = [
+        output_shape[0],
+        output_shape[1],
+        output_shape[2],
+        math.ceil(padded_output_tile_num / output_tiles_shape[0]) * tile[1],
+    ]
+    return padded_shape
 
 
 def run_all_gather_impl(
@@ -68,7 +83,7 @@ def run_all_gather_impl(
     logger.info("Creating persistent buffers")
     persistent_intermediate_buffers = [
         ttnn.from_torch(
-            torch.zeros(ag_output_shape),
+            torch.zeros(padded_shape(ag_output_shape, tile)),
             device=t3k_mesh_device,
             layout=ttnn.TILE_LAYOUT,
             dtype=ag_input_dtype,
@@ -175,6 +190,11 @@ def run_all_gather_impl(
 @pytest.mark.parametrize(
     "num_devices, num_links, ag_output_shape, dim, layout, ag_input_dtype",
     [
+        # 128 shapes
+        (8, 1, [1, 1, 128, 320 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
+        (8, 1, [1, 1, 128, 256 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
+        (8, 1, [1, 1, 128, 32 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat16),
+        (8, 1, [1, 1, 128, 896 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
         # 4k shapes
         (8, 1, [1, 1, 4096, 320 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
         (8, 1, [1, 1, 4096, 256 * 8], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
