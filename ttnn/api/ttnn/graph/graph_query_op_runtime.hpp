@@ -116,15 +116,15 @@ uint64_t execute_time_and_release_trace(TraceID trace_id, MeshDevice* device) {
  */
 template <typename Op, typename... Args>
 auto query_op_runtime(Op op, MeshDevice* device, Args&&... args) {
-    try {
-        auto trace_id = capture_op_trace(op, device, std::forward<Args>(args)...);
-        auto runtime = execute_time_and_release_trace(trace_id, device);
-        return RuntimeQueryResponse{ExecutionStatus::Success, runtime};
+    // try {
+    auto trace_id = capture_op_trace(op, device, std::forward<Args>(args)...);
+    auto runtime = execute_time_and_release_trace(trace_id, device);
+    return RuntimeQueryResponse{ExecutionStatus::Success, runtime};
 
-    } catch (const std::exception& e) {
-        tt::log_debug(tt::LogOp, "op_runtime - error: {}", e.what());
-        return RuntimeQueryResponse{ExecutionStatus::Error, 0, e.what()};
-    }
+    // } catch (const std::exception& e) {
+    //     tt::log_debug(tt::LogOp, "op_runtime - error: {}", e.what());
+    //     return RuntimeQueryResponse{ExecutionStatus::Error, 0, e.what()};
+    // }
 }
 
 }  // namespace ttnn::graph
