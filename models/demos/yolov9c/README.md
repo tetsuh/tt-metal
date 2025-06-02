@@ -33,6 +33,16 @@ Use the following command to run the demo for Object Detection task with pre-tra
 pytest --disable-warnings models/demos/yolov9c/demo/demo.py::test_demo[detect-True-tt_model-models/demos/yolov9c/demo/image.png-device_params0]
 ```
 
+### Demo with Trace
+Use the following command to run the demo for Instance Segmentation task with pre-trained weights:
+```
+pytest --disable-warnings models/demos/yolov9c/demo/demo_performant.py::test_demo_with_trace -k "segment" --disable-warnings
+```
+Use the following command to run the demo for Object Detection task with pre-trained weights:
+```
+pytest --disable-warnings models/demos/yolov9c/demo/demo_performant.py::test_demo_with_trace -k "detect" --disable-warnings
+```
+
 #### Outputs
 - The Demo outputs are saved inside this directory: `models/demos/yolov9c/demo/runs`
 
