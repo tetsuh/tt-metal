@@ -134,7 +134,7 @@ void kernel_main() {
     uint32_t tiles_read = input_tile_id_start;
     uint32_t tiles_to_read = input_tile_id_end;
     uint32_t tile_id_start = my_chip_id * input_tensor_Wt;
-    uint32_t packet_id = input_tile_id_start / contig_pages_advanced;
+    uint32_t packet_id = (input_tile_id_start + contig_pages_advanced - 1) / contig_pages_advanced;
     DPRINT << "WRITER: Reading tiles...\n";
     while (tiles_read < tiles_to_read) {
         uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
@@ -244,7 +244,7 @@ void kernel_main() {
             uint32_t actual_slice_chip_id = (slice_chip_id < 0) ? ring_size + slice_chip_id : slice_chip_id;
             tiles_to_read = input_tile_id_end;
 
-            uint32_t packet_id = input_tile_id_start / contig_pages_advanced;
+            uint32_t packet_id = (input_tile_id_start + contig_pages_advanced - 1) / contig_pages_advanced;
             while (tiles_read < tiles_to_read) {
                 uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
                 cb_wait_front(cb_forward_id, num_pages_to_read);
@@ -291,7 +291,7 @@ void kernel_main() {
             uint32_t actual_slice_chip_id = (slice_chip_id >= ring_size) ? slice_chip_id - ring_size : slice_chip_id;
             tiles_to_read = input_tile_id_end;
 
-            uint32_t packet_id = input_tile_id_start / contig_pages_advanced;
+            uint32_t packet_id = (input_tile_id_start + contig_pages_advanced - 1) / contig_pages_advanced;
             while (tiles_read < tiles_to_read) {
                 uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
                 cb_wait_front(cb_backward_id, num_pages_to_read);

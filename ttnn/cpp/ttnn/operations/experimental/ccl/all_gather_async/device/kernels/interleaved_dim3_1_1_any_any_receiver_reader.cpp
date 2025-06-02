@@ -93,7 +93,7 @@ void kernel_main() {
         uint32_t tiles_read = input_tile_id_start;
         uint32_t tiles_to_read = input_tile_id_end;
 
-        uint32_t packet_id = input_tile_id_start / contig_pages_advanced;
+        uint32_t packet_id = (input_tile_id_start + contig_pages_advanced - 1) / contig_pages_advanced;
         while (tiles_read < tiles_to_read) {
             uint32_t num_pages_to_read = std::min(tiles_to_read - tiles_read, packet_size_in_pages);
             cb_reserve_back(cb_intermediate_id, num_pages_to_read);
