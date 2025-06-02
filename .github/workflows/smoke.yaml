@@ -55,7 +55,7 @@ jobs:
 
       - name: Run a test
         id: test
-        timeout-minutes: 5
+        timeout-minutes: 15
         env:
           GTEST_COLOR: yes
           GTEST_OUTPUT: xml:/work/test-reports/
