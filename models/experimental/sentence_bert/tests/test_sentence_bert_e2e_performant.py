@@ -14,6 +14,12 @@ from models.experimental.sentence_bert.reference.sentence_bert import BertModel,
 from models.experimental.sentence_bert.ttnn.ttnn_sentence_bert_model import TtnnSentenceBertModel
 from ttnn.model_preprocessing import preprocess_model_parameters
 from models.experimental.sentence_bert.ttnn.common import custom_preprocessor, preprocess_inputs
+from tests.ttnn.utils_for_testing import assert_with_pcc
+
+
+def mean_pooling(token_embeddings, attention_mask):
+    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+    return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
 
 @run_for_wormhole_b0()
@@ -48,6 +54,9 @@ def test_run_sentence_bert_trace_2cqs_inference(
     position_ids = torch.arange(0, inputs[1][1], dtype=torch.int64).unsqueeze(dim=0)
     reference_module = BertModel(config).to(torch.bfloat16)
     reference_module.load_state_dict(transformers_model.state_dict())
+    reference_out = reference_module(
+        input_ids, attention_mask=extended_mask, token_type_ids=token_type_ids, position_ids=position_ids
+    )
     parameters = preprocess_model_parameters(
         initialize_model=lambda: reference_module,
         custom_preprocessor=custom_preprocessor,
@@ -63,10 +72,13 @@ def test_run_sentence_bert_trace_2cqs_inference(
     for iter in range(0, inference_iter_count):
         t0 = time.time()
         output = sentence_bert_trace_2cq.execute_sentence_bert_trace_2cqs_inference(ttnn_input_ids)
+        output_torch = ttnn.to_torch(sentence_bert_trace_2cq.test_infra.output_tensor_1[0]).squeeze(dim=1)
+        processed_output = mean_pooling(output_torch, attention_mask)
         t1 = time.time()
         inference_time_iter.append(t1 - t0)
     sentence_bert_trace_2cq.release_sentence_bert_trace_2cqs_inference()
     inference_time_avg = round(sum(inference_time_iter) / len(inference_time_iter), 6)
+    assert_with_pcc(output_torch, reference_out.last_hidden_state, 1.0)
     logger.info(
         f"ttnn_sentence_bert inference iteration time (sec): {inference_time_avg}, FPS: {round(batch_size/inference_time_avg)}"
     )
