@@ -37,17 +37,16 @@ void kernel_main() {
     constexpr uint32_t weight_size_w = get_compile_time_arg_val(22);
     constexpr uint32_t conv_act_size_w_padded = get_compile_time_arg_val(23);
     constexpr uint32_t act_block_w_extra_align_bytes = get_compile_time_arg_val(24);
-    constexpr uint32_t act_block_h_datums_first_reader = get_compile_time_arg_val(25);
-    constexpr uint32_t act_block_h_datums_last_block = get_compile_time_arg_val(26);
-    constexpr bool needs_act_block_zero_out = get_compile_time_arg_val(27) == 1;
-    constexpr uint32_t dilation_h = get_compile_time_arg_val(28);
-    constexpr uint32_t dilation_w = get_compile_time_arg_val(29);
+    // constexpr uint32_t act_block_h_datums_first_reader = get_compile_time_arg_val(25);
+    // constexpr uint32_t act_block_h_datums_last_block = get_compile_time_arg_val(26);
+    constexpr bool needs_act_block_zero_out = get_compile_time_arg_val(25) == 1;
+    constexpr uint32_t dilation_h = get_compile_time_arg_val(26);
+    constexpr uint32_t dilation_w = get_compile_time_arg_val(27);
 
-    constexpr uint32_t act_block_h_datums_read_last_block =
-        act_block_h_datums_last_block > act_block_h_datums
-            ? (act_block_h_datums_last_block - act_block_h_datums_first_reader) / 2
-            : 0;
-    constexpr uint32_t act_block_h_datums_first_reader_read = act_block_h_datums_first_reader / 2;
+    // constexpr uint32_t act_block_h_datums_read_last_block =
+    //     act_block_h_datums_last_block > act_block_h_datums
+    //         ? (act_block_h_datums_last_block - act_block_h_datums_first_reader) / 2
+    //         : 0;
 
     uint32_t i = 0;
     const uint32_t weight_addr_dram_base = get_arg_val<uint32_t>(i++);
@@ -165,8 +164,6 @@ void kernel_main() {
                         reader_idx = start_reader_idx;
                         cb_reserve_back(cb_id_act_second_reader, act_block_num_tiles);
                         uint32_t l1_write_addr_act = get_write_ptr(cb_id_act_second_reader);
-                        uint32_t act_block_h_datums_read_curr =
-                            bh == out_num_blocks_h - 1 ? act_block_h_datums_read_last_block : act_block_h_datums_read;
                         read_sticks<
                             dilation_w,
                             coalesced_read_bytes,

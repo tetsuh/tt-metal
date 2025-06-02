@@ -12,8 +12,8 @@
 #include "debug/dprint_pages.h"
 #endif
 
-constexpr uint32_t weight_size_h = get_compile_time_arg_val(7);  // Input filter window width
-constexpr uint32_t weight_size_w = get_compile_time_arg_val(8);  // Input filter window width
+constexpr uint32_t weight_size_h = get_compile_time_arg_val(6);  // Input filter window width
+constexpr uint32_t weight_size_w = get_compile_time_arg_val(7);  // Input filter window width
 
 template <int window_height, int window_width>
 FORCE_INLINE void read_dilated_channels(
@@ -65,24 +65,23 @@ void kernel_main() {
     constexpr uint32_t dilation_w = get_compile_time_arg_val(1);
     constexpr uint32_t conv_act_c_read_bytes = get_compile_time_arg_val(2);
     constexpr uint32_t window_inner = get_compile_time_arg_val(4);
-    constexpr uint32_t act_block_h_datums = get_compile_time_arg_val(5);
-    constexpr uint32_t padded_conv_act_size_w = get_compile_time_arg_val(9);
-    constexpr uint32_t act_block_w_extra_align_bytes = get_compile_time_arg_val(10);
-    constexpr uint32_t act_num_blocks_h = get_compile_time_arg_val(11);
-    constexpr uint32_t act_block_num_tiles = get_compile_time_arg_val(12);
-    constexpr uint32_t act_w_num_outer = get_compile_time_arg_val(13);
-    constexpr uint32_t act_mcast_num_dests = get_compile_time_arg_val(14);
-    constexpr uint32_t act_mcast_num_cores = get_compile_time_arg_val(15);
-    const uint32_t act_mcast_sender_semaphore_addr = get_semaphore(get_compile_time_arg_val(16));
-    const uint32_t act_mcast_receiver_semaphore_addr = get_semaphore(get_compile_time_arg_val(17));
-    constexpr uint32_t act_mcast_sender_size_bytes = get_compile_time_arg_val(18);
-    constexpr bool transpose_mcast = get_compile_time_arg_val(19) == 1;
-    constexpr uint32_t cb_id_act = get_compile_time_arg_val(23);
-    constexpr uint32_t cb_id_sharded_act = get_compile_time_arg_val(24);
-    constexpr uint32_t cb_reader_indices = get_compile_time_arg_val(25);
-    constexpr uint32_t tilized_in0_cb_id = get_compile_time_arg_val(26);
-    constexpr uint32_t cb_id_act_row_major_bfloat16 = get_compile_time_arg_val(27);
-    constexpr uint32_t cb_l1_array = get_compile_time_arg_val(28);
+    constexpr uint32_t padded_conv_act_size_w = get_compile_time_arg_val(8);
+    constexpr uint32_t act_block_w_extra_align_bytes = get_compile_time_arg_val(9);
+    constexpr uint32_t act_num_blocks_h = get_compile_time_arg_val(10);
+    constexpr uint32_t act_block_num_tiles = get_compile_time_arg_val(11);
+    constexpr uint32_t act_w_num_outer = get_compile_time_arg_val(12);
+    constexpr uint32_t act_mcast_num_dests = get_compile_time_arg_val(13);
+    constexpr uint32_t act_mcast_num_cores = get_compile_time_arg_val(14);
+    const uint32_t act_mcast_sender_semaphore_addr = get_semaphore(get_compile_time_arg_val(15));
+    const uint32_t act_mcast_receiver_semaphore_addr = get_semaphore(get_compile_time_arg_val(16));
+    constexpr uint32_t act_mcast_sender_size_bytes = get_compile_time_arg_val(17);
+    constexpr bool transpose_mcast = get_compile_time_arg_val(18) == 1;
+    constexpr uint32_t cb_id_act = get_compile_time_arg_val(20);
+    constexpr uint32_t cb_id_sharded_act = get_compile_time_arg_val(21);
+    constexpr uint32_t cb_reader_indices = get_compile_time_arg_val(22);
+    constexpr uint32_t tilized_in0_cb_id = get_compile_time_arg_val(23);
+    constexpr uint32_t cb_id_act_row_major_bfloat16 = get_compile_time_arg_val(24);
+    constexpr uint32_t cb_l1_array = get_compile_time_arg_val(25);
 
     uint32_t i = 0;
     uint32_t noop = get_arg_val<uint32_t>(i);
@@ -130,7 +129,6 @@ void kernel_main() {
         act_mcast_dest_noc_start_x, act_mcast_dest_noc_start_y, act_mcast_dest_noc_end_x, act_mcast_dest_noc_end_y, 0);
 
     uint64_t act_mcast_receiver_semaphore_noc_addr = act_multicast_noc_addr | act_mcast_receiver_semaphore_addr;
-    constexpr uint32_t num_issued_reads_per_block = act_block_h_datums * window_inner;
 
     // TODO: need to make the read coalescing optimization cleaner
     // currently works for the case of num_coalesced_reads == weight_size_w since these reads are contiguous on both
@@ -185,8 +183,7 @@ void kernel_main() {
             }
         }
         reader_idx++;
-        // incrementing num issued in one shot is actually slower
-        // noc_async_read_inc_num_issued(num_issued_reads_per_block); // "false" on read
+
         noc_async_read_barrier();
         cb_push_back(cb_id_act_row_major_bfloat16, act_block_num_tiles);
 

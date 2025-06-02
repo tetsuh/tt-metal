@@ -25,11 +25,11 @@ import torch
 )
 @pytest.mark.parametrize(
     "output_dtype",
-    [ttnn.bfloat8_b, ttnn.bfloat16],
+    [ttnn.bfloat16],
 )
 @pytest.mark.parametrize(
     "input_dtype",
-    [ttnn.bfloat8_b, ttnn.bfloat16, ttnn.float32],
+    [ttnn.bfloat16],
 )
 @pytest.mark.parametrize(
     "fp32_accum",

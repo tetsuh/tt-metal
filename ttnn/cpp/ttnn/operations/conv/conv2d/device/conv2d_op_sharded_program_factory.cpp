@@ -1358,7 +1358,6 @@ tt::tt_metal::operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_
         (uint32_t)conv_act_c_read_bytes,
         (uint32_t)window_outer,
         (uint32_t)window_inner,
-        (uint32_t)reader_arg_act_block_h_datums,
         (uint32_t)(enable_split_reader ? act_block_num_tiles_split / conv_act_c_blocks
                                        : act_block_num_tiles / conv_act_c_blocks),
         (uint32_t)filter_h,
@@ -1374,8 +1373,6 @@ tt::tt_metal::operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_
         (uint32_t)act_mcast_receiver_semaphore_id,
         (uint32_t)in0_block_num_tiles * tilized_act_tile_size,  // act_mcast_sender_size_bytes
         (uint32_t)(transpose_mcast ? 1 : 0),
-        (uint32_t)act_block_h_datums_last_block,
-        (uint32_t)act_block_h_datums_split_last,
         (uint32_t)needs_act_block_zero_out,  // zero_out_act_cb
         (uint32_t)cb_indices.act_cb,
         (uint32_t)cb_indices.sharded_act_cb,
@@ -1460,15 +1457,15 @@ tt::tt_metal::operation::ProgramWithCallbacks multi_core_optimized_conv_sharded_
             (uint32_t)filter_w,                       // weight_size_w
             (uint32_t)(conv_act_size_w + pad_w),      // conv_act_size_w_padded
             (uint32_t)act_block_w_extra_align_bytes,  // only used for 1d systolic variant
-            (uint32_t)act_block_h_datums_split,       // only used for 1d systolic variant
-            (uint32_t)act_block_h_datums_last_block,
+            // (uint32_t)act_block_h_datums_split,       // only used for 1d systolic variant
+            // (uint32_t)act_block_h_datums_last_block,
             (uint32_t)needs_act_block_zero_out,
             (uint32_t)dilation_h,
             (uint32_t)dilation_w};
         writer_compile_time_args.insert(
             writer_compile_time_args.end(), split_reader_args.begin(), split_reader_args.end());
     } else {
-        std::vector<uint32_t> split_reader_args(11, 0);
+        std::vector<uint32_t> split_reader_args(9, 0);
         writer_compile_time_args.insert(
             writer_compile_time_args.end(), split_reader_args.begin(), split_reader_args.end());
     }
