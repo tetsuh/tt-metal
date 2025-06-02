@@ -60,7 +60,7 @@ def compute_ttnn_embeddings(sentences, model_name, device, batch_size=8):
         ttnn_input_ids, ttnn_token_type_ids, ttnn_position_ids, ttnn_attention_mask = preprocess_inputs(
             input_ids, token_type_ids, position_ids, extended_mask, device
         )
-        logger.info("Running inference on TTNN model for current batch...")
+        # logger.info("Running inference on TTNN model for current batch...")
         ttnn_out = ttnn_module(
             ttnn_input_ids, ttnn_attention_mask, ttnn_token_type_ids, ttnn_position_ids, device=device
         )
@@ -70,7 +70,7 @@ def compute_ttnn_embeddings(sentences, model_name, device, batch_size=8):
         all_embeddings.append(embeddings)
         all_sentences.extend(sentences[i : i + orig_batch_size])
     all_embeddings = torch.cat(all_embeddings, dim=0)
-    logger.info("All embeddings computed.")
+    # logger.info("All embeddings computed.")
     return all_embeddings, all_sentences
 
 
@@ -100,13 +100,14 @@ def test_semantic_search_with_ttnn(device):
         logger.info("Ready for semantic search. Please enter your query:")
         query = input("Query: ").strip()
         query_embeddings, _ = compute_ttnn_embeddings([query], model_name, device)
-        logger.info("Computing cosine similarities...")
+        # logger.info("Computing cosine similarities...")
         similarities = cosine_similarity(query_embeddings.detach().cpu().numpy(), kb_embeddings.detach().cpu().numpy())[
             0
         ]
         top_idx = np.argmax(similarities)
+        logger.info(f"Query: {query}")
         logger.info(f"Best match: {kb_sentences[top_idx]}")
         logger.info(f"Similarity score: {similarities[top_idx]:.4f}")
-        print(f"\tQuery: {query}")
-        print(f"\tBest match: {kb_sentences[top_idx]}")
-        print(f"\tSimilarity score: {similarities[top_idx]:.4f}")
+        # print(f"\tQuery: {query}")
+        # print(f"\tBest match: {kb_sentences[top_idx]}")
+        # print(f"\tSimilarity score: {similarities[top_idx]:.4f}")
