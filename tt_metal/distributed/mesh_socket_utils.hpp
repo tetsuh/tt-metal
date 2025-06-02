@@ -6,6 +6,8 @@
 
 #include <tt-metalium/distributed.hpp>
 #include <tt-metalium/fabric_types.hpp>
+#include <tt-metalium/mesh_socket.hpp>
+#include "flatbuffers/flatbuffers.h"
 
 namespace tt::tt_metal::distributed {
 
@@ -26,6 +28,10 @@ void write_socket_configs(
     const std::shared_ptr<MeshBuffer>& socket_data_buffer,
     const SocketConfig& config,
     SocketEndpoint socket_endpoint);
+
+// (De)serialization Functions (for Host to Host handshaking)
+flatbuffers::FlatBufferBuilder serialize_socket_config(const SocketConfig& socket_config);
+SocketConfig deserialize_socket_config(const std::vector<uint8_t>& data);
 
 //  =============== Additional utility functions  ===============
 

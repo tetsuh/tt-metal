@@ -8,6 +8,7 @@
 #include "impl/context/metal_context.hpp"
 
 #include "tt_metal/hw/inc/socket.h"
+#include "mesh_socket_generated.h"
 
 namespace tt::tt_metal::distributed {
 
@@ -243,6 +244,125 @@ void write_socket_configs(
             distributed::WriteShard(mesh_device->mesh_command_queue(0), config_buffer, config_data, device_coord, true);
         }
     }
+}
+
+flatbuffers::FlatBufferBuilder serialize_socket_config(const SocketConfig& socket_config) {
+    flatbuffers::FlatBufferBuilder builder;
+
+    // Helper lambda to create CoreCoord
+    auto createCoreCoord = [&](const CoreCoord& coord) {
+        return SocketConfigFB::CreateCoreCoord(builder, coord.x, coord.y);
+    };
+
+    // Helper lambda to create MeshCoordinate
+    auto createMeshCoordinate = [&](const MeshCoordinate& mesh_coord) {
+        auto values_vector = builder.CreateVector(mesh_coord.coords().data(), mesh_coord.coords().size());
+        return SocketConfigFB::CreateMeshCoordinate(builder, values_vector);
+    };
+
+    // Helper lambda to create MeshCoreCoord
+    auto createMeshCoreCoord = [&](const MeshCoreCoord& mesh_core_coord) {
+        auto device_coord = createMeshCoordinate(mesh_core_coord.device_coord);
+        auto core_coord = createCoreCoord(mesh_core_coord.core_coord);
+        return SocketConfigFB::CreateMeshCoreCoord(builder, device_coord, core_coord);
+    };
+
+    // Create socket connections
+    std::vector<flatbuffers::Offset<SocketConfigFB::SocketConnection>> fb_connections;
+    for (const auto& conn : socket_config.socket_connection_config) {
+        auto sender_core = createMeshCoreCoord(conn.sender_core);
+        auto receiver_core = createMeshCoreCoord(conn.receiver_core);
+
+        auto fb_connection = SocketConfigFB::CreateSocketConnection(builder, sender_core, receiver_core);
+        fb_connections.push_back(fb_connection);
+    }
+    auto connections_vector = builder.CreateVector(fb_connections);
+
+    // Create socket memory config
+    std::optional<uint32_t> sender_sub_device = std::nullopt;
+    if (socket_config.socket_mem_config.sender_sub_device.has_value()) {
+        sender_sub_device = *(socket_config.socket_mem_config.sender_sub_device.value());
+    }
+
+    std::optional<uint32_t> receiver_sub_device = std::nullopt;
+    if (socket_config.socket_mem_config.receiver_sub_device.has_value()) {
+        receiver_sub_device = *(socket_config.socket_mem_config.receiver_sub_device.value());
+    }
+    auto fb_mem_config = SocketConfigFB::CreateSocketMemoryConfig(
+        builder,
+        static_cast<uint32_t>(socket_config.socket_mem_config.socket_storage_type),
+        socket_config.socket_mem_config.fifo_size,
+        sender_sub_device,
+        receiver_sub_device);
+
+    // Create the root SocketConfig
+    auto socket_config_fb = SocketConfigFB::CreateSocketConfig(
+        builder, connections_vector, fb_mem_config, socket_config.sender_rank, socket_config.receiver_rank);
+
+    builder.Finish(socket_config_fb);
+
+    return builder;
+}
+
+SocketConfig deserialize_socket_config(const std::vector<uint8_t>& data) {
+    // Verify the buffer
+    auto verifier = flatbuffers::Verifier(data.data(), data.size());
+    if (!SocketConfigFB::VerifySocketConfigBuffer(verifier)) {
+        throw std::runtime_error("Invalid FlatBuffer data");
+    }
+
+    // Get the root object
+    auto socket_config_fb = SocketConfigFB::GetSocketConfig(data.data());
+
+    SocketConfig socket_config;
+
+    // Deserialize socket connections
+    if (socket_config_fb->socket_connections()) {
+        for (const auto* fb_conn : *socket_config_fb->socket_connections()) {
+            // Deserialize sender core
+            TT_FATAL(
+                fb_conn->sender_core(),
+                "Internal Error: Sender core is not preset in the socket connection during deserialization");
+            TT_FATAL(
+                fb_conn->receiver_core(),
+                "Internal Error: Receiver core is not preset in the socket connection during deserialization");
+            auto sender = fb_conn->sender_core();
+            auto receiver = fb_conn->receiver_core();
+            MeshCoreCoord sender_core = {
+                MeshCoordinate(*(sender->device_coord()->values())),
+                CoreCoord(sender->core_coord()->x(), sender->core_coord()->y())};
+            MeshCoreCoord receiver_core = {
+                MeshCoordinate(*(receiver->device_coord()->values())),
+                CoreCoord(receiver->core_coord()->x(), receiver->core_coord()->y())};
+
+            SocketConnection conn = {
+                .sender_core = sender_core,
+                .receiver_core = receiver_core,
+            };
+            socket_config.socket_connection_config.push_back(conn);
+        }
+    }
+
+    // Deserialize socket memory config
+    if (socket_config_fb->socket_mem_config()) {
+        auto mem_config = socket_config_fb->socket_mem_config();
+        socket_config.socket_mem_config.socket_storage_type =
+            static_cast<BufferType>(mem_config->socket_storage_type());
+        socket_config.socket_mem_config.fifo_size = mem_config->fifo_size();
+
+        // Handle optional fields (check if they're non-zero, assuming 0 means null)
+        if (mem_config->sender_sub_device().has_value()) {
+            socket_config.socket_mem_config.sender_sub_device = SubDeviceId(mem_config->sender_sub_device().value());
+        }
+        if (mem_config->receiver_sub_device().has_value()) {
+            socket_config.socket_mem_config.receiver_sub_device =
+                SubDeviceId(mem_config->receiver_sub_device().value());
+        }
+    }
+    socket_config.sender_rank = socket_config_fb->sender_rank();
+    socket_config.receiver_rank = socket_config_fb->receiver_rank();
+
+    return socket_config;
 }
 
 uint32_t get_physical_mesh_id(MeshDevice* mesh_device, const MeshCoordinate& coord) {

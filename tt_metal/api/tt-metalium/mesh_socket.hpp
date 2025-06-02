@@ -12,6 +12,9 @@ namespace tt::tt_metal::distributed {
 struct MeshCoreCoord {
     MeshCoordinate device_coord;
     CoreCoord core_coord;
+    bool operator==(const MeshCoreCoord& other) const {
+        return device_coord == other.device_coord && core_coord == other.core_coord;
+    }
 };
 
 // Specifies how sender cores on a Virtual Mesh connect to receiver cores on the same or another Virtual Mesh.
@@ -41,6 +44,8 @@ struct SocketMemoryConfig {
 struct SocketConfig {
     std::vector<SocketConnection> socket_connection_config;
     SocketMemoryConfig socket_mem_config;
+    uint32_t sender_rank = 0;
+    uint32_t receiver_rank = 0;
 };
 
 // Socket Handle exposed to the user.

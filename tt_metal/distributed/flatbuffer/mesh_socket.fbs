@@ -1,0 +1,37 @@
+
+namespace SocketConfigFB;
+
+table CoreCoord {
+    x: uint32;
+    y: uint32;
+}
+
+table MeshCoordinate {
+    values:[uint32];
+}
+
+table MeshCoreCoord {
+    device_coord: MeshCoordinate;
+    core_coord: CoreCoord;
+}
+
+table SocketConnection {
+    sender_core: MeshCoreCoord;
+    receiver_core: MeshCoreCoord;
+}
+
+table SocketMemoryConfig {
+    socket_storage_type: uint32;  // enum as uint32
+    fifo_size: uint32;
+    sender_sub_device: uint32 = null;
+    receiver_sub_device: uint32 = null;
+}
+
+table SocketConfig {
+    socket_connections: [SocketConnection];
+    socket_mem_config: SocketMemoryConfig;
+    sender_rank: uint32;
+    receiver_rank: uint32;
+}
+
+root_type SocketConfig;

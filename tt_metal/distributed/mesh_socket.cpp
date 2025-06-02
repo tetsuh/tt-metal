@@ -7,38 +7,12 @@
 
 namespace tt::tt_metal::distributed {
 
-struct DistributedSocketMD {
-    SocketConfig config;
-    DeviceAddr peer_addr;
-    std::vector<uint32_t> peer_mesh_ids;
-    std::vector<uint32_t> peer_chip_ids;
-};
-
-DistributedSocketMD get_socket_metadata(const SocketConfig& config, MPI_Comm comm) {
-    TT_FATAL(
-        !(config.sender_device and config.receiver_device),
-        "Cannot set both sender_device and receiver_device when ranks differ in SocketConfig");
-    bool is_sender = config.sender_device;
-    uint32_t peer_rank = is_sender ? config.receiver_rank : config.sender_rank;
-    MPI_Status probe_status;
-    MPI_Probe(peer_rank, 0, comm, &probe_status);
-    if (config.sender_device) {
-    }
-}
-
-MeshSocket MeshSocket::create_distributed_socket(const SocketConfig& config, MPI_Comm comm) {
-    if (config.sender_rank == config.receiver_rank) {
-        TT_FATAL(
-            config.sender_device and config.receiver_device,
-            "Sender and receiver mesh devices must be poulated when ranks are equal.");
-        return MeshSocket::create_sockets(config.sender_device, config.receiver_device, config);
-    }
-    if (config.sender_device) {
-        // Creating a sender socket
-        auto config_buffer = create_socket_config_buffer(config.sender_device, config, SocketEndpoint::SENDER);
-        auto recv_socket_md = get_socket_metadata(config, comm);
-    }
-}
+// struct DistributedSocketMD {
+//     SocketConfig config;
+//     DeviceAddr peer_addr;
+//     std::vector<uint32_t> peer_mesh_ids;
+//     std::vector<uint32_t> peer_chip_ids;
+// };
 
 std::pair<MeshSocket, MeshSocket> MeshSocket::create_sockets(
     const std::shared_ptr<MeshDevice>& sender,
