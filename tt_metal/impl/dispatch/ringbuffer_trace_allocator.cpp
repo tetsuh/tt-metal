@@ -14,9 +14,14 @@ RingbufferTraceAllocator::RingbufferTraceAllocator(
     uint32_t worker_ringbuffer_size,
     uint32_t active_eth_ringbuffer_start,
     uint32_t active_eth_ringbuffer_size) {
+    fmt::println(stderr, "Worker ringbuffer start: {}, size: {}, active eth ringbuffer start: {}, size: {}",
+                    worker_ringbuffer_start, worker_ringbuffer_size,
+                    active_eth_ringbuffer_start, active_eth_ringbuffer_size);
     for (auto& mgr : config_buffer_mgr_) {
         mgr.init_add_buffer(worker_ringbuffer_start, worker_ringbuffer_size);
         mgr.init_add_buffer(active_eth_ringbuffer_start, active_eth_ringbuffer_size);
+        // Idle ethernet.
+        mgr.init_add_buffer(0, 0);
         // Worker launch messages.
         mgr.init_add_buffer(0, launch_msg_buffer_num_entries - 1);
         // Ethernet launch messages.

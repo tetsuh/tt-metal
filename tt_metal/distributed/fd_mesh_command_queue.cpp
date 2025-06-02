@@ -886,6 +886,7 @@ void FDMeshCommandQueue::record_end() {
     size_t max_trace_size = 0;
     std::set<SubDeviceId> sub_device_ids;
     std::optional<std::unordered_map<SubDeviceId, TraceWorkerDescriptor>> overall_trace_worker_descriptors;
+    bool first_trace = true;
     for (const auto& range : device_ranges) {
         std::vector<TraceNode*> trace_nodes;
         std::vector<MeshTraceNode*> mesh_trace_nodes;
@@ -1026,8 +1027,20 @@ void FDMeshCommandQueue::record_end() {
                     tt_metal::detail::EncodePerDeviceProgramID(node.program_runtime_id, device->id());
             }
 #endif
+            auto& program_config = program.get_program_config_sizes();
 
             node.dispatch_metadata.sync_count += starting_workers_completed[*sub_device_id];
+            if (first_trace) {
+                fmt::println(stderr, "Trace node {}: num_workers {}, num_workers_before {} sync_count {}, stall_first {}, stall_before_program {}, send_binary {}, binary size {} eth size {}",
+                             node_idx, num_workers, 
+                            trace_worker_descriptors[sub_device_id].num_completion_worker_cores,
+                             node.dispatch_metadata.sync_count,
+                             node.dispatch_metadata.stall_first, node.dispatch_metadata.stall_before_program,
+                             node.dispatch_metadata.send_binary,
+                            program_config[0],
+                            program_config[1]);
+            }
+
             // Issue dispatch commands for this program
             program_dispatch::write_program_command_sequence(
                 cached_program_command_sequence,
@@ -1049,6 +1062,7 @@ void FDMeshCommandQueue::record_end() {
             }
             trace_worker_descriptors[sub_device_id].num_completion_worker_cores += num_workers;
         }
+        first_trace = false;
 
         auto& bypass_data = sysmem_manager_for_trace.get_bypass_data();
         bypass_data.insert(bypass_data.end(), exec_buf_end.begin(), exec_buf_end.end());
