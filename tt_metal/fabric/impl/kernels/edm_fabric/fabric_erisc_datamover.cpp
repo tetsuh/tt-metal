@@ -767,6 +767,7 @@ template <uint8_t RECEIVER_NUM_BUFFERS, uint8_t SENDER_NUM_BUFFERS>
 struct SenderContext {
     tt::tt_fabric::EthChannelBuffer<SENDER_NUM_BUFFERS> local_sender_channels;
     tt::tt_fabric::EdmChannelWorkerInterface<SENDER_NUM_BUFFERS>* local_sender_channel_worker_interfaces;
+    tt::tt_fabric::EdmChannelWorkerInterface<SENDER_NUM_BUFFERS> local_sender_channel_worker_interfaces_v2;
     volatile tt::tt_fabric::EdmFabricSenderChannelCounters* channel_counters_ptr;
     PacketHeaderRecorder channel_packet_recorder;
     bool channel_connection_established;  // false by default
@@ -916,6 +917,7 @@ FORCE_INLINE void run_sender_channel_step(
         run_sender_channel_step_impl<enable_packet_header_recording, VC_RECEIVER_CHANNEL, sender_channel_index>(
             sender_contexts.contexts[sender_channel_index].local_sender_channels,
             *sender_contexts.contexts[sender_channel_index].local_sender_channel_worker_interfaces,
+            // sender_contexts.contexts[sender_channel_index].local_sender_channel_worker_interfaces_v2,
             sender_contexts.outbound_to_receiver_channel_pointers[VC_RECEIVER_CHANNEL],
             sender_contexts.remote_receiver_channels[VC_RECEIVER_CHANNEL],
             sender_contexts.contexts[sender_channel_index].channel_counters_ptr,
@@ -1103,6 +1105,10 @@ bool all_channels_drained(
         sender_contexts,
     std::array<ReceiverChannelPointers<RECEIVER_NUM_BUFFERS>, NUM_RECEIVER_CHANNELS>& receiver_channel_pointers) {
     bool eth_buffers_drained =
+        // sender_contexts.contexts[0].local_sender_channel_worker_interfaces_v2.all_eth_packets_completed() &&
+        // sender_contexts.contexts[1].local_sender_channel_worker_interfaces_v2.all_eth_packets_completed() &&
+        // !sender_contexts.contexts[0].local_sender_channel_worker_interfaces_v2.has_unsent_payload() &&
+        // !sender_contexts.contexts[1].local_sender_channel_worker_interfaces_v2.has_unsent_payload() &&
         sender_contexts.contexts[0].local_sender_channel_worker_interfaces->all_eth_packets_completed() &&
         sender_contexts.contexts[1].local_sender_channel_worker_interfaces->all_eth_packets_completed() &&
         !sender_contexts.contexts[0].local_sender_channel_worker_interfaces->has_unsent_payload() &&
@@ -1129,6 +1135,8 @@ bool all_channels_drained(
     if constexpr (enable_ring_support && !dateline_connection) {
         eth_buffers_drained =
             eth_buffers_drained &&
+            // (sender_contexts.contexts[2].local_sender_channel_worker_interfaces_v2.all_eth_packets_completed() &&
+            //  !sender_contexts.contexts[2].local_sender_channel_worker_interfaces_v2.has_unsent_payload() &&
             (sender_contexts.contexts[2].local_sender_channel_worker_interfaces->all_eth_packets_completed() &&
              !sender_contexts.contexts[2].local_sender_channel_worker_interfaces->has_unsent_payload() &&
              get_ptr_val<to_sender_packets_acked_streams[2]>() == 0 &&
@@ -1243,9 +1251,9 @@ void __attribute__((noinline)) wait_for_static_connection_to_ready_v2(
     for (size_t i = 0; i < NUM_SENDER_CHANNELS; i++) {
         if (sender_ch_live_check_skip[i]) {
             while (!connect_is_requested(
-                *sender_contexts.contexts[i].local_sender_channel_worker_interfaces.connection_live_semaphore));
+                *sender_contexts.contexts[i].local_sender_channel_worker_interfaces_v2.connection_live_semaphore));
             establish_connection<enable_ring_support, enable_first_level_ack>(
-                sender_contexts.contexts[i].local_sender_channel_worker_interfaces);
+                sender_contexts.contexts[i].local_sender_channel_worker_interfaces_v2);
         }
     }
 }
@@ -1278,30 +1286,30 @@ FORCE_INLINE void init_local_sender_channel_worker_interfaces_v2(
     init_local_sender_channel_worker_interface<0>(
         local_sender_connection_live_semaphore_addresses[0],
         local_sender_connection_info_addresses[0],
-        sender_contexts.contexts[0].local_sender_channel_worker_interfaces,
+        sender_contexts.contexts[0].local_sender_channel_worker_interfaces_v2,
         local_sender_flow_control_semaphores[0]);
     init_local_sender_channel_worker_interface<1>(
         local_sender_connection_live_semaphore_addresses[1],
         local_sender_connection_info_addresses[1],
-        sender_contexts.contexts[1].local_sender_channel_worker_interfaces,
+        sender_contexts.contexts[1].local_sender_channel_worker_interfaces_v2,
         local_sender_flow_control_semaphores[1]);
 #ifdef FABRIC_2D
     init_local_sender_channel_worker_interface<2>(
         local_sender_connection_live_semaphore_addresses[2],
         local_sender_connection_info_addresses[2],
-        sender_contexts.contexts[2].local_sender_channel_worker_interfaces,
+        sender_contexts.contexts[2].local_sender_channel_worker_interfaces_v2,
         local_sender_flow_control_semaphores[2]);
     init_local_sender_channel_worker_interface<3>(
         local_sender_connection_live_semaphore_addresses[3],
         local_sender_connection_info_addresses[3],
-        sender_contexts.contexts[3].local_sender_channel_worker_interfaces,
+        sender_contexts.contexts[3].local_sender_channel_worker_interfaces_v2,
         local_sender_flow_control_semaphores[3]);
 #endif
     if constexpr (NUM_SENDER_CHANNELS == 3 || NUM_SENDER_CHANNELS == 5) {
         init_local_sender_channel_worker_interface<VC1_SENDER_CHANNEL>(
             local_sender_connection_live_semaphore_addresses[VC1_SENDER_CHANNEL],
             local_sender_connection_info_addresses[VC1_SENDER_CHANNEL],
-            sender_contexts.contexts[VC1_SENDER_CHANNEL].local_sender_channel_worker_interfaces,
+            sender_contexts.contexts[VC1_SENDER_CHANNEL].local_sender_channel_worker_interfaces_v2,
             local_sender_flow_control_semaphores[VC1_SENDER_CHANNEL]);
     }
 }
@@ -1816,6 +1824,11 @@ void kernel_main() {
         local_sender_connection_info_addresses,
         local_sender_channel_worker_interfaces,
         local_sender_flow_control_semaphores);
+    // init_local_sender_channel_worker_interfaces_v2(
+    //     local_sender_connection_live_semaphore_addresses,
+    //     local_sender_connection_info_addresses,
+    //     sender_contexts,
+    //     local_sender_flow_control_semaphores);
 
     // init sender context
     {
@@ -1969,6 +1982,7 @@ void kernel_main() {
 #endif
 
     wait_for_static_connection_to_ready(local_sender_channel_worker_interfaces);
+    // wait_for_static_connection_to_ready_v2(sender_contexts);
 
     //////////////////////////////
     //////////////////////////////
