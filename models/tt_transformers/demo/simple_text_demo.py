@@ -399,7 +399,7 @@ def prepare_generator_args(
             1,  # repeat_batches
             128 * 1024,  # max_seq_len
             1,  # batch_size
-            50000,  # max_generated_tokens
+            5000,  # max_generated_tokens
             True,  # paged_attention
             {"page_block_size": 64, "page_max_num_blocks_per_dp": 2048},  # page_params
             {"temperature": 0, "top_p": 0.08},  # sampling_params (argmax)
@@ -435,7 +435,11 @@ def prepare_generator_args(
     ],
     ids=["performance", "accuracy"],
 )
-@pytest.mark.parametrize("device_params", [{"trace_region_size": 23887872, "num_command_queues": 1}], indirect=True)
+@pytest.mark.parametrize(
+    "device_params",
+    [{"trace_region_size": 23887872, "num_command_queues": 1, "offset": ttnn.MeshCoordinate(0, 0)}],
+    indirect=True,
+)
 @pytest.mark.parametrize(
     "mesh_device",
     [
@@ -465,6 +469,7 @@ def test_demo_text(
     reset_seeds,
     request,
 ):
+    ttnn.visualize_mesh_device(mesh_device)
     """
     Simple demo with limited dependence on reference code.
     """
