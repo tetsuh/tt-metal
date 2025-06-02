@@ -49,7 +49,8 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async(
     const uint32_t ring_index,
     ccl::Topology topology,
     const std::vector<GlobalSemaphore>& semaphore,
-    const std::optional<tt::tt_metal::SubDeviceId>& sub_device_id) {
+    const std::optional<tt::tt_metal::SubDeviceId>& sub_device_id,
+    const std::optional<uint32_t>& cluster_axis) {
     tt::tt_metal::Program program{};
     std::optional<experimental::ccl::ReduceScatterFusedOpSignaler> empty_fused_op_signaler;
     return reduce_scatter_minimal_async_helper(
