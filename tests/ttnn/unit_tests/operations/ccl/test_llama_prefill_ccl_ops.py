@@ -252,6 +252,10 @@ def test_all_gather_async(
 @pytest.mark.parametrize(
     "num_devices, num_links, rs_input_shape, dim, layout, rs_input_dtype",
     [
+        # 128 shapes
+        (8, 1, [1, 1, 128, 1280], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
+        (8, 1, [1, 1, 128, 2048], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
+        (8, 1, [1, 1, 128, 3584], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
         # 4k shapes
         (8, 1, [1, 1, 4096, 1280], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
         (8, 1, [1, 1, 4096, 2048], 3, ttnn.TILE_LAYOUT, ttnn.bfloat8_b),
