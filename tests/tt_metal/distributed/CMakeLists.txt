@@ -1,3 +1,6 @@
+# Find MPI package
+find_package(MPI REQUIRED)
+
 add_executable(distributed_unit_tests)
 target_sources(
     distributed_unit_tests
@@ -16,6 +19,7 @@ target_sources(
         test_mesh_events.cpp
         test_mesh_trace.cpp
         test_thread_pool.cpp
+        test_mpi.cpp
         utils.cpp
 )
 
@@ -24,6 +28,7 @@ target_link_libraries(
     PRIVATE
         tt_metal
         test_common_libs
+        MPI::MPI_CXX
 )
 
 target_include_directories(
