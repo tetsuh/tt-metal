@@ -558,7 +558,7 @@ void test_single_connection_multi_device_socket(
     auto recv_virtual_coord = md1->worker_core_from_logical_core(recv_logical_coord);
 
     auto l1_alignment = MetalContext::instance().hal().get_alignment(HalMemType::L1);
-    auto control_plane = tt::tt_metal::MetalContext::instance().get_cluster().get_control_plane();
+    auto control_plane = tt::tt_metal::MetalContext::instance().get_control_plane();
     const auto& fabric_context = control_plane->get_fabric_context();
     auto fabric_max_packet_size = fabric_context.get_fabric_max_payload_size_bytes();
     auto packet_header_size_bytes = fabric_context.get_fabric_packet_header_size_bytes();
@@ -758,7 +758,7 @@ void test_single_connection_multi_device_socket_with_workers(
     auto output_virtual_coord = md1->worker_core_from_logical_core(output_logical_coord);
 
     auto l1_alignment = MetalContext::instance().hal().get_alignment(HalMemType::L1);
-    auto control_plane = tt::tt_metal::MetalContext::instance().get_cluster().get_control_plane();
+    auto control_plane = tt::tt_metal::MetalContext::instance().get_control_plane();
     const auto& fabric_context = control_plane->get_fabric_context();
 
     auto fabric_max_packet_size = fabric_context.get_fabric_max_payload_size_bytes();
@@ -946,7 +946,7 @@ std::shared_ptr<Program> create_sender_program(
     const CoreCoord& sender_logical_coord,
     chip_id_t sender_physical_device_id,
     chip_id_t recv_physical_device_id) {
-    auto control_plane = tt::tt_metal::MetalContext::instance().get_cluster().get_control_plane();
+    auto control_plane = tt::tt_metal::MetalContext::instance().get_control_plane();
     const auto& fabric_context = control_plane->get_fabric_context();
 
     auto fabric_max_packet_size = fabric_context.get_fabric_max_payload_size_bytes();
@@ -994,7 +994,7 @@ std::shared_ptr<Program> create_split_reduce_program(
     chip_id_t sender0_physical_device_id,
     chip_id_t sender1_physical_device_id,
     chip_id_t recv_physical_device_id) {
-    auto control_plane = tt::tt_metal::MetalContext::instance().get_cluster().get_control_plane();
+    auto control_plane = tt::tt_metal::MetalContext::instance().get_control_plane();
     const auto& fabric_context = control_plane->get_fabric_context();
 
     auto packet_header_size_bytes = fabric_context.get_fabric_packet_header_size_bytes();
@@ -1131,7 +1131,7 @@ std::shared_ptr<Program> create_reduce_program(
     chip_id_t sender1_physical_device_id,
     chip_id_t reducer_physical_device_id,
     chip_id_t recv_physical_device_id) {
-    auto control_plane = tt::tt_metal::MetalContext::instance().get_cluster().get_control_plane();
+    auto control_plane = tt::tt_metal::MetalContext::instance().get_control_plane();
     const auto& fabric_context = control_plane->get_fabric_context();
 
     auto packet_header_size_bytes = fabric_context.get_fabric_packet_header_size_bytes();
@@ -1217,7 +1217,7 @@ std::shared_ptr<Program> create_recv_program(
     const CoreCoord& output_logical_coord,
     chip_id_t sender_physical_device_id,
     chip_id_t recv_physical_device_id) {
-    auto control_plane = tt::tt_metal::MetalContext::instance().get_cluster().get_control_plane();
+    auto control_plane = tt::tt_metal::MetalContext::instance().get_control_plane();
     const auto& fabric_context = control_plane->get_fabric_context();
 
     auto packet_header_size_bytes = fabric_context.get_fabric_packet_header_size_bytes();
@@ -1658,7 +1658,7 @@ void run_multi_connection_multi_device_data_copy(FixtureT* fixture) {
 
 // Sanity test with a single connection
 TEST_F(MeshSocketTest, SingleConnectionSingleDeviceConfig) {
-    auto control_plane = tt::tt_metal::MetalContext::instance().get_cluster().get_control_plane();
+    auto control_plane = tt::tt_metal::MetalContext::instance().get_control_plane();
     auto md0 = mesh_device_->create_submesh(MeshShape(1, 1), MeshCoordinate(0, 0));
     auto current_device_id = md0->get_device(MeshCoordinate(0, 0))->id();
     auto current_fabric_node_id = control_plane->get_fabric_node_id_from_physical_chip_id(current_device_id);
@@ -1710,7 +1710,7 @@ TEST_F(MeshSocketTest, SingleConnectionSingleDeviceConfig) {
 
 // Test multiple connections
 TEST_F(MeshSocketTest, MultiConnectionSingleDeviceConfig) {
-    auto control_plane = tt::tt_metal::MetalContext::instance().get_cluster().get_control_plane();
+    auto control_plane = tt::tt_metal::MetalContext::instance().get_control_plane();
     auto md0 = mesh_device_->create_submesh(MeshShape(1, 1), MeshCoordinate(0, 0));
     auto current_device_id = md0->get_device(MeshCoordinate(0, 0))->id();
     auto current_fabric_node_id = control_plane->get_fabric_node_id_from_physical_chip_id(current_device_id);
@@ -1790,7 +1790,7 @@ TEST_F(MeshSocketTest, MultiConnectionSingleDeviceConfig) {
 
 // Test random connections across multiple devices
 TEST_F(MeshSocketTest2DFabric, MultiConnectionMultiDeviceTest) {
-    auto control_plane = tt::tt_metal::MetalContext::instance().get_cluster().get_control_plane();
+    auto control_plane = tt::tt_metal::MetalContext::instance().get_control_plane();
     auto md0 = mesh_device_->create_submesh(MeshShape(1, 4), MeshCoordinate(0, 0));
     auto md1 = mesh_device_->create_submesh(MeshShape(1, 4), MeshCoordinate(1, 0));
     std::unordered_map<MeshCoordinate, chip_id_t> sender_device_coord_to_id;

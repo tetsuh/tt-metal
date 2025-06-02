@@ -392,7 +392,7 @@ void syncDeviceDevice(chip_id_t device_id_sender, chip_id_t device_id_receiver) 
     }
 
     if (device_sender != nullptr and device_receiver != nullptr) {
-        FabricConfig fabric_config = tt::tt_metal::MetalContext::instance().get_cluster().get_fabric_config();
+        FabricConfig fabric_config = tt::tt_metal::MetalContext::instance().get_fabric_config();
         TT_FATAL(
             fabric_config != FabricConfig::DISABLED,
             "Cannot support device to device synchronization when TT-Fabric is disabled.");

@@ -21,10 +21,9 @@ void FabricRouterVC::GenerateDependentConfigs() {
     TT_ASSERT(
         upstream_kernels_.size() == downstream_kernels_.size(),
         "Fabric Router VC requires upstream.size() == downstream.size()");
-    auto& cluster = tt::tt_metal::MetalContext::instance().get_cluster();
-    const auto& control_plane = cluster.get_control_plane();
+    const auto& control_plane = tt::tt_metal::MetalContext::instance().get_control_plane();
     TT_FATAL(
-        cluster.get_fabric_config() != FabricConfig::DISABLED && control_plane,
+        tt::tt_metal::MetalContext::instance().get_fabric_config() != FabricConfig::DISABLED && control_plane,
         "Control plane is nullptr. Is fabric initialized yet?");
 
     // Zip upstream and downstream kernels together
@@ -83,6 +82,7 @@ void FabricRouterVC::GenerateDependentConfigs() {
         TT_FATAL(valid_path, "FabricRouterVC is not implemented for this path");
 
         // Get outbound ethernet channels
+        auto& cluster = tt::tt_metal::MetalContext::instance().get_cluster();
         auto us_outbound_eth_channels = cluster.get_fabric_ethernet_channels(src_chip_id);
         auto ds_outbound_eth_channels = cluster.get_fabric_ethernet_channels(dst_chip_id);
         TT_FATAL(!us_outbound_eth_channels.empty(), "No outbound ethernet channels for upstream kernel");
