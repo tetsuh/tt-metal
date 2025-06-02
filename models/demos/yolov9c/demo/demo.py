@@ -92,38 +92,25 @@ def test_demo(device, source, model_type, use_weights_from_ultralytics, use_prog
     for batch in dataset:
         paths, im0s, s = batch
         im = preprocess(im0s, res=(640, 640))
-        img = torch.permute(im, (0, 2, 3, 1))
-        img = img.reshape(
-            1,
-            1,
-            img.shape[0] * img.shape[1] * img.shape[2],
-            img.shape[3],
-        )
-        ttnn_im = ttnn.from_torch(img, dtype=ttnn.bfloat16)
+        # img = torch.permute(im, (0, 2, 3, 1))
+        # img = img.reshape(
+        #    1,
+        #    1,
+        #    img.shape[0] * img.shape[1] * img.shape[2],
+        #    img.shape[3],
+        # )
+        ttnn_im = ttnn.from_torch(im, dtype=ttnn.bfloat16)
+        ttnn_im = ttnn_im.to(device)
         if model_type == "torch_model":
             preds = model(im)
         else:
             preds = model(ttnn_im)
             preds = ttnn.to_torch(preds, dtype=torch.float32)
 
-        results = postprocess(preds, im, im0s, batch, names)[0]
-        output = []
-        # print(results["boxes"]["xyxy"])
-        for i in range(len(results["boxes"]["xyxy"])):
-            output.append(
-                torch.concat(
-                    (
-                        results["boxes"]["xyxy"][i] / 640,
-                        results["boxes"]["conf"][i].unsqueeze(0),
-                        results["boxes"]["conf"][i].unsqueeze(0),
-                        results["boxes"]["cls"][i].unsqueeze(0),
-                    ),
-                    dim=0,
-                )
-                .numpy()
-                .tolist()
-            )
-        print(output)
+        print(preds.shape)
+        results = postprocess(preds, im, im0s, names=names)[0]
+        # results = postprocess(preds, im, im0s, batch, names)[0]
+        print(results)
         save_yolo_predictions_by_model(results, save_dir, source, model_type)
 
     logger.info("Inference done")

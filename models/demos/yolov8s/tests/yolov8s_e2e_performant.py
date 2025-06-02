@@ -73,6 +73,7 @@ class Yolov8sTrace2CQ:
         assert trace_input_addr == self.input_tensor.buffer_address()
 
     def execute_yolov8s_trace_2cqs_inference(self, tt_inputs_host=None):
+        print(tt_inputs_host.shape, self.tt_image_res.shape)
         ttnn.copy_host_to_device_tensor(tt_inputs_host, self.tt_image_res, 1)
         self.write_event = ttnn.record_event(self.device, 1)
         ttnn.wait_for_event(0, self.write_event)
@@ -84,8 +85,9 @@ class Yolov8sTrace2CQ:
         return outputs
 
     def run(self, torch_input_tensor):
-        tt_inputs_hose = setup_l1_sharded_input(self.device, torch_input_tensor)
-        return execute_yolov8s_trace_2cqs_inference(tt_inputs_host)
+        tt_inputs_host = ttnn.from_torch(torch_input_tensor, dtype=ttnn.bfloat16, layout=ttnn.ROW_MAJOR_LAYOUT)
+        # tt_inputs_host = self.test_infra.setup_l1_sharded_input(self.device, torch_input_tensor)
+        return self.execute_yolov8s_trace_2cqs_inference(tt_inputs_host)
 
     def release_yolov8s_trace_2cqs_inference(self):
         ttnn.release_trace(self.device, self.tid)
