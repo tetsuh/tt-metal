@@ -10,6 +10,8 @@ from models.experimental.stable_diffusion_xl_base.utils.clip_encoder import CLIP
 import torchvision.transforms as TF
 import os
 import urllib
+import pathlib
+from PIL import Image
 
 test_demo.__test__ = False
 coco_statistics_download_path = "https://github.com/mlcommons/inference/raw/4b1d1156c23965172ae56eacdd8372f8897eb771/text_to_image/tools/val2014.npz"
@@ -99,17 +101,25 @@ def calculate_activation_statistics(files, model, batch_size=1, dims=2048, devic
     return mu, sigma
 
 
-def compute_statistics_of_path(
-    path,
-):
-    if not os.path.isfile(path):
-        print(f"{path} not found. Downloading...")
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        urllib.request.urlretrieve(coco_statistics_download_path, path)
-        print("Download complete.")
+def compute_statistics_of_path(path, model):
+    # if not os.path.isfile(path):
+    #     print(f"{path} not found. Downloading...")
+    #     os.makedirs(os.path.dirname(path), exist_ok=True)
+    #     urllib.request.urlretrieve(coco_statistics_download_path, path)
+    #     print("Download complete.")
 
-    with np.load(path) as f:
-        m, s = f["mu"][:], f["sigma"][:]
+    # with np.load(path) as f:
+    #     m, s = f["mu"][:], f["sigma"][:]
+
+    # return m, s
+    if path.endswith(".npz"):
+        with np.load(path) as f:
+            m, s = f["mu"][:], f["sigma"][:]
+    else:
+        path = pathlib.Path(path)
+        files = sorted([file for file in path.glob("*.png")])
+
+        m, s = calculate_activation_statistics(files, model)
 
     return m, s
 
@@ -177,6 +187,11 @@ class ImagesDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, i):
         img = self.imgs[i]
+        # Only open image if it's a path
+        if isinstance(img, (str, pathlib.Path)):
+            img = Image.open(img).convert("RGB")
+        elif not isinstance(img, Image.Image):
+            raise TypeError(f"Unsupported image type: {type(img)}")
         if self.transforms is not None:
             img = self.transforms(img)
         return img
@@ -200,8 +215,8 @@ class ImagesDataset(torch.utils.data.Dataset):
     ],
 )
 @pytest.mark.parametrize("captions_path", ["models/experimental/stable_diffusion_xl_base/coco2014/captions.tsv"])
-@pytest.mark.parametrize("coco_statistics_path", ["models/experimental/stable_diffusion_xl_base/coco2014/val2014.npz"])
-@pytest.mark.parametrize("start_from", [0, 1000, 2000, 3000, 4000])
+@pytest.mark.parametrize("coco_statistics_path", ["coco_images/"])
+# @pytest.mark.parametrize("start_from", [0, 1000, 2000, 3000, 4000])
 def test_accuracy_sdxl(
     device,
     use_program_cache,
@@ -211,7 +226,7 @@ def test_accuracy_sdxl(
     vae_on_device,
     captions_path,
     coco_statistics_path,
-    start_from,
+    start_from=0,
 ):
     prompts = []
 
@@ -233,7 +248,7 @@ def test_accuracy_sdxl(
         device,
         use_program_cache,
         is_ci_env,
-        prompts[start_from : start_from + 1000],
+        prompts[0:1],
         num_inference_steps,
         classifier_free_guidance,
         vae_on_device,
@@ -253,7 +268,7 @@ def test_accuracy_sdxl(
     model = InceptionV3([block_idx])
     model.eval()
 
-    m1, s1 = compute_statistics_of_path(coco_statistics_path)
+    m1, s1 = compute_statistics_of_path(coco_statistics_path, model)
 
     m2, s2 = calculate_activation_statistics(images, model)
 

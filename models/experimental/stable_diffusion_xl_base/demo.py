@@ -131,12 +131,7 @@ def run_tt_iteration(
 
 @torch.no_grad()
 def run_demo_inference(
-    ttnn_device,
-    is_ci_env,
-    prompts,
-    num_inference_steps,
-    classifier_free_guidance,
-    vae_on_device,
+    ttnn_device, is_ci_env, prompts, num_inference_steps, classifier_free_guidance, vae_on_device, start_from
 ):
     torch.manual_seed(0)
 
@@ -492,7 +487,8 @@ def run_demo_inference(
         images.append(image)
 
         image.save(f"output/output{iter}.png")
-        # logger.info(f"Image saved to output.png")
+        logger.info(f"Image saved to output/output{iter + start_from}.png")
+        ttnn.deallocate(latents)
         latents = latents_clone.clone()
         latents = ttnn.from_torch(
             latents,
@@ -540,12 +536,8 @@ def test_demo(
     num_inference_steps,
     classifier_free_guidance,
     vae_on_device,
+    start_from=0,
 ):
     return run_demo_inference(
-        device,
-        is_ci_env,
-        prompt,
-        num_inference_steps,
-        classifier_free_guidance,
-        vae_on_device=vae_on_device,
+        device, is_ci_env, prompt, num_inference_steps, classifier_free_guidance, vae_on_device, start_from
     )
