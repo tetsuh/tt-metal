@@ -32,10 +32,12 @@ on:
         required: false
         type: boolean
         default: false
-run-name: ${{ inputs.description }}
+run-name: Galaxy 6U Health Tests Only
 jobs:
   build-artifact:
     uses: ./.github/workflows/build-artifact.yaml
+    permissions:
+      packages: write
     secrets: inherit
     with:
       build-type: ${{ inputs.build-type }}
