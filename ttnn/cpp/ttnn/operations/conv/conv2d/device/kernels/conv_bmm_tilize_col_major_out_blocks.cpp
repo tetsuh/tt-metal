@@ -20,9 +20,12 @@
 
 #define DEBUG_PRINT 0
 
-inline void tilize_in(
+template <bool init_tilize = true, bool uninit_tilize = true>
+__attribute__((noinline)) void tilize_in(
     uint32_t in_cb_id, uint32_t in_subblock_h, uint32_t in_block_w, uint32_t in_num_subblocks, uint32_t out_cb_id) {
-    tilize_init_short(in_cb_id, in_block_w, out_cb_id);
+    if constexpr (init_tilize) {
+        tilize_init_short(in_cb_id, in_block_w, out_cb_id);
+    }
     for (uint32_t in_subblock = 0; in_subblock < in_num_subblocks; ++in_subblock) {
         for (uint32_t h = 0; h < in_subblock_h; ++h) {
             cb_wait_front(in_cb_id, in_block_w);
@@ -32,7 +35,9 @@ inline void tilize_in(
             cb_pop_front(in_cb_id, in_block_w);
         }
     }
-    tilize_uninit(in_cb_id, out_cb_id);
+    if constexpr (uninit_tilize) {
+        tilize_uninit(in_cb_id, out_cb_id);
+    }
 }  // tilize_in()
 
 template <uint32_t out_subblock_w, uint32_t out_block_w>
@@ -119,10 +124,12 @@ void MAIN {
     constexpr uint32_t mm_in0_cb_id = tilize_in0 ? tilized_in0_cb_id : in0_cb_id;
 
 #ifdef SPLIT_READER
+    constexpr bool split_reader = true;
     constexpr uint32_t in0_num_subblocks_read_last = in0_num_subblocks / 2;
     constexpr uint32_t in0_num_subblocks_read = in0_num_subblocks - in0_num_subblocks_read_last;
 #else
     constexpr uint32_t in0_num_subblocks_read = in0_num_subblocks;
+    constexpr bool split_reader = false;
 #endif
 
     mm_block_init(mm_in0_cb_id, in1_cb_id, out_cb_id, false, out_subblock_w, out_subblock_h, in0_block_w);
@@ -181,9 +188,10 @@ void MAIN {
 
                     reconfig_data_format_srca(in1_cb_id, in0_cb_id);
 
-                    tilize_in(in0_cb_id, in0_subblock_h, in0_block_w, in0_num_subblocks_read, tilized_in0_cb_id);
+                    tilize_in<true, !split_reader>(
+                        in0_cb_id, in0_subblock_h, in0_block_w, in0_num_subblocks_read, tilized_in0_cb_id);
 #ifdef SPLIT_READER
-                    tilize_in(
+                    tilize_in<false, true>(
                         in0_cb_second_reader_id,
                         in0_subblock_h,
                         in0_block_w,
