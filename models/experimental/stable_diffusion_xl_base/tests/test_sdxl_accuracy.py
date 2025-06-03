@@ -216,7 +216,8 @@ class ImagesDataset(torch.utils.data.Dataset):
 )
 @pytest.mark.parametrize("captions_path", ["models/experimental/stable_diffusion_xl_base/coco2014/captions.tsv"])
 @pytest.mark.parametrize("coco_statistics_path", ["coco_images/"])
-# @pytest.mark.parametrize("start_from", [0, 1000, 2000, 3000, 4000])
+@pytest.mark.parametrize("start_from", [int(os.getenv("START_FROM", 0))])
+@pytest.mark.parametrize("num_prompts", [int(os.getenv("NUM_PROMPTS", 0))])
 def test_accuracy_sdxl(
     device,
     use_program_cache,
@@ -226,7 +227,8 @@ def test_accuracy_sdxl(
     vae_on_device,
     captions_path,
     coco_statistics_path,
-    start_from=0,
+    start_from,
+    num_prompts,
 ):
     prompts = []
 
@@ -242,16 +244,17 @@ def test_accuracy_sdxl(
         for row in reader:
             prompts.append(row[2])
 
-    print(f"Start inference from prompt index: {start_from} to {start_from + 1000}")
+    print(f"Start inference from prompt index: {start_from} to {start_from + num_prompts}")
 
     images = test_demo(
         device,
         use_program_cache,
         is_ci_env,
-        prompts[0:1],
+        prompts[start_from : start_from + num_prompts],
         num_inference_steps,
         classifier_free_guidance,
         vae_on_device,
+        start_from,
     )
 
     clip = CLIPEncoder()
@@ -260,6 +263,8 @@ def test_accuracy_sdxl(
 
     for idx, image in enumerate(images):
         clip_scores.append(100 * clip.get_clip_score(prompts[idx], image).item())
+
+    torch.save(clip_scores, f"clip_scores_{start_from}-{start_from + num_prompts}.pt")
 
     average_clip_score = sum(clip_scores) / len(clip_scores)
 

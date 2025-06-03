@@ -486,7 +486,7 @@ def run_demo_inference(
         image = pipeline.image_processor.postprocess(image, output_type="pil")[0]
         images.append(image)
 
-        image.save(f"output/output{iter}.png")
+        image.save(f"output/output{iter + start_from}.png")
         logger.info(f"Image saved to output/output{iter + start_from}.png")
         ttnn.deallocate(latents)
         latents = latents_clone.clone()
@@ -536,7 +536,7 @@ def test_demo(
     num_inference_steps,
     classifier_free_guidance,
     vae_on_device,
-    start_from=0,
+    start_from,
 ):
     return run_demo_inference(
         device, is_ci_env, prompt, num_inference_steps, classifier_free_guidance, vae_on_device, start_from
