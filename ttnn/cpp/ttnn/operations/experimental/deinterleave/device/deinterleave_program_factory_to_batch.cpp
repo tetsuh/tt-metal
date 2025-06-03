@@ -22,10 +22,6 @@ DeinterleaveToBatchOperation::ProgramFactoryToBatch::create(
     using namespace tt::tt_metal;
     using namespace tt;
 
-    // TT_FATAL(operation_attributes.to_batch == true, "Deinterleave: bad configuration.");
-    // TT_FATAL(outputs.size() != 1, "Deinterleave: outputs.size() must be 1 in to_batch mode");
-    // auto& output = outputs[0];
-
     Program program;
 
     const auto& input = tensor_args.input;
@@ -69,7 +65,7 @@ DeinterleaveToBatchOperation::ProgramFactoryToBatch::create(
 
     auto per_core_width = operation_attributes.input_width;
     auto per_core_height = input.memory_config().shard_spec.value().shape[0] / operation_attributes.input_width;
-    log_info(
+    tt::log_info(
         tt::LogOp,
         "DeinterleaveToBatchOperation::ProgramFactoryToBatch::create; stride_hw: {}; per core height {} per_core_width "
         "{}",
@@ -119,12 +115,14 @@ DeinterleaveToBatchOperation::ProgramFactoryToBatch::create(
     auto cores = corerange_to_cores(worker_grid, std::nullopt, true);
 
     uint32_t out_batches = operation_attributes.stride_hw[0] * operation_attributes.stride_hw[1];
-    // assuming a single core reads only one stick type from src from the interleaved data, thus fail if cores_in_batch
-    // > num_of_shards
+
+    // assuming a single core reads only one stick type from src from the interleaved data
+    // thus fail if cores_in_batch > num_of_shards
     TT_FATAL(
         out_batches <= num_of_shards, "Deinterleave: out_batches {} > num_of_shards {}", out_batches, num_of_shards);
-    tt::log_warning(tt::LogOp, "Output buffer address {:#x}", output.buffer()->address());
-    tt::log_warning(tt::LogOp, "Input buffer address {:#x}", input.buffer()->address());
+
+    tt::log_info(tt::LogOp, "Output buffer address {:#x}", output.buffer()->address());
+    tt::log_info(tt::LogOp, "Input buffer address {:#x}", input.buffer()->address());
 
     using CoreCoord = tt::tt_metal::CoreCoord;
 
@@ -163,7 +161,7 @@ DeinterleaveToBatchOperation::ProgramFactoryToBatch::create(
     };
 
     for (const auto& core : cores) {
-        auto my_id = core.x + core.y * device_grid.x;
+        auto this_core = core.x + core.y * device_grid.x;
 
         // number of output batches,for ABAB;CDCD => 4 batches AAAA;BBBB;CCCD;DDDD
         // also turns out this is the number of src core one reads from
@@ -171,28 +169,19 @@ DeinterleaveToBatchOperation::ProgramFactoryToBatch::create(
         // number of cores processing one output batch
         uint32_t cores_in_batch = num_of_shards / out_batches;
         // batch this core is processing [0-3]
-        uint32_t dst_batch = my_id / cores_in_batch;
+        uint32_t dst_batch = this_core / cores_in_batch;
 
         // id of this core in batch
-        uint32_t id_in_batch = my_id % cores_in_batch;
+        uint32_t id_in_batch = this_core % cores_in_batch;
         uint32_t start_id = id_in_batch * num_src_cores;
         CoreCoord start = {start_id % device_grid.x, start_id / device_grid.x};
         CoreCoord end = core_coord_get_end_loc(start, device_grid, num_src_cores);
-        // uint32_t end_x = start_x + (num_src_cores % device_grid.x == 0 ? device_grid.x : num_src_cores %
-        // device_grid.x); uint32_t end.y = start_y + (num_src_cores % device_grid.x == 0 ? num_src_cores /
-        // device_grid.x
-        //                                                                : 1 + num_src_cores / device_grid.x);
 
         // core should proccess data from start_xy to end_xy, but we dont want every core reading from the same source
         // to start from the same point but offset and process the data in a round robin fashion. cores that read same
         // srcs have same id_in_batch, but different dst_batch
         CoreCoord offset_dm0 = core_range_offset(start, end, device_grid, dst_batch);
         CoreCoord offset_dm1 = core_range_offset(start, end, device_grid, (dst_batch + 1) % out_batches);
-
-        // uint32_t offset_x_dm0 = (start.x + dst_batch) % device_grid.x;
-        // uint32_t offset_y_dm0 = start.y + (start.x + dst_batch) / device_grid.x;
-        // uint32_t offset_x_dm1 = (offset_x_dm0 + 1) % device_grid.x;
-        // uint32_t offset_y_dm1 = (offset_x_dm0 + 1) % device_grid.x == 0 ? offset_y_dm0 + 1 : offset_y_dm0;
 
         // src offset are not affected by offset change, because we always read all data from one source and ordering
         // here is not important.
@@ -205,17 +194,13 @@ DeinterleaveToBatchOperation::ProgramFactoryToBatch::create(
             (dst_batch / operation_attributes.stride_hw[1]) * per_core_width * stick_size_bytes;
 
         uint32_t src_offset = src_datum_width_offset + src_datum_height_offset;
-        // uint32_t src_offset_dm1 = (per_core_height / 2 * per_core_width * aligned_input_unit_size) +
-        //   src_datum_width_offset + src_datum_height_offset;
 
         // stride to move for one src_core output in the dst buffer
         uint32_t dst_height = per_core_height / operation_attributes.stride_hw[0];
         uint32_t dst_width = per_core_width / operation_attributes.stride_hw[1];
 
         uint32_t dst_b1_size_bytes = dst_height * dst_width * stick_size_bytes;
-        // dst offset now needs some adjustments
         uint32_t dst_offset_dm0 = dst_batch * dst_b1_size_bytes;
-        // uint32_t dst_offset_dm1 = dst_batch * dst_b1_size_bytes + dst_b1_size_bytes / 2;
         uint32_t dst_offset_dm1 = (dst_offset_dm0 + dst_b1_size_bytes) % (out_batches * dst_b1_size_bytes);
 
         uint32_t dst_rollover_offset_dm0 =
@@ -223,14 +208,14 @@ DeinterleaveToBatchOperation::ProgramFactoryToBatch::create(
         uint32_t dst_rollover_offset_dm1 =
             (dst_batch % 2 == 0) ? dst_b1_size_bytes : 0;  // div by 2 for two data movement processors
 
-        log_warning(
+        log_info(
             tt::LogOp,
             "DeinterleaveToBatchOperation::ProgramFactoryToBatch::create; core: {} myid {}, start {}-{}, end {}-{}, "
             "dst_batch "
             "{}, "
             "id_in_batch {} offset_dm0 {}-{} offset_dm1 {}-{}",
             core,
-            my_id,
+            this_core,
             start.y,
             start.x,
             end.y,
@@ -258,12 +243,12 @@ DeinterleaveToBatchOperation::ProgramFactoryToBatch::create(
             end.y,
             device_grid.y);
 
-        log_warning(
+        log_info(
             tt::LogOp,
             "src_width_stride {}, src_height_offset_to_next {}",
             src_width_stride,
             src_height_offset_to_next);
-        log_warning(
+        log_info(
             tt::LogOp,
             "dst_batch {}, src_offset_dm0 {}, src_offset_dm1 {}, dst_b1_size_bytes {}, dst_offset_dm0 {}, "
             "dst_offset_dm1 {}",
@@ -308,9 +293,6 @@ DeinterleaveToBatchOperation::ProgramFactoryToBatch::create(
              (uint32_t)num_src_cores,
              (uint32_t)dst_rollover_offset_dm1});
     }
-    // uint32_t start_id = 0;
-    // uint32_t num_cores_group_1 = core_group_1.num_cores();
-    // auto cores = grid_to_cores(num_cores, num_cores_x, num_cores_y);
 
     return {std::move(program), {read_kernel_id, write_kernel_id, worker_grid}};
 }
@@ -324,13 +306,6 @@ void DeinterleaveToBatchOperation::ProgramFactoryToBatch::override_runtime_argum
     const auto& read_kernel_id = cached_program.shared_variables.read_kernel_id;
     const auto& write_kernel_id = cached_program.shared_variables.write_kernel_id;
 
-    // auto input_buffer_address = tensor_args.input.buffer()->address();
-    // auto output_buffer_address = output[0].buffer()->address();
-
     TT_FATAL(false, "to resolve overriding runtime args");
-    // std::vector<std::vector<uint32_t>>& reader_args = GetRuntimeArgs(program, read_kernel_id);
-    // reader_args[0] = input_buffer_address;
-    // std::vector<std::vector<uint32_t>>& writer_args = GetRuntimeArgs(program, write_kernel_id);
-    // writer_args[0] = output_buffer_address;
 }
 }  // namespace ttnn::operations::experimental::deinterleave

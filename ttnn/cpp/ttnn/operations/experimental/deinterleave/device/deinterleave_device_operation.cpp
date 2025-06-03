@@ -11,13 +11,13 @@ void DeinterleaveToBatchOperation::validate_inputs(
     const operation_attributes_t& operation_attributes, const tensor_args_t& tensor_args) {
     const auto& input = tensor_args.input;
 
-    TT_FATAL(
-        input.get_dtype() == DataType::BFLOAT16,
-        "Deinterleave: input must be BFLOAT16");  // BFP8 requires untilizing/tilizing in the deinterleaving loop
-    TT_FATAL(
-        input.get_layout() == Layout::ROW_MAJOR,
-        "Deinterleave: input must be ROW_MAJOR");  // TILE requires untilizing/tilizing in the deinterleaving loop
     TT_FATAL(input.storage_type() == StorageType::DEVICE, "Deinterleave: input must be on device");
+    // BFP8 requires untilizing/tilizing in the deinterleaving loop
+    TT_FATAL(input.get_dtype() == DataType::BFLOAT16, "Deinterleave: input must be BFLOAT16");
+    // TILE requires untilizing/tilizing in the deinterleaving loop
+    TT_FATAL(input.get_layout() == Layout::ROW_MAJOR, "Deinterleave: input must be ROW_MAJOR");
+
+    // sharding checks
     TT_FATAL(input.buffer() != nullptr, "Deinterleave: input must be allocated in buffer on device");
     TT_FATAL(
         input.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED,
@@ -27,6 +27,7 @@ void DeinterleaveToBatchOperation::validate_inputs(
         input.memory_config().shard_spec.value().orientation == ShardOrientation::ROW_MAJOR,
         "Deinterleave: input must have ROW_MAJOR orientation");
 
+    // tensor shape constraints
     auto per_core_height = input.memory_config().shard_spec.value().shape[0] / operation_attributes.input_width;
     TT_FATAL(
         per_core_height >= operation_attributes.stride_hw[0],
@@ -35,7 +36,7 @@ void DeinterleaveToBatchOperation::validate_inputs(
         operation_attributes.stride_hw[0]);
     TT_FATAL(
         per_core_height % (operation_attributes.stride_hw[0]) == 0,
-        "Deinterleave: per_core_height {} must be div by {}",
+        "Deinterleave: per_core_height {} must be divisible by {}",
         per_core_height,
         operation_attributes.stride_hw[0]);
     TT_FATAL(
@@ -105,13 +106,19 @@ void DeinterleaveLocalOperation::validate_inputs(
     const operation_attributes_t& operation_attributes, const tensor_args_t& tensor_args) {
     const auto& input = tensor_args.input;
 
+    // TODO: remove when implemented
     TT_FATAL(
-        input.get_dtype() == DataType::BFLOAT16,
-        "Deinterleave: input must be BFLOAT16");  // BFP8 requires untilizing/tilizing in the deinterleaving loop
-    TT_FATAL(
-        input.get_layout() == Layout::ROW_MAJOR,
-        "Deinterleave: input must be ROW_MAJOR");  // TILE requires untilizing/tilizing in the deinterleaving loop
+        false,
+        "DeinterleaveLocalOperation: This operation is not supported yet. Please use DeinterleaveToBatchOperation "
+        "instead.");
+
     TT_FATAL(input.storage_type() == StorageType::DEVICE, "Deinterleave: input must be on device");
+    // BFP8 requires untilizing/tilizing in the deinterleaving loop
+    TT_FATAL(input.get_dtype() == DataType::BFLOAT16, "Deinterleave: input must be BFLOAT16");
+    // TILE requires untilizing/tilizing in the deinterleaving loop
+    TT_FATAL(input.get_layout() == Layout::ROW_MAJOR, "Deinterleave: input must be ROW_MAJOR");
+
+    // sharding checks
     TT_FATAL(input.buffer() != nullptr, "Deinterleave: input must be allocated in buffer on device");
     TT_FATAL(
         input.memory_config().memory_layout == TensorMemoryLayout::HEIGHT_SHARDED,
@@ -121,6 +128,7 @@ void DeinterleaveLocalOperation::validate_inputs(
         input.memory_config().shard_spec.value().orientation == ShardOrientation::ROW_MAJOR,
         "Deinterleave: input must have ROW_MAJOR orientation");
 
+    // tensor shape constraints
     auto per_core_height = input.memory_config().shard_spec.value().shape[0] / operation_attributes.input_width;
     TT_FATAL(
         per_core_height >= operation_attributes.stride_hw[0],

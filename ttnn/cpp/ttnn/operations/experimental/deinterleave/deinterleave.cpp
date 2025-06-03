@@ -33,7 +33,6 @@ OptionalTensors DeinterleaveLocal::invoke(
 }
 
 OptionalTensors DeinterleaveLocal::create_async_optional_output_tensors(
-    // std::vector<Tensor> DeinterleaveLocal::create_async_output_tensors(
     const Tensor& input,
     const uint32_t input_height,
     const uint32_t input_width,

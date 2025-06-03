@@ -28,7 +28,6 @@ struct DeinterleaveLocal {
         const std::optional<DeviceComputeKernelConfig>& compute_kernel_config);
 
     static OptionalTensors create_async_optional_output_tensors(
-        // static std::vector<Tensor> create_async_output_tensors(
         const Tensor& input,
         const uint32_t input_height,
         const uint32_t input_width,
