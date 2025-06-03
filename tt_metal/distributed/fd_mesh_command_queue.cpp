@@ -404,6 +404,7 @@ void FDMeshCommandQueue::enqueue_read_shard_from_core(
     sub_device_ids = buffer_dispatch::select_sub_device_ids(mesh_device_, sub_device_ids);
 
     if (size_bytes > 0) {
+        this->reset_prefetcher_cache_manager();
         device_dispatch::CoreReadDispatchParams dispatch_params{
             address.virtual_core_coord,
             address.address,
