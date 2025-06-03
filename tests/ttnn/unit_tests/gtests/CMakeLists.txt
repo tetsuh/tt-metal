@@ -39,7 +39,6 @@ target_sources(
         test_sliding_window_infra.cpp
         common_test_utils.cpp
         test_generic_op.cpp
-        test_graph_query_op_runtime.cpp
 )
 target_include_directories(unit_tests_ttnn_smoke PRIVATE ${PROJECT_SOURCE_DIR}/tests)
 target_link_libraries(
@@ -57,7 +56,7 @@ target_sources(
     PRIVATE
         test_async_runtime.cpp # FIXME: Fix memory leak (LSan) then shift-left
         test_conv2d.cpp # FIXME: Fix misaligned memory load (UBSan) then shift-left
-    # test_graph_query_op_runtime.cpp
+        test_graph_query_op_runtime.cpp
 )
 target_include_directories(unit_tests_ttnn_basic PRIVATE ${PROJECT_SOURCE_DIR}/tests)
 target_link_libraries(
@@ -72,7 +71,7 @@ target_link_libraries(
     unit_tests_ttnn
     PRIVATE
         TT::NN::Test::Smoke
-    # TT::NN::Test::Basic
+        TT::NN::Test::Basic
 )
 
 # unit_tests_ttnn_ccl
