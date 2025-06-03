@@ -77,11 +77,12 @@ public:
     }
 };
 
-void forward_socket_metadata(const tt::tt_metal::distributed::SocketConfig& config, bool is_sender, MPI_Comm comm) {
+void forward_socket_metadata(const tt::tt_metal::distributed::DistributedSocketMD& md, bool is_sender, MPI_Comm comm) {
+    const auto& config = md.config;
     uint32_t peer_rank = is_sender ? config.receiver_rank : config.sender_rank;
     uint32_t curr_rank = is_sender ? config.sender_rank : config.receiver_rank;
     std::cout << "Forward socket metadata from rank " << curr_rank << " to rank " << peer_rank << std::endl;
-    auto socket_config_fbb = serialize_socket_config(config);
+    auto socket_config_fbb = serialize_distributed_socket_md(md);
     uint8_t* buf = socket_config_fbb.GetBufferPointer();
     int size = socket_config_fbb.GetSize();
     std::cout << "Socket FB send size: " << size << std::endl;
@@ -89,8 +90,9 @@ void forward_socket_metadata(const tt::tt_metal::distributed::SocketConfig& conf
     MPI_Send(buf, size, MPI_BYTE, peer_rank, 1, comm);
 }
 
-tt::tt_metal::distributed::SocketConfig get_socket_metadata(
-    const tt::tt_metal::distributed::SocketConfig& config, bool is_sender, MPI_Comm comm) {
+tt::tt_metal::distributed::DistributedSocketMD get_socket_metadata(
+    const tt::tt_metal::distributed::DistributedSocketMD& md, bool is_sender, MPI_Comm comm) {
+    const auto& config = md.config;
     uint32_t peer_rank = is_sender ? config.receiver_rank : config.sender_rank;
     uint32_t curr_rank = is_sender ? config.sender_rank : config.receiver_rank;
     std::cout << "Get socket metadata from rank " << curr_rank << " to rank " << peer_rank << std::endl;
@@ -100,42 +102,69 @@ tt::tt_metal::distributed::SocketConfig get_socket_metadata(
     std::vector<uint8_t> buffer(size);
     MPI_Recv(buffer.data(), size, MPI_BYTE, peer_rank, 1, comm, MPI_STATUS_IGNORE);
 
-    return deserialize_socket_config(buffer);
+    return deserialize_distributed_socket_md(buffer);
 }
 
-void multi_host_handshake(const tt::tt_metal::distributed::SocketConfig& config, bool is_sender, MPI_Comm comm) {
+void multi_host_handshake(const tt::tt_metal::distributed::DistributedSocketMD& md, bool is_sender, MPI_Comm comm) {
+    const auto& config = md.config;
     TT_FATAL(
         config.sender_rank != config.receiver_rank,
         "Cannot create a distributed socket with the same sender and receiver rank.");
-    forward_socket_metadata(config, is_sender, comm);
-    auto peer_socket_md = get_socket_metadata(config, is_sender, comm);
+    forward_socket_metadata(md, is_sender, comm);
+    auto peer_socket_md = get_socket_metadata(md, is_sender, comm);
+    const auto& peer_config = peer_socket_md.config;
     TT_FATAL(
-        peer_socket_md.socket_connection_config.size() == config.socket_connection_config.size(),
+        peer_config.socket_connection_config.size() == config.socket_connection_config.size(),
         "Mismatch in number of socket connections during handshake.");
     for (size_t i = 0; i < config.socket_connection_config.size(); ++i) {
         const auto& local_conn = config.socket_connection_config[i];
-        const auto& peer_conn = peer_socket_md.socket_connection_config[i];
+        const auto& peer_conn = peer_config.socket_connection_config[i];
         TT_FATAL(local_conn.sender_core == peer_conn.sender_core, "Mismatch in sender core during handshake.");
         TT_FATAL(local_conn.receiver_core == peer_conn.receiver_core, "Mismatch in receiver core during handshake.");
     }
     // make sure socket memory config matches
     TT_FATAL(
-        config.socket_mem_config.socket_storage_type == peer_socket_md.socket_mem_config.socket_storage_type,
+        config.socket_mem_config.socket_storage_type == peer_config.socket_mem_config.socket_storage_type,
         "Mismatch in socket storage type during handshake.");
     TT_FATAL(
-        config.socket_mem_config.fifo_size == peer_socket_md.socket_mem_config.fifo_size,
+        config.socket_mem_config.fifo_size == peer_config.socket_mem_config.fifo_size,
         "Mismatch in socket FIFO size during handshake.");
 
     TT_FATAL(
-        config.socket_mem_config.sender_sub_device == peer_socket_md.socket_mem_config.sender_sub_device,
+        config.socket_mem_config.sender_sub_device == peer_config.socket_mem_config.sender_sub_device,
         "Mismatch in sender sub-device during handshake.");
 
     TT_FATAL(
-        config.socket_mem_config.receiver_sub_device == peer_socket_md.socket_mem_config.receiver_sub_device,
+        config.socket_mem_config.receiver_sub_device == peer_config.socket_mem_config.receiver_sub_device,
         "Mismatch in receiver sub-device during handshake.");
     // verify ranks match
-    TT_FATAL(config.sender_rank == peer_socket_md.sender_rank, "Mismatch in sender rank during handshake.");
-    TT_FATAL(config.receiver_rank == peer_socket_md.receiver_rank, "Mismatch in receiver rank during handshake.");
+    TT_FATAL(config.sender_rank == peer_config.sender_rank, "Mismatch in sender rank during handshake.");
+    TT_FATAL(config.receiver_rank == peer_config.receiver_rank, "Mismatch in receiver rank during handshake.");
+    if (is_sender) {
+        std::cout << "Sender got peer address: " << peer_socket_md.peer_addr << std::endl;
+        std::cout << "Sender got peer mesh IDs " << std::endl;
+        for (const auto& mesh_id : peer_socket_md.peer_mesh_ids) {
+            std::cout << mesh_id << " ";
+        }
+        std::cout << std::endl;
+        std::cout << "Sender got peer chip IDs " << std::endl;
+        for (const auto& chip_id : peer_socket_md.peer_chip_ids) {
+            std::cout << chip_id << " ";
+        }
+        std::cout << std::endl;
+    } else {
+        std::cout << "Receiver got peer address: " << peer_socket_md.peer_addr << std::endl;
+        std::cout << "Receiver got peer mesh IDs " << std::endl;
+        for (const auto& mesh_id : peer_socket_md.peer_mesh_ids) {
+            std::cout << mesh_id << " ";
+        }
+        std::cout << std::endl;
+        std::cout << "Receiver got peer chip IDs " << std::endl;
+        for (const auto& chip_id : peer_socket_md.peer_chip_ids) {
+            std::cout << chip_id << " ";
+        }
+        std::cout << std::endl;
+    }
     std::cout << "Multi-host handshake successful between ranks " << config.sender_rank << " and "
               << config.receiver_rank << std::endl;
 }
@@ -166,10 +195,23 @@ TEST_F(MPITest, BasicCommunication) {
     };
 
     if (rank == 0) {
-        multi_host_handshake(socket_config, true, MPI_COMM_WORLD);
+        DistributedSocketMD socket_md = {
+            .config = socket_config,
+            .peer_addr = 0,        // Dummy address for testing
+            .peer_mesh_ids = {0},  // Dummy mesh ID for testing
+            .peer_chip_ids = {0},  // Dummy chip ID for testing
+        };
+        multi_host_handshake(socket_md, true, MPI_COMM_WORLD);
     } else {
-        multi_host_handshake(socket_config, false, MPI_COMM_WORLD);
+        DistributedSocketMD socket_md = {
+            .config = socket_config,
+            .peer_addr = 10,       // Dummy address for testing
+            .peer_mesh_ids = {1},  // Dummy mesh ID for testing
+            .peer_chip_ids = {0},  // Dummy chip ID for testing
+        };
+        multi_host_handshake(socket_md, false, MPI_COMM_WORLD);
     }
+
     // if (rank == 0) {
     //     std::size_t var_size = 5;
     //     Config config;

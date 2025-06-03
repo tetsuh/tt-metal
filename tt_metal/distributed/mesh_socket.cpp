@@ -7,13 +7,6 @@
 
 namespace tt::tt_metal::distributed {
 
-// struct DistributedSocketMD {
-//     SocketConfig config;
-//     DeviceAddr peer_addr;
-//     std::vector<uint32_t> peer_mesh_ids;
-//     std::vector<uint32_t> peer_chip_ids;
-// };
-
 std::pair<MeshSocket, MeshSocket> MeshSocket::create_sockets(
     const std::shared_ptr<MeshDevice>& sender,
     const std::shared_ptr<MeshDevice>& receiver,

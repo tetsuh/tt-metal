@@ -246,7 +246,7 @@ void write_socket_configs(
     }
 }
 
-flatbuffers::FlatBufferBuilder serialize_socket_config(const SocketConfig& socket_config) {
+flatbuffers::FlatBufferBuilder serialize_distributed_socket_md(const DistributedSocketMD& socket_md) {
     flatbuffers::FlatBufferBuilder builder;
 
     // Helper lambda to create CoreCoord
@@ -267,6 +267,7 @@ flatbuffers::FlatBufferBuilder serialize_socket_config(const SocketConfig& socke
         return SocketConfigFB::CreateMeshCoreCoord(builder, device_coord, core_coord);
     };
 
+    auto& socket_config = socket_md.config;
     // Create socket connections
     std::vector<flatbuffers::Offset<SocketConfigFB::SocketConnection>> fb_connections;
     for (const auto& conn : socket_config.socket_connection_config) {
@@ -299,21 +300,28 @@ flatbuffers::FlatBufferBuilder serialize_socket_config(const SocketConfig& socke
     auto socket_config_fb = SocketConfigFB::CreateSocketConfig(
         builder, connections_vector, fb_mem_config, socket_config.sender_rank, socket_config.receiver_rank);
 
-    builder.Finish(socket_config_fb);
+    auto distributed_socket_md = SocketConfigFB::CreateDistributedSocketMD(
+        builder,
+        socket_config_fb,
+        socket_md.peer_addr,
+        builder.CreateVector(socket_md.peer_mesh_ids),
+        builder.CreateVector(socket_md.peer_chip_ids));
+    builder.Finish(distributed_socket_md);
 
     return builder;
 }
 
-SocketConfig deserialize_socket_config(const std::vector<uint8_t>& data) {
+DistributedSocketMD deserialize_distributed_socket_md(const std::vector<uint8_t>& data) {
     // Verify the buffer
     auto verifier = flatbuffers::Verifier(data.data(), data.size());
-    if (!SocketConfigFB::VerifySocketConfigBuffer(verifier)) {
-        throw std::runtime_error("Invalid FlatBuffer data");
+    if (!SocketConfigFB::VerifyDistributedSocketMDBuffer(verifier)) {
+        throw std::runtime_error("Invalid FlatBuffer data of distributed socket metadata");
     }
+    auto distributed_socket_md_fb = SocketConfigFB::GetDistributedSocketMD(data.data());
+    auto socket_config_fb = distributed_socket_md_fb->config();
 
-    // Get the root object
-    auto socket_config_fb = SocketConfigFB::GetSocketConfig(data.data());
-
+    DistributedSocketMD socket_md;
+    ;
     SocketConfig socket_config;
 
     // Deserialize socket connections
@@ -361,8 +369,17 @@ SocketConfig deserialize_socket_config(const std::vector<uint8_t>& data) {
     }
     socket_config.sender_rank = socket_config_fb->sender_rank();
     socket_config.receiver_rank = socket_config_fb->receiver_rank();
-
-    return socket_config;
+    socket_md.config = std::move(socket_config);
+    socket_md.peer_addr = distributed_socket_md_fb->peer_addr();
+    if (distributed_socket_md_fb->peer_mesh_ids()) {
+        socket_md.peer_mesh_ids.assign(
+            distributed_socket_md_fb->peer_mesh_ids()->begin(), distributed_socket_md_fb->peer_mesh_ids()->end());
+    }
+    if (distributed_socket_md_fb->peer_chip_ids()) {
+        socket_md.peer_chip_ids.assign(
+            distributed_socket_md_fb->peer_chip_ids()->begin(), distributed_socket_md_fb->peer_chip_ids()->end());
+    }
+    return socket_md;
 }
 
 uint32_t get_physical_mesh_id(MeshDevice* mesh_device, const MeshCoordinate& coord) {

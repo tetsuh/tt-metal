@@ -34,4 +34,11 @@ table SocketConfig {
     receiver_rank: uint32;
 }
 
-root_type SocketConfig;
+table DistributedSocketMD {
+    config: SocketConfig;
+    peer_addr: uint64;
+    peer_mesh_ids: [uint32];
+    peer_chip_ids: [uint32];
+}
+
+root_type DistributedSocketMD;

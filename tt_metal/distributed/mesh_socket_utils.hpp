@@ -13,6 +13,13 @@ namespace tt::tt_metal::distributed {
 
 enum class SocketEndpoint : uint8_t { SENDER, RECEIVER };
 
+struct DistributedSocketMD {
+    SocketConfig config;
+    DeviceAddr peer_addr;
+    std::vector<uint32_t> peer_mesh_ids;
+    std::vector<uint32_t> peer_chip_ids;
+};
+
 // Create send/receive socket config buffers
 std::shared_ptr<MeshBuffer> create_socket_config_buffer(
     const std::shared_ptr<MeshDevice>& device, const SocketConfig& config, SocketEndpoint socket_endpoint);
@@ -30,8 +37,8 @@ void write_socket_configs(
     SocketEndpoint socket_endpoint);
 
 // (De)serialization Functions (for Host to Host handshaking)
-flatbuffers::FlatBufferBuilder serialize_socket_config(const SocketConfig& socket_config);
-SocketConfig deserialize_socket_config(const std::vector<uint8_t>& data);
+flatbuffers::FlatBufferBuilder serialize_distributed_socket_md(const DistributedSocketMD& socket_md);
+DistributedSocketMD deserialize_distributed_socket_md(const std::vector<uint8_t>& data);
 
 //  =============== Additional utility functions  ===============
 
