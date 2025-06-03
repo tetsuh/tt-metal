@@ -20,51 +20,94 @@ FORCE_INLINE void setup_local_cb_read_write_interfaces(
     bool read,
     bool write,
     bool init_wr_tile_ptr) {
-    volatile tt_l1_ptr uint32_t* circular_buffer_config_addr =
+    register volatile tt_l1_ptr uint32_t* circular_buffer_config_addr asm("a0") =
         cb_l1_base + start_cb_index * UINT32_WORDS_PER_LOCAL_CIRCULAR_BUFFER_CONFIG;
+
+    register int local_cb_mask asm ("a4") = local_cb_mask2;
 
     local_cb_mask >>= start_cb_index;
     uint32_t cb_id = start_cb_index;
-    while (true) {
-        // We could attempt to find the next set bit instead of iterating through all bits, but the circular buffers are
-        // often pretty tightly packed and computing the next set bit is somewhat expensive without specialized
-        // instructions.
-        // TODO: Blackhole supports zbb, so use __builtin_ctz there.
-        if (local_cb_mask & 1) {
-            // NOTE: fifo_addr, fifo_size and fifo_limit in 16B words!
-            uint32_t fifo_addr = circular_buffer_config_addr[0] >> cb_addr_shift;
-            uint32_t fifo_size = circular_buffer_config_addr[1] >> cb_addr_shift;
-            uint32_t fifo_num_pages = circular_buffer_config_addr[2];
-            uint32_t fifo_page_size = circular_buffer_config_addr[3] >> cb_addr_shift;
-            uint32_t fifo_limit = fifo_addr + fifo_size;
+    register LocalCBInterface *local_interface_ptr asm("a5")= &get_local_cb_interface(cb_id);
 
-            LocalCBInterface& local_interface = get_local_cb_interface(cb_id);
-            local_interface.fifo_limit = fifo_limit;  // to check if we need to wrap
-            if (write) {
-                local_interface.fifo_wr_ptr = fifo_addr;
-            }
-            if (read) {
-                local_interface.fifo_rd_ptr = fifo_addr;
-            }
-            local_interface.fifo_size = fifo_size;
-            local_interface.tiles_acked_received_init = 0;
-            if (write) {
-                local_interface.fifo_num_pages = fifo_num_pages;
-            }
-            local_interface.fifo_page_size = fifo_page_size;
+        asm volatile ("j LOOP_CHECK\n\t"
+            "LOOP:\n\t"
+            //uint32_t fifo_size = circular_buffer_config_addr[1] >> cb_addr_shift;
+            "lw a3, 4(a0)\n\t"
+            //uint32_t fifo_addr = circular_buffer_config_addr[0] >> cb_addr_shift;
+            "lw a2, 0(a0)\n\t"
+            //uint32_t fifo_num_pages = circular_buffer_config_addr[2];
+            "lw a6, 8(a0)\n\t"
+            //uint32_t fifo_page_size = circular_buffer_config_addr[3] >> cb_addr_shift;
+            "lw a7, 12(a0)\n\t"
+            //local_cb_mask >>= 1;
+            "srli a4, a4, 1\n\t"
+            // local_cb_mask & 1
+            "and a7, a4, 1\n\t"
 
-            if (init_wr_tile_ptr) {
-                local_interface.fifo_wr_tile_ptr = 0;
-            }
-        } else if (local_cb_mask == 0) {
-            // No more circular buffers to set up
-            break;
-        }
-        local_cb_mask >>= 1;
-        cb_id++;
+            //local_interface.tiles_acked_received_init = 0;
+            "sw zero, -8(a5)\n\t"
 
-        circular_buffer_config_addr += UINT32_WORDS_PER_LOCAL_CIRCULAR_BUFFER_CONFIG;
-    }
+            //circular_buffer_config_addr += UINT32_WORDS_PER_LOCAL_CIRCULAR_BUFFER_CONFIG;
+            "addi a0, a0, %[circular_buffer_byte_size]\n\t"
+
+ //           local_interface.fifo_size = fifo_size;
+            "sw a3, %[off_fifo_size](a5)\n\t"
+            // uint32_t fifo_limit = fifo_addr + fifo_size;
+            "add a3, a2, a3\n\t"
+
+            //local_interface.fifo_limit = fifo_limit;  // to check if we need to wrap
+            "sw a3, %[off_fifo_limit](a5)\n\t"
+            //local_interface.fifo_wr_ptr = fifo_addr;
+            "sw a2, %[off_fifo_wr_ptr](a5)\n\t"
+
+            //local_interface.fifo_rd_ptr = fifo_addr;
+            "sw a2, %[off_fifo_rd_ptr](a5)\n\t"
+            //local_interface.fifo_num_pages = fifo_num_pages;
+            "sw a6, %[off_fifo_num_pages](a5)\n\t"
+            //local_interface.fifo_page_size = fifo_page_size;
+            "sw a7, %[off_fifo_page_size](a5)\n\t"
+
+            //local_interface_ptr = (LocalCBInterface*)((CBInterface*)local_interface_ptr + 1);
+            "addi a5, a5, %[local_cb_interface_size]\n\t"
+
+        //while (local_cb_mask & 1) [[likely]] {
+            "LOOP_CHECK:\n\t"
+            "bnez a7, LOOP\n\t"
+
+            //if (local_cb_mask == 0) {
+            "beqz a4, LOOP_DONE\n\t"
+
+            //circular_buffer_config_addr += UINT32_WORDS_PER_LOCAL_CIRCULAR_BUFFER_CONFIG;
+            "addi a0, a0, %[circular_buffer_byte_size]\n\t"
+
+            //local_interface_ptr = (LocalCBInterface*)((CBInterface*)local_interface_ptr + 1);
+            "addi a5, a5, %[local_cb_interface_size]\n\t"
+
+            //local_cb_mask >>= 1;
+            "srli a4, a4, 1\n\t"
+            // local_cb_mask & 1
+            "and a7, a4, 1\n\t"
+
+            "j LOOP_CHECK\n\t"
+
+
+            "LOOP_DONE:\n\t"
+
+            
+            
+            : "+r" (circular_buffer_config_addr), "+r" (local_cb_mask),
+            "+r" (local_interface_ptr)
+            :
+            [off_fifo_size] "i" (offsetof(LocalCBInterface, fifo_size)),
+            [off_fifo_limit] "i" (offsetof(LocalCBInterface, fifo_limit)),
+            [off_fifo_page_size] "i" (offsetof(LocalCBInterface, fifo_page_size)),
+            [off_fifo_num_pages] "i" (offsetof(LocalCBInterface, fifo_num_pages)),
+            [off_fifo_rd_ptr] "i" (offsetof(LocalCBInterface, fifo_rd_ptr)),
+            [off_fifo_wr_ptr] "i" (offsetof(LocalCBInterface, fifo_wr_ptr)),
+            [off_tiles_acked] "i" (offsetof(LocalCBInterface, tiles_acked_received_init)),
+            [local_cb_interface_size] "i" (sizeof(CBInterface)),
+            [circular_buffer_byte_size] "i" (UINT32_WORDS_PER_LOCAL_CIRCULAR_BUFFER_CONFIG * sizeof(uint32_t))
+            : "a2", "a3", "a6", "a7", "memory");
 }
 
 namespace experimental {
