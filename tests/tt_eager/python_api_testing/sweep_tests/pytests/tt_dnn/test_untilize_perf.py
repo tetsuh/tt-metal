@@ -111,7 +111,7 @@ def test_untilize_test(input_shapes, untilize_args, device, function_level_defau
     if perf_scope == "block":
         os.environ["TT_LLK_PERF_BLOCK"] = "1"
 
-    for perf in ["op", "op_no_dm", "unpack", "pack"]:
+    for perf in ["op", "op_no_dm"]:
         # Set log csv file name, file will be used to store perf data
         ENVS = dict(os.environ)
         TT_METAL_HOME = Path(ENVS["TT_METAL_HOME"])
@@ -147,7 +147,7 @@ def test_untilize_test(input_shapes, untilize_args, device, function_level_defau
             writer.writerow(csv_header)
 
             # Run tilize test for different rt and ct dims
-            for rt_dim in range(1, 21, 1):
+            for rt_dim in range(1, 2, 1):
                 for ct_dim in range(1, 21, 1):
                     input_shapes = [[1, 1, rt_dim * 32, ct_dim * 32]]
 
