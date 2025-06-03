@@ -3601,3 +3601,47 @@ def test_conv2d_with_fold(
         has_bias=has_bias,
         enable_kernel_stride_folding=True,
     )
+
+
+@pytest.mark.parametrize("device_params", [{"l1_small_size": 32768}], indirect=True)
+@pytest.mark.parametrize("batch_size", [1])
+@pytest.mark.parametrize("input_channels", [3])
+@pytest.mark.parametrize("output_channels", [768])
+@pytest.mark.parametrize("input_height,input_width", [(224, 224)])
+@pytest.mark.parametrize("kernel_height,kernel_width", [(16, 16)])
+@pytest.mark.parametrize("input_layout", [ ttnn.TILE_LAYOUT])
+@pytest.mark.parametrize("has_bias", [False])
+def test_conv2d_data_mismatch(
+    device,
+    torch_tensor_map,
+    batch_size,
+    input_channels,
+    output_channels,
+    input_height,
+    input_width,
+    kernel_height,
+    kernel_width,
+    input_layout,
+    has_bias,
+):
+    run_conv(
+        device=device,
+        torch_tensor_map=torch_tensor_map,
+        math_fidelity=ttnn.MathFidelity.LoFi,
+        packer_l1_acc = True,
+        output_dtype=ttnn.float32,
+        weights_dtype=ttnn.float32,
+        batch_size=batch_size,
+        output_channels=output_channels,
+        input_channels=input_channels,
+        input_height=input_height,
+        input_width=input_width,
+        filter_height=kernel_height,
+        filter_width=kernel_width,
+        stride_h=kernel_height,
+        stride_w=kernel_width,
+        padding=(0, 0),
+        config_override=None,
+        input_layout=input_layout,
+        has_bias=has_bias,
+    )

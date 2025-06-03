@@ -18,6 +18,8 @@ set(TTNN_UNIT_TESTS_SRC
     ${CMAKE_CURRENT_SOURCE_DIR}/test_conv2d.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/common_test_utils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/test_generic_op.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/test_conv2d_data_mismatch.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/utils.cpp
 )
 
 set(TTNN_CCL_UNIT_TESTS_SRC
