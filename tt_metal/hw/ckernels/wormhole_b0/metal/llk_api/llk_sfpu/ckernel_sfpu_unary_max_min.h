@@ -42,22 +42,30 @@ inline void calculate_unary_max_min(uint value) {
 
 template <bool APPROXIMATION_MODE, int ITERATIONS = 8>
 inline void calculate_unary_max_int32(uint value) {
-    // Load value param to lreg2 --> sign + magnitude
-    TT_SFPLOADI(p_sfpu::LREG2, 10, value & 0xFFFF);
-    TT_SFPLOADI(p_sfpu::LREG2, 8, value >> 16);
+    vInt inp = value;
+    v_if(inp < 0) {
+        inp = -inp;
+        vInt resu = setsgn(inp, -1);
+        inp = resu;
+    }
+    v_endif;
+    vInt zero = 0;
 
 #pragma GCC unroll 0
     for (int d = 0; d < ITERATIONS; d++) {
-        // Load input to lreg0
-        TTI_SFPLOAD(p_sfpu::LREG0, 12, ADDR_MOD_3, 0);
-
-        // Copy value param to lreg1
-        TTI_SFPMOV(0, p_sfpu::LREG2, p_sfpu::LREG1, 0);
-
-        // Swap and store maximum in lreg1 (sign + magnitude format)
-        TTI_SFPSWAP(0, p_sfpu::LREG1, p_sfpu::LREG0, 1);
-        TTI_SFPSTORE(p_sfpu::LREG1, 12, ADDR_MOD_3, 0);
-
+        vInt v = dst_reg[0];
+        v_if(v < zero && inp >= zero) {
+            v = inp;
+        }  // Negative value comparison is not happening properly. Hence need to add this condition
+        v_elseif(v < zero && inp < zero) {
+            vInt pos_val = setsgn(v, 0);
+            vInt pos_s = setsgn(inp, 0);
+            v_if(pos_val > pos_s) { v = inp; }
+            v_endif;
+        }
+        v_elseif(v < inp) { v = inp; }
+        v_endif;
+        dst_reg[0] = v;
         dst_reg++;
     }
 }

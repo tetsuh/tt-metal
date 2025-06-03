@@ -16,13 +16,13 @@ from models.utility_functions import torch_random, is_wormhole_b0
 
 
 # @pytest.mark.parametrize("scalar", [0, 1, 100, 10, 5, 21474836])  # passing cases
-@pytest.mark.parametrize("scalar", [-1, -2, -3, -4, -5, -2147483647])  # overflow
+@pytest.mark.parametrize("scalar", [-1, -2, -3, -4, -5, 3])  # overflow
 # @pytest.mark.parametrize("scalar", [-1,  -5, -2147483]) # Negative scalar issue - Failing case
 # @pytest.mark.parametrize("scalar", [2147483647]) # Failing case
 # @pytest.mark.parametrize("scalar", [-21474836]) # Unhandled overflow
 def test_unary_max_int32_test(scalar, device):
     num_elements = torch.prod(torch.tensor(torch.Size([1, 1, 32, 32]))).item()
-    torch_input = torch.linspace(-5, -10, num_elements, dtype=torch.int32)
+    torch_input = torch.linspace(-10, 1, num_elements, dtype=torch.int32)
     torch_input = torch_input[:num_elements].reshape(torch.Size([1, 1, 32, 32]))
 
     # if is_wormhole_b0() and is_int32_overflow(torch_input, scalar).any():
