@@ -17,8 +17,10 @@ namespace ckernel {
 
 // clang-format off
 /**
- * Performs the necessary hardware initialization for reduce operation. Needs to be called once, after hw_start_init function. Meant to be called only once
- * at the beginning of the compute kernel.
+ * Performs the necessary hardware and software initialization for reduce operation. Needs to be called before reduce_tile. Does the following for each engine:
+ * UNPACK - modifies x_dim, sets transpose bit if doing row reduce and initializes UNPACK MOP.
+ * MATH - sets address mode, clears counters, initializes MATH MOP.
+ * PACK - programs packer edge mask depedning on reduce_dim.
  *
  * Return value: None
  *

@@ -15,7 +15,11 @@ namespace ckernel {
 // clang-format off
 /**
  * Performs the necessary hardware initialization for all operations that will follow. Needs to be called once, before op-specific
- * initialization  function, e.g. reduce_init, tilize_init, etc. Meant to be called only once at the beginning of the compute kernel.
+ * initialization  function, e.g. reduce_init, tilize_init, etc. Meant to be called only once per compute kernel, at its beginning.
+ * This call has MMIO writes - it's slow and using it inside kernel can cause race conditions. Does the following for each engine:
+ * UNPACK - clears address counters, sets up dims and strides based on input CBs, sets other HW features to default.
+ * MATH - initializes sync mechanism with PACK, sets DEST access pattern to default, 8-bit math if needed.
+ * PACK - initializes sync mechanism with MATH, sets x_dim, counters, default strides, sets other HW features to default.
  *
  * Return value: None
  *
@@ -46,7 +50,10 @@ ALWI void hw_start_init(uint32_t icb0, uint32_t icb1, uint32_t ocb) {
 /**
  * Convenience overload for hardware initialization when only one input circular buffer is used.
  * Both input operands (srcA and srcB) will be programmed using the same circular buffer identifier (`icb0`).
- * Internally, this calls the three-parameter version with `icb0` passed for both input operands.
+ * Internally, this calls the three-parameter version with `icb0` passed for both input operands. Does the following for each engine:
+ * UNPACK - clears address counters, sets up dims and strides based on input CBs, sets other HW features to default.
+ * MATH - initializes sync mechanism with PACK, sets DEST access pattern to default, 8-bit math if needed.
+ * PACK - initializes sync mechanism with MATH, sets x_dim, counters, default strides, sets other HW features to default.
  *
  * | Param Type | Name  | Description                                                        | Type     | Valid Range | Required |
  * |------------|-------|--------------------------------------------------------------------|----------|-------------|----------|
