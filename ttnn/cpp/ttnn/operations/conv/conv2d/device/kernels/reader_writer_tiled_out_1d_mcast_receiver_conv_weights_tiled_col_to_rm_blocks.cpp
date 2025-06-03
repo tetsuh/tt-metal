@@ -22,15 +22,15 @@ void kernel_main() {
     constexpr uint32_t out_num_blocks_h = get_compile_time_arg_val(15);
 
     // Split reader args
-    constexpr bool split_reader = get_compile_time_arg_val(19);
-    constexpr uint32_t act_block_num_tiles = get_compile_time_arg_val(20);
-    constexpr uint32_t conv_act_c_read_bytes = get_compile_time_arg_val(21);
-    constexpr uint32_t weight_size_w = get_compile_time_arg_val(22);
-    constexpr uint32_t conv_act_size_w_padded = get_compile_time_arg_val(23);
-    constexpr uint32_t act_block_w_extra_align_bytes = get_compile_time_arg_val(24);
-    constexpr bool needs_act_block_zero_out = get_compile_time_arg_val(25) == 1;
-    constexpr uint32_t dilation_h = get_compile_time_arg_val(26);
-    constexpr uint32_t dilation_w = get_compile_time_arg_val(27);
+    constexpr bool split_reader = get_compile_time_arg_val(17);
+    constexpr uint32_t act_block_num_tiles = get_compile_time_arg_val(18);
+    constexpr uint32_t conv_act_c_read_bytes = get_compile_time_arg_val(19);
+    constexpr uint32_t weight_size_w = get_compile_time_arg_val(20);
+    constexpr uint32_t conv_act_size_w_padded = get_compile_time_arg_val(21);
+    constexpr uint32_t act_block_w_extra_align_bytes = get_compile_time_arg_val(22);
+    constexpr bool needs_act_block_zero_out = get_compile_time_arg_val(23) == 1;
+    constexpr uint32_t dilation_h = get_compile_time_arg_val(24);
+    constexpr uint32_t dilation_w = get_compile_time_arg_val(25);
 
     uint32_t i = 0;
     uint32_t noop = get_arg_val<uint32_t>(i++);
@@ -74,12 +74,16 @@ void kernel_main() {
 
     // OUTER most loop is looping over out blocks in width dim because blocks from compute are in col major order.
     const uint32_t act_l1_read_addr = get_read_ptr(cb_id_sharded_act);
-    for (uint32_t bw = 0; bw < out_num_blocks_w; bw++) {
-        // coalesce reads along weight_size_w
-        uint32_t start_reader_idx;
-        if constexpr (split_reader) {
-            start_reader_idx = (uint32_t)(packed_reader_indices_ptr[reader_idx] & 0xffff) + 1;
-        }
+    // coalesce reads along weight_size_w
+    uint32_t start_reader_idx;
+    if constexpr (split_reader) {
+        start_reader_idx = (uint32_t)(packed_reader_indices_ptr[reader_idx] & 0xffff) + 1;
+    }
+    for (uint32_t bh = 0; bh < out_num_blocks_h; bh++) {
+        // MCAST RECEIVE WEIGHTS
+        // read weight blocks inner dim
+        // read weight slice - 1 block of weights in width dim and full weight matrix height
+        // read slice only once for all activation blocks
 
         uint32_t reader_offset = act_l1_read_addr;
         for (uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) {
@@ -89,65 +93,17 @@ void kernel_main() {
                 reader_idx = start_reader_idx;
                 cb_reserve_back(cb_id_act_second_reader, act_block_num_tiles);
                 uint32_t l1_write_addr_act = get_write_ptr(cb_id_act_second_reader);
-                uint32_t act_block_h_datums_read_curr =
-                    bh == out_num_blocks_h - 1 ? act_block_h_datums_read_last_block : act_block_h_datums_read;
                 read_sticks<
                     dilation_w,
                     coalesced_read_bytes,
                     conv_act_c_read_bytes,
                     act_block_w_extra_align_bytes,
                     stride_w_bytes,
-                    weight_size_w>(
-                    act_block_h_datums_read_curr,
-                    packed_reader_indices_ptr,
-                    reader_offset,
-                    l1_write_addr_act,
-                    reader_idx);
+                    weight_size_w>(packed_reader_indices_ptr, reader_offset, l1_write_addr_act, reader_idx);
                 noc_async_read_barrier();
                 cb_push_back(cb_id_act_second_reader, act_block_num_tiles);
 
-            // TODO: Not sure how this loop works with the additional reader; we don't have a use case for this right
-            // now
-            for (uint32_t weight_tile_h_outer_i = 0; weight_tile_h_outer_i < weight_block_height_num_outer;
-                 weight_tile_h_outer_i++) {
-                uint32_t reader_offset = act_l1_read_addr;
-                for (uint32_t block_weight_h = 0; block_weight_h < num_blocks_weight_h; block_weight_h++) {
-                    if constexpr (split_reader) {
-                        // Do the second half of the reads for act
-                        noc_async_read_one_packet_set_state(get_noc_addr(act_l1_read_addr), coalesced_read_bytes);
-                        reader_idx = start_reader_idx;
-                        cb_reserve_back(cb_id_act_second_reader, act_block_num_tiles);
-                        uint32_t l1_write_addr_act = get_write_ptr(cb_id_act_second_reader);
-                        read_sticks<
-                            dilation_w,
-                            coalesced_read_bytes,
-                            conv_act_c_read_bytes,
-                            act_block_w_extra_align_bytes,
-                            stride_w_bytes,
-                            weight_size_w>(packed_reader_indices_ptr, reader_offset, l1_write_addr_act, reader_idx);
-                        noc_async_read_barrier();
-                        cb_push_back(cb_id_act_second_reader, act_block_num_tiles);
-
-                        reader_offset += window_outer_offset;
-                    }
-
-                    // Receive weights
-                    cb_reserve_back(cb_id_weight, weight_block_num_tiles);
-                    if (bh == 0) {
-                        // Set weights semaphore value to INVALID
-                        noc_semaphore_set(weights_mcast_receiver_semaphore_addr_ptr, INVALID);
-
-                        // Atomic increment source core counter
-                        noc_semaphore_inc(weights_mcast_sender_semaphore_noc_addr, 1);
-
-                        // wait on weights semaphore value to become VALID (set by mcast sender after it multicasts
-                        // data)
-                        noc_semaphore_wait(weights_mcast_receiver_semaphore_addr_ptr, VALID);
-                    }
-
-                    cb_push_back(cb_id_weight, weight_block_num_tiles);
-
-                }  // for weight_block_height_num_outer
+                reader_offset += window_outer_offset;
             }
 
             // Receive weights
@@ -185,12 +141,11 @@ void kernel_main() {
         }
 #endif
 
-            if constexpr (split_reader) {
-                // Increment reader index for next block in height dim
-                start_reader_idx = reader_idx + (uint32_t)(packed_reader_indices_ptr[reader_idx] & 0xffff) + 1;
-            }
-        }  // out_num_blocks_h
-    }  // out_num_blocks_w
+        if constexpr (split_reader) {
+            // Increment reader index for next block in height dim
+            start_reader_idx = reader_idx + (uint32_t)(packed_reader_indices_ptr[reader_idx] & 0xffff) + 1;
+        }
+    }  // out_num_blocks_h
 
     noc_async_write_barrier();
 }

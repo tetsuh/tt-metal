@@ -1,10 +1,10 @@
-// SPDX-FileCopyrightText: © 2024 Tenstorrent AI ULC
+// SPDX-FileCopyrightText: © 2023 Tenstorrent Inc.More actions
 //
 // SPDX-License-Identifier: Apache-2.0
 
 #include "dataflow_api.h"
 #include "height_sharded_reader_common.hpp"
-#include "debug/debug.h"
+#include "dprint.h"
 
 void kernel_main() {
     // This writer is for output tensor in tile format
@@ -29,15 +29,15 @@ void kernel_main() {
     constexpr uint32_t out_num_blocks_h = get_compile_time_arg_val(15);
 
     // Split reader args
-    constexpr bool split_reader = get_compile_time_arg_val(19);
-    constexpr uint32_t act_block_num_tiles = get_compile_time_arg_val(20);
-    constexpr uint32_t conv_act_c_read_bytes = get_compile_time_arg_val(21);
-    constexpr uint32_t weight_size_w = get_compile_time_arg_val(22);
-    constexpr uint32_t conv_act_size_w_padded = get_compile_time_arg_val(23);
-    constexpr uint32_t act_block_w_extra_align_bytes = get_compile_time_arg_val(24);
-    constexpr bool needs_act_block_zero_out = get_compile_time_arg_val(25) == 1;
-    constexpr uint32_t dilation_h = get_compile_time_arg_val(26);
-    constexpr uint32_t dilation_w = get_compile_time_arg_val(27);
+    constexpr bool split_reader = get_compile_time_arg_val(17);
+    constexpr uint32_t act_block_num_tiles = get_compile_time_arg_val(18);
+    constexpr uint32_t conv_act_c_read_bytes = get_compile_time_arg_val(19);
+    constexpr uint32_t weight_size_w = get_compile_time_arg_val(20);
+    constexpr uint32_t conv_act_size_w_padded = get_compile_time_arg_val(21);
+    constexpr uint32_t act_block_w_extra_align_bytes = get_compile_time_arg_val(22);
+    constexpr bool needs_act_block_zero_out = get_compile_time_arg_val(23) == 1;
+    constexpr uint32_t dilation_h = get_compile_time_arg_val(24);
+    constexpr uint32_t dilation_w = get_compile_time_arg_val(25);
 
     uint32_t i = 0;
     const uint32_t weight_addr_dram_base = get_arg_val<uint32_t>(i++);
@@ -104,7 +104,6 @@ void kernel_main() {
     bool load_bias = true;
 #endif
     constexpr uint32_t weight_tile_nbytes = get_tile_size(cb_id_weight);
-    constexpr uint32_t tile_mcast_bytes = weight_tile_nbytes * weight_block_num_tiles;
     constexpr DataFormat weight_df = get_dataformat(cb_id_weight);
     const InterleavedAddrGenFast<true> s_weight = {
         .bank_base_address = weight_addr_dram_base, .page_size = weight_tile_nbytes, .data_format = weight_df};
@@ -118,13 +117,11 @@ void kernel_main() {
     constexpr uint32_t weight_inner_block_stride_h =
         weight_next_block_stride_h / weight_block_height_num_outer;  // TODO: Pass as args
     const uint32_t act_l1_read_addr = get_read_ptr(cb_id_sharded_act);
-    // DPRINT << "weight_start_tile_id=" << weight_start_tile_id << ENDL();
-    for (uint32_t bw = 0; bw < out_num_blocks_w; bw++) {
-        // coalesce reads along weight_size_w
-        uint32_t start_reader_idx;
-        if constexpr (split_reader) {
-            start_reader_idx = (uint32_t)(packed_reader_indices_ptr[0] & 0xffff) + 1;
-        }
+    // coalesce reads along weight_size_w
+    uint32_t start_reader_idx;
+    if constexpr (split_reader) {
+        start_reader_idx = (uint32_t)(packed_reader_indices_ptr[0] & 0xffff) + 1;
+    }
 
     for (uint32_t bh = 0; bh < out_num_blocks_h; bh++) {
         // READ WEIGHTS + MCAST SEND WEIGHTS
@@ -273,8 +270,6 @@ void kernel_main() {
             if constexpr (split_reader) {
                 start_reader_idx = reader_idx + (uint32_t)(packed_reader_indices_ptr[reader_idx] & 0xffff) + 1;
             }
-        }  // out_num_blocks_h
-
             // We should also multicast the flag to destinations
             // num_dests must not include source, since we are NOT really doing a local copy!
             noc_semaphore_set_multicast(
@@ -288,8 +283,5 @@ void kernel_main() {
             load_bias = false;
         }
 #endif
-        if constexpr (split_reader) {
-            start_reader_idx = reader_idx + act_block_h_datums_first_reader_read;
-        }
     }  // out_num_blocks_h
 }
