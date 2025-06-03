@@ -10,16 +10,13 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
 from models.utility_functions import torch_random, is_wormhole_b0
 
 
-# def is_int32_overflow(tensor, scalar):
-#     result = tensor.to(torch.int64) - scalar
-#     return (result < -(2**31) + 1) | (result > 2**31 - 1)
+def is_int32_overflow(tensor, scalar):
+    return (scalar < -(2**24))
 
 
-# @pytest.mark.parametrize("scalar", [0, 1, 100, 10, 5, 21474836])  # passing cases
-@pytest.mark.parametrize("scalar", [-1, -2, -3, -4, -5, 3])  # overflow
-# @pytest.mark.parametrize("scalar", [-1,  -5, -2147483]) # Negative scalar issue - Failing case
-# @pytest.mark.parametrize("scalar", [2147483647]) # Failing case
-# @pytest.mark.parametrize("scalar", [-21474836]) # Unhandled overflow
+@pytest.mark.parametrize("scalar", [-1, -2, -3, -4, -5, 3, 21474836, 0, 1, 100, 10, 5, 2147483, -2147483, 2147483600 ]) # passing cases in WH
+# @pytest.mark.parametrize("scalar", [2147483601]) # Failing case --> Limits to 2147483600 in WH
+# @pytest.mark.parametrize("scalar", [-2147483647,-21474836 ]) # handled overflow
 def test_unary_max_int32_test(scalar, device):
     num_elements = torch.prod(torch.tensor(torch.Size([1, 1, 32, 32]))).item()
     torch_input = torch.linspace(-10, 1, num_elements, dtype=torch.int32)
@@ -27,6 +24,8 @@ def test_unary_max_int32_test(scalar, device):
 
     # if is_wormhole_b0() and is_int32_overflow(torch_input, scalar).any():
     #     pytest.xfail("Overflow occurs")
+    if is_wormhole_b0() and is_int32_overflow(torch_input, scalar):
+        pytest.xfail("Overflow occurs")
 
     golden_function = ttnn.get_golden_function(ttnn.maximum)
     golden = golden_function(torch_input, torch.full(torch.Size([1, 1, 32, 32]), scalar), device=device)
@@ -39,7 +38,6 @@ def test_unary_max_int32_test(scalar, device):
         memory_config=ttnn.DRAM_MEMORY_CONFIG,
     )
     tt_result = ttnn.maximum(tt_in, scalar)
-    print(tt_result, golden)
     comp_pass = compare_equal([tt_result], [golden])
     assert comp_pass
 
@@ -58,10 +56,13 @@ def test_unary_max_int32_test(scalar, device):
         (-5, 5),
         (-100, 100),
         (-21474, 21474),
+        (-2147483600, 2147483600),
+        (-21474836, 21474836),
+        (-214748364, 214748364),
         (-2147483647, 2147483647),
     ],
 )
-@pytest.mark.parametrize("scalar", [0, 1, -1, 100, -10, 21474836])
+@pytest.mark.parametrize("scalar", [0, 1, -1, 100, -10, 21474836, 2147483600])
 def test_unary_max_int32(input_shapes, low, high, scalar, device):
     num_elements = torch.prod(torch.tensor(input_shapes)).item()
     torch_input = torch.linspace(high, low, num_elements, dtype=torch.int32)
@@ -79,8 +80,6 @@ def test_unary_max_int32(input_shapes, low, high, scalar, device):
     )
 
     tt_result = ttnn.maximum(tt_in, scalar)
-    print("tt: ", tt_result)
-    print("golden: ", golden)
     comp_pass = compare_equal([tt_result], [golden])
     assert comp_pass
 
@@ -95,7 +94,9 @@ def test_unary_max_int32(input_shapes, low, high, scalar, device):
         (-1, 1),
         (1, 0),
         (0, 0),
+        (1, 1),
         (21474836, -1),
+        (2147483600, 2147483600),
         (11, 53),
     ],
 )
