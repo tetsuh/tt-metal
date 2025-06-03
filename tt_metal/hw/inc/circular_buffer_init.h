@@ -16,14 +16,14 @@
 FORCE_INLINE void setup_local_cb_read_write_interfaces(
     uint32_t tt_l1_ptr* cb_l1_base,
     uint32_t start_cb_index,
-    uint32_t local_cb_mask,
+    uint32_t local_cb_mask_orig,
     bool read,
     bool write,
     bool init_wr_tile_ptr) {
     register volatile tt_l1_ptr uint32_t* circular_buffer_config_addr asm("a0") =
         cb_l1_base + start_cb_index * UINT32_WORDS_PER_LOCAL_CIRCULAR_BUFFER_CONFIG;
 
-    register int local_cb_mask asm ("a4") = local_cb_mask2;
+    register int local_cb_mask asm ("a4") = local_cb_mask_orig;
 
     local_cb_mask >>= start_cb_index;
     uint32_t cb_id = start_cb_index;
