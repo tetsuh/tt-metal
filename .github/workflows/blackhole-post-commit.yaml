@@ -70,26 +70,28 @@ jobs:
       build-wheel: true
       version: "22.04"
       build-umd-tests: true
-  # build-artifact-profiler:
-  #   uses: ./.github/workflows/build-artifact.yaml
-  #   secrets: inherit
-  #   with:
-  #     build-type: ${{ inputs.build-type || 'Release' }}
-  #     build-wheel: true
-  #     tracy: true
-  #     version: "22.04"
-  # run-profiler-regression:
-  #   needs: build-artifact-profiler
-  #   uses: ./.github/workflows/run-profiler-regression.yaml
-  #   secrets: inherit
-  #   with:
-  #     arch: "blackhole"
-  #     timeout: 20
-  #     runner-label: ${{ inputs.runner-label || 'BH' }}
-  #     docker-image: ${{ needs.build-artifact-profiler.outputs.dev-docker-image }}
-  #     build-artifact-name: ${{ needs.build-artifact-profiler.outputs.build-artifact-name }}
-  #     wheel-artifact-name: ${{ needs.build-artifact-profiler.outputs.wheel-artifact-name }}
-  #     enable-watcher: ${{ inputs.enable-watcher || false }}
+  build-artifact-profiler:
+    uses: ./.github/workflows/build-artifact.yaml
+    permissions:
+      packages: write
+    secrets: inherit
+    with:
+      build-type: ${{ inputs.build-type || 'Release' }}
+      build-wheel: true
+      tracy: true
+      version: "22.04"
+  run-profiler-regression:
+    needs: build-artifact-profiler
+    uses: ./.github/workflows/run-profiler-regression.yaml
+    secrets: inherit
+    with:
+      arch: "blackhole"
+      timeout: 20
+      runner-label: ${{ inputs.runner-label || 'BH' }}
+      docker-image: ${{ needs.build-artifact-profiler.outputs.dev-docker-image }}
+      build-artifact-name: ${{ needs.build-artifact-profiler.outputs.build-artifact-name }}
+      wheel-artifact-name: ${{ needs.build-artifact-profiler.outputs.wheel-artifact-name }}
+      enable-watcher: ${{ inputs.enable-watcher || false }}
   umd-unit-tests:
     needs: build-artifact
     secrets: inherit
