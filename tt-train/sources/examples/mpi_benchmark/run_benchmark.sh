@@ -14,7 +14,7 @@ HOSTS=(
   "11.228.0.10"
   "11.228.0.11"
   "11.228.0.14"
-  "11.228.0.16"
+  # "11.228.0.16"
 )
 
 print_usage() {
@@ -74,7 +74,7 @@ echo "✔ Remote copy complete."
 
 # launch MPI job, exporting TT_METAL_HOME so each rank sees it
 echo "Launching MPI benchmark..."
-mpirun \
+mpirun-ulfm \
   --hostfile "$HOSTFILE" \
   -np "$NUM_HOSTS" \
   -x TT_METAL_HOME \
