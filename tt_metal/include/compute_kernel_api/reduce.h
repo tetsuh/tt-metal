@@ -22,7 +22,7 @@ namespace ckernel {
  *
  * Return value: None
  *
- * | Param Cat  | Name         | Description                                                     | Type      | Valid Range                                    | Required |
+ * | Param Type | Name         | Description                                                     | Type      | Valid Range                                    | Required |
  * |------------|--------------|-----------------------------------------------------------------|-----------|------------------------------------------------|----------|
  * | Template   | reduce_type  | The type of reduce op - sum, average or maximum                 | PoolType  | {SUM, AVG, MAX}                                | True     |
  * | Template   | reduce_dim   | The dimension of reduce op - row, column or both                | ReduceDim | {REDUCE_ROW, REDUCE_COL, REDUCE_SCALAR}        | True     |
@@ -38,20 +38,12 @@ ALWI void reduce_init(uint32_t icb, uint32_t icb1, uint32_t ocb) {
     PACK((llk_pack_reduce_mask_config<false /*untilize*/, reduce_dim>()));
 }
 
-template <bool at_start, PoolType reduce_type = REDUCE_OP, ReduceDim reduce_dim = REDUCE_DIM>
-ALWI void reduce_init_delta(uint32_t icb0, uint32_t icb1, uint32_t ocb) {
-    // FIXME: API Update needed in compute kernel?
-    UNPACK((llk_unpack_AB_reduce_init<reduce_dim>(icb0, icb1)));
-    MATH((llk_math_reduce_init<reduce_type, reduce_dim, MATH_FIDELITY>()));
-    // Make an if-else to conditionally call pack hw_config?
-    PACK((llk_pack_reduce_config_v2<reduce_dim, at_start, false, DST_ACCUM_MODE>(ocb)));
-}
 // clang-format off
 /**
  * Reverts the packer edge mask configuration to its default state by clearing any previously set masks. Needed to be called after
  * reduce op to reset the packer state to default.
  *
- * | Param Cat  | Name | Description                                      | Type | Valid Range | Required |
+ * | Param Type | Name | Description                                      | Type | Valid Range | Required |
  * |------------|------|--------------------------------------------------|------|-------------|----------|
  * | Function   | —    | No parameters                                    |  —   |      —      |    —     |
  */
@@ -69,7 +61,7 @@ ALWI void reduce_revert_delta() { PACK((llk_pack_reduce_mask_clear())); }
  *
  * This call is blocking and is only available on the compute engine.
  *
- * | Param Cat  | Name     | Description                                                     | Type     | Valid Range                                    | Required |
+ * | Param Type | Name     | Description                                                     | Type     | Valid Range                                    | Required |
  * |------------|----------|-----------------------------------------------------------------|----------|------------------------------------------------|----------|
  * | Template   | reduce_type | The type of reduce op - sum, average or maximum              | PoolType | {SUM, AVG, MAX}                                | True     |
  * | Template   | reduce_dim  | The dimension of reduce op - row, column or both             | ReduceDim| {REDUCE_ROW, REDUCE_COL, REDUCE_SCALAR}        | True     |
@@ -90,7 +82,7 @@ ALWI void reduce_tile(uint32_t icb0, uint32_t icb1, uint32_t itile0, uint32_t it
 /**
  * Performs a math-only reduction operation on a tile in the DST register. Assumes that source tiles are already in source registers.
  *
- * | Param Cat  | Name         | Description                                                     | Type      | Valid Range                                    | Required |
+ * | Param Type | Name         | Description                                                     | Type      | Valid Range                                    | Required |
  * |------------|--------------|-----------------------------------------------------------------|-----------|------------------------------------------------|----------|
  * | Template   | reduce_type  | The type of reduce op - sum, average or maximum                 | PoolType  | {SUM, AVG, MAX}                                | True     |
  * | Template   | reduce_dim   | The dimension of reduce op - row, column or both                | ReduceDim | {REDUCE_ROW, REDUCE_COL, REDUCE_SCALAR}        | True     |
