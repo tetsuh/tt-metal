@@ -29,7 +29,10 @@ FORCE_INLINE void setup_local_cb_read_write_interfaces(
     uint32_t cb_id = start_cb_index;
     register LocalCBInterface *local_interface_ptr asm("a5")= &get_local_cb_interface(cb_id);
 
-        asm volatile ("j LOOP_CHECK\n\t"
+        asm volatile (
+            // local_cb_mask & 1
+            "and a7, a4, 1\n\t"
+            "j LOOP_CHECK\n\t"
             "LOOP:\n\t"
             //uint32_t fifo_size = circular_buffer_config_addr[1] >> cb_addr_shift;
             "lw a3, 4(a0)\n\t"
