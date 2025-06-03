@@ -46,6 +46,9 @@ FORCE_INLINE void setup_local_cb_read_write_interfaces(
 
             //local_interface.tiles_acked_received_init = 0;
             "sw zero, -8(a5)\n\t"
+            ".if %[init_wr_tile_ptr]\n\t"
+            "sw zero, %[off_fifo_tile_wr_ptr](a5)\n\t"
+            ".endif\n\t"
 
             //circular_buffer_config_addr += UINT32_WORDS_PER_LOCAL_CIRCULAR_BUFFER_CONFIG;
             "addi a0, a0, %[circular_buffer_byte_size]\n\t"
@@ -58,10 +61,14 @@ FORCE_INLINE void setup_local_cb_read_write_interfaces(
             //local_interface.fifo_limit = fifo_limit;  // to check if we need to wrap
             "sw a3, %[off_fifo_limit](a5)\n\t"
             //local_interface.fifo_wr_ptr = fifo_addr;
+            ".if %[write]\n\t"
             "sw a2, %[off_fifo_wr_ptr](a5)\n\t"
+            ".endif\n\t"
 
             //local_interface.fifo_rd_ptr = fifo_addr;
+            ".if %[read]\n\t"
             "sw a2, %[off_fifo_rd_ptr](a5)\n\t"
+            ".endif\n\t"
             //local_interface.fifo_num_pages = fifo_num_pages;
             "sw a6, %[off_fifo_num_pages](a5)\n\t"
             //local_interface.fifo_page_size = fifo_page_size;
@@ -105,8 +112,12 @@ FORCE_INLINE void setup_local_cb_read_write_interfaces(
             [off_fifo_rd_ptr] "i" (offsetof(LocalCBInterface, fifo_rd_ptr)),
             [off_fifo_wr_ptr] "i" (offsetof(LocalCBInterface, fifo_wr_ptr)),
             [off_tiles_acked] "i" (offsetof(LocalCBInterface, tiles_acked_received_init)),
+            [off_fifo_tile_wr_ptr] "i" (offsetof(LocalCBInterface, fifo_wr_tile_ptr)),
             [local_cb_interface_size] "i" (sizeof(CBInterface)),
-            [circular_buffer_byte_size] "i" (UINT32_WORDS_PER_LOCAL_CIRCULAR_BUFFER_CONFIG * sizeof(uint32_t))
+            [circular_buffer_byte_size] "i" (UINT32_WORDS_PER_LOCAL_CIRCULAR_BUFFER_CONFIG * sizeof(uint32_t)),
+            [read] "i" (read ? 1 : 0),
+            [write] "i" (write ? 1 : 0),
+            [init_wr_tile_ptr] "i" (init_wr_tile_ptr ? 1 : 0)
             : "a2", "a3", "a6", "a7", "memory");
 }
 
