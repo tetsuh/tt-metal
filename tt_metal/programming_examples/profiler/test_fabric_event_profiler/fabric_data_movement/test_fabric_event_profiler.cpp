@@ -43,6 +43,9 @@ namespace fabric_router_tests {
 std::random_device rd;  // Non-deterministic seed source
 std::mt19937 global_rng(rd());
 
+constexpr int RETCODE_INCOMPATIBLE_DEVICE = 95;
+constexpr int RETCODE_SUCCESS = 0;
+
 struct WorkerMemMap {
     uint32_t packet_header_address;
     uint32_t source_l1_buffer_address;
@@ -87,7 +90,7 @@ std::vector<uint32_t> get_random_numbers_from_range(uint32_t start, uint32_t end
     return std::vector<uint32_t>(range.begin(), range.begin() + count);
 }
 
-void RunFabricProfilerUnicastTest(BaseFabricFixture* fixture, uint32_t num_hops, RoutingDirection direction) {
+int RunFabricProfilerUnicastTest(BaseFabricFixture* fixture, uint32_t num_hops, RoutingDirection direction) {
     CoreCoord sender_logical_core = {0, 0};
     CoreCoord receiver_logical_core = {1, 0};
 
@@ -125,7 +128,7 @@ void RunFabricProfilerUnicastTest(BaseFabricFixture* fixture, uint32_t num_hops,
             physical_end_device_ids_by_dir,
             fabric_hops)) {
         tt::log_warning(tt::LogTest, "Cannot perform test because neighbors aren't available");
-        return;
+        return RETCODE_INCOMPATIBLE_DEVICE;
     }
     mesh_shape = control_plane->get_physical_mesh_shape(src_fabric_node_id.mesh_id);
     dst_physical_device_id = physical_end_device_ids_by_dir[direction][num_hops - 1];
@@ -135,7 +138,7 @@ void RunFabricProfilerUnicastTest(BaseFabricFixture* fixture, uint32_t num_hops,
     eth_chans = control_plane->get_active_fabric_eth_channels_in_direction(src_fabric_node_id, direction);
     if (eth_chans.size() == 0) {
         tt::log_warning(tt::LogTest, "Cannot perform test because ethernet channels don't exist");
-        return;
+        return RETCODE_INCOMPATIBLE_DEVICE;
     }
 
     // Pick any port, for now pick the 1st one in the set
@@ -275,6 +278,8 @@ void RunFabricProfilerUnicastTest(BaseFabricFixture* fixture, uint32_t num_hops,
     uint64_t receiver_bytes =
         ((uint64_t)receiver_status[TT_FABRIC_WORD_CNT_INDEX + 1] << 32) | receiver_status[TT_FABRIC_WORD_CNT_INDEX];
     TT_ASSERT(sender_bytes == receiver_bytes);
+
+    return RETCODE_SUCCESS;
 }
 }  // namespace fabric_router_tests
 }  // namespace tt::tt_fabric
@@ -282,7 +287,7 @@ void RunFabricProfilerUnicastTest(BaseFabricFixture* fixture, uint32_t num_hops,
 int main() {
     tt::tt_fabric::fabric_router_tests::BaseFabricFixture fixture;
     fixture.SetUpDevices(tt::tt_metal::FabricConfig::FABRIC_1D);
-    tt::tt_fabric::fabric_router_tests::RunFabricProfilerUnicastTest(&fixture);
+    int ret_code = tt::tt_fabric::fabric_router_tests::RunFabricProfilerUnicastTest(&fixture);
     fixture.TearDown();
-    return 0;
+    return ret_code;
 }

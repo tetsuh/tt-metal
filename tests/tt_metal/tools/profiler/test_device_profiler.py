@@ -450,8 +450,14 @@ def test_fabric_event_profiler():
     testCommand = f"build/{PROG_EXMP_DIR}/test_fabric_event_profiler"
     clear_profiler_runtime_artifacts()
     nocEventProfilerEnv = "TT_METAL_DEVICE_PROFILER_NOC_EVENTS=1"
-    profilerRun = os.system(f"cd {TT_METAL_HOME} && {nocEventProfilerEnv} {testCommand}")
-    assert profilerRun == 0, f"test command '{testCommand}' returned unsuccessfully"
+    ret_code = os.system(f"cd {TT_METAL_HOME} && {nocEventProfilerEnv} {testCommand}")
+
+    RETCODE_INCOMPATIBLE_DEVICE = 95
+    if ret_code == RETCODE_INCOMPATIBLE_DEVICE:
+        logger.warning(f"fabric event profiler test skipped because device doesn't support fabric.")
+        return
+    else:
+        assert ret_code == 0, f"test command '{testCommand}' returned unsuccessfully"
 
     expected_cluster_coords_file = f"{PROFILER_LOGS_DIR}/cluster_coordinates.json"
     assert os.path.isfile(

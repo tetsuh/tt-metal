@@ -71,7 +71,7 @@ public:
 };
 
 // tests fabric tracing on a small number of unicast transfers on 1D fabric
-void RunFabricProfilerUnicastTest(
+int RunFabricProfilerUnicastTest(
     BaseFabricFixture* fixture, uint32_t num_hops = 1, RoutingDirection direction = RoutingDirection::E);
 }  // namespace fabric_router_tests
 }  // namespace tt::tt_fabric
