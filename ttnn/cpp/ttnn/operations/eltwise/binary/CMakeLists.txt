@@ -35,6 +35,7 @@ target_sources(
             device/kernels/compute/bcast_hw.cpp
             device/kernels/dataflow/reader_bcast_scalar_interleaved_partitioned.cpp
             device/kernels/compute/eltwise_binary_kernel.cpp
+            device/kernels/dataflow/reader_binary_interleaved_start_id.cpp
 )
 
 target_include_directories(ttnn_op_eltwise_binary PRIVATE ${FixmeOpIncDirs})
