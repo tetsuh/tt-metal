@@ -37,7 +37,6 @@ target_sources(
         test_to_and_from_json.cpp
         test_broadcast_to.cpp
         test_sliding_window_infra.cpp
-        common_test_utils.cpp
         test_generic_op.cpp
 )
 target_include_directories(unit_tests_ttnn_smoke PRIVATE ${PROJECT_SOURCE_DIR}/tests)
@@ -54,6 +53,7 @@ TT_ENABLE_UNITY_BUILD(unit_tests_ttnn_basic)
 target_sources(
     unit_tests_ttnn_basic
     PRIVATE
+        common_test_utils.cpp
         test_async_runtime.cpp # FIXME: Fix memory leak (LSan) then shift-left
         test_conv2d.cpp # FIXME: Fix misaligned memory load (UBSan) then shift-left
         test_graph_query_op_runtime.cpp
