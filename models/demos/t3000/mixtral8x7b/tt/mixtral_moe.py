@@ -111,8 +111,13 @@ class TtMoeLayer(LightweightModule):
             weights_1SB1 = ttnn.moe(gate_logits_1SB8, self.top8_mask_11B_64, self.top2_mask_11BB, 32)
         else:
             topk_values, topk_indices = ttnn.topk(gate_logits_1SB8, 32)
+            print("checking the failing test_1", gate_logits_1SB8)
+            print("checking the failing test_2", topk_values)
             topk_values = ttnn.add(topk_values, self.top2_mask_11BB)
+            print("checking the failing test_3", topk_values)
+            print("checking the failing test_4", topk_indices)
             mask_B2 = ttnn.eqz(topk_indices)
+            print("checking the failing test_5", mask_B2)
             weights_1SB1 = ttnn.sum(ttnn.softmax(topk_values, dim=-1) * mask_B2, dim=3, keepdim=True)
 
             topk_values.deallocate(True)
