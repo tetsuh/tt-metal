@@ -51,19 +51,24 @@ struct DeviceStorage {
 
 class MultiDeviceHostStorage {
 public:
+    // Temporary APIs to accommodate transition from the old storage format to distributed storage.
+    std::optional<HostBuffer> get_shard_at_origin() const {
+        return buffers_.get_shard(distributed::MeshCoordinate::zero_coordinate(buffers_.shape().dims()));
+    }
+
+    // Creates a linearized distributed host buffer from a vector of host buffers.
     explicit MultiDeviceHostStorage(std::vector<HostBuffer> buffers);
+
+    //
+    explicit MultiDeviceHostStorage(DistributedHostBuffer buffer);
+
+    const DistributedHostBuffer& distributed_buffer() const { return buffers_; }
 
     static constexpr auto attribute_names = std::forward_as_tuple();
     auto attribute_values() const { return std::forward_as_tuple(); }
 
-    // Returns `HostBuffer` at position `buffer_index`;
-    HostBuffer get_buffer(int buffer_index) const;
-
-    // Returns the number of `HostBuffer`s in the storage;
-    size_t num_buffers() const;
-
 private:
-    std::vector<HostBuffer> buffers_;
+    DistributedHostBuffer buffers_;
 };
 
 using Storage = std::variant<HostStorage, DeviceStorage, MultiDeviceHostStorage>;

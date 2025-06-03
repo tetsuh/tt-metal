@@ -28,6 +28,7 @@ void close_mesh_device(const std::shared_ptr<MeshDevice>& mesh_device);
 std::vector<Tensor> get_device_tensors(const Tensor& tensor);
 
 // Given a list of per-device shards, returns multi-device tensor.
+// TODO: #22169 - propagate multi-host parameters here.
 Tensor aggregate_as_tensor(
     const std::vector<Tensor>& tensor_shards, const tt::tt_metal::DistributedTensorConfig& config);
 

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 #include <algorithm>
+#include <vector>
 
 #include "tt-metalium/mesh_coord.hpp"
 
@@ -66,13 +67,12 @@ bool DeviceStorage::is_uniform_storage() const {
     return coords.size() == mesh_buffer->device()->num_devices();
 }
 
-MultiDeviceHostStorage::MultiDeviceHostStorage(std::vector<HostBuffer> buffers) : buffers_(std::move(buffers)) {}
-
-HostBuffer MultiDeviceHostStorage::get_buffer(int buffer_index) const {
-    TT_FATAL(buffer_index < buffers_.size(), "Buffer not found for buffer_index {}", buffer_index);
-    return buffers_[buffer_index];
+MultiDeviceHostStorage::MultiDeviceHostStorage(std::vector<HostBuffer> buffers) :
+    buffers_(DistributedHostBuffer::create(tt::tt_metal::distributed::MeshShape(buffers.size()))) {
+    for (size_t i = 0; i < buffers.size(); ++i) {
+        buffers_.emplace_shard(tt::tt_metal::distributed::MeshCoordinate(i), std::move(buffers[i]));
+    }
 }
-
-size_t MultiDeviceHostStorage::num_buffers() const { return buffers_.size(); }
+MultiDeviceHostStorage::MultiDeviceHostStorage(DistributedHostBuffer buffer) : buffers_(std::move(buffer)) {}
 
 }  // namespace tt::tt_metal

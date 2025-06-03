@@ -41,6 +41,10 @@ DistributedHostBuffer DistributedHostBuffer::create(
         distributed::MeshContainer<HostBuffer>(local_shape, HostBuffer()));
 }
 
+DistributedHostBuffer DistributedHostBuffer::create(const distributed::MeshShape& shape) {
+    return DistributedHostBuffer::create(shape, shape, distributed::MeshCoordinate::zero_coordinate(shape.dims()));
+}
+
 std::optional<distributed::MeshCoordinate> DistributedHostBuffer::global_to_local(
     const distributed::MeshCoordinate& coord) const {
     const auto& local_shape = local_buffers_.shape();
@@ -79,11 +83,18 @@ void DistributedHostBuffer::emplace_shard(const distributed::MeshCoordinate& coo
     }
 }
 
-DistributedHostBuffer DistributedHostBuffer::transform(const TransformFn& fn) const {
+DistributedHostBuffer DistributedHostBuffer::transform(const TransformFn& fn, ParallelForAdaptor* parallel_for) const {
     std::vector<HostBuffer> transformed_buffers;
     transformed_buffers.reserve(local_buffers_.shape().mesh_size());
-    for (const auto& local_buffer : local_buffers_.values()) {
-        transformed_buffers.push_back(fn(local_buffer));
+    if (parallel_for) {
+        for (const auto& local_buffer : local_buffers_.values()) {
+            parallel_for->add_task([&]() { transformed_buffers.push_back(fn(local_buffer)); });
+        }
+        parallel_for->wait();
+    } else {
+        for (const auto& local_buffer : local_buffers_.values()) {
+            transformed_buffers.push_back(fn(local_buffer));
+        }
     }
     DistributedHostBuffer transformed_buffer(
         global_shape_,
@@ -92,16 +103,24 @@ DistributedHostBuffer DistributedHostBuffer::transform(const TransformFn& fn) co
     return transformed_buffer;
 }
 
-void DistributedHostBuffer::apply(const ApplyFn& fn) const {
-    for (const auto& local_buffer : local_buffers_.values()) {
-        fn(local_buffer);
+void DistributedHostBuffer::apply(const ApplyFn& fn, ParallelForAdaptor* parallel_for) const {
+    if (parallel_for) {
+        for (const auto& local_buffer : local_buffers_.values()) {
+            parallel_for->add_task([&]() { fn(local_buffer); });
+        }
+        parallel_for->wait();
+    } else {
+        for (const auto& local_buffer : local_buffers_.values()) {
+            fn(local_buffer);
+        }
     }
 }
 
 distributed::MeshShape DistributedHostBuffer::shape() const { return global_shape_; }
-
-std::unordered_set<distributed::MeshCoordinate> DistributedHostBuffer::shard_coords() const {
-    return populated_shards_;
+distributed::MeshCoordinateRange DistributedHostBuffer::range() const {
+    return distributed::MeshCoordinateRange(global_shape_);
 }
+
+const std::set<distributed::MeshCoordinate>& DistributedHostBuffer::shard_coords() const { return populated_shards_; }
 
 }  // namespace tt::tt_metal
