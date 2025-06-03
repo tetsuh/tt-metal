@@ -557,10 +557,10 @@ Tensor to_host_mesh_tensor(const Tensor& tensor, bool blocking, ttnn::QueueId cq
     // Initialize vector of host buffers that data will be read into
     std::vector<HostBuffer> buffers(num_buffers);
     std::vector<distributed::MeshCommandQueue::ShardDataTransfer> shard_data_transfers;
-    std::vector<TensorSpec> specs;
-    specs.reserve(num_buffers);
     shard_data_transfers.reserve(num_buffers);
 
+    // TODO: #22169 - Use read API for a DistributedHostBuffer.
+    // Perform a single batch allocation here instead.
     const auto tensor_size_bytes = tensor.get_tensor_spec().compute_packed_buffer_size_bytes();
     for (std::size_t shard_idx = 0; shard_idx < num_buffers; shard_idx++) {
         const auto& coord = storage.coords[shard_idx];

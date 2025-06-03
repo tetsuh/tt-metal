@@ -7,9 +7,9 @@
 
 #include <tt-metalium/mesh_coord.hpp>
 #include <tt-metalium/host_buffer.hpp>
+#include <tt-metalium/distributed_host_buffer.hpp>
 #include <flatbuffers/flatbuffers.h>
 
-#include "tt-metalium/distributed_host_buffer.hpp"
 #include "ttnn/tensor/types.hpp"
 #include "ttnn/tensor/tensor_spec.hpp"
 #include "ttnn/tensor/tensor.hpp"
