@@ -49,7 +49,7 @@ void AllGatherFusedOpSignaler::push_all_gather_fused_op_rt_args(
     uint32_t num_workers_to_sync,
     uint32_t curr_worker_index,
     uint32_t all_gather_direction) {
-    TT_ASSERT(initialized_fused_op && initialized_all_gather, "AllGatherFusedOpSignaler not initialized fully.");
+    TT_FATAL(initialized_fused_op && initialized_all_gather, "AllGatherFusedOpSignaler not initialized fully.");
 
     out_rt_args.push_back(static_cast<uint32_t>(num_workers_to_sync));
     out_rt_args.push_back(static_cast<uint32_t>(curr_worker_index));
@@ -119,8 +119,7 @@ void ReduceScatterFusedOpSignaler::init_reduce_scatter(
 void ReduceScatterFusedOpSignaler::init_fused_op() { initialized_fused_op = true; }
 
 void ReduceScatterFusedOpSignaler::push_reduce_scatter_fused_op_rt_args(std::vector<uint32_t>& out_rt_args) {
-    TT_ASSERT(
-        initialized_reduce_scatter && initialized_fused_op, "ReduceScatterFusedOpSignaler not initialized fully.");
+    TT_FATAL(initialized_reduce_scatter && initialized_fused_op, "ReduceScatterFusedOpSignaler not initialized fully.");
     out_rt_args.push_back(static_cast<uint32_t>(this->fused_op_receiver_signal_semaphores[0]));
 }
 
@@ -223,7 +222,7 @@ void MatmulFusedOpSignaler::init_fused_op(
 
 void MatmulFusedOpSignaler::push_matmul_fused_op_rt_args(
     std::vector<uint32_t>& out_rt_args, uint32_t curr_worker_in0_idx, uint32_t curr_worker_in1_idx) {
-    TT_ASSERT(initialized_fused_op && initialized_reduce_scatter, "MatmulFusedOpSignaler not initialized fully.");
+    TT_FATAL(initialized_fused_op && initialized_reduce_scatter, "MatmulFusedOpSignaler not initialized fully.");
 
     out_rt_args.push_back(static_cast<uint32_t>(this->matmul_worker_cores_noc.size()));
     uint32_t curr_worker_index = 0;
@@ -236,7 +235,7 @@ void MatmulFusedOpSignaler::push_matmul_fused_op_rt_args(
             break;
         }
     }
-    TT_ASSERT(core_found, "MatmulFusedOpSignaler did not find curr_worker_index.");
+    TT_FATAL(core_found, "MatmulFusedOpSignaler did not find curr_worker_index.");
     out_rt_args.push_back(static_cast<uint32_t>(curr_worker_index));
     out_rt_args.push_back(static_cast<uint32_t>(this->matmul_worker_sync_semaphore));
 
@@ -261,7 +260,7 @@ void MatmulFusedOpSignaler::push_matmul_fused_op_rt_args(
 }
 
 void MatmulFusedOpSignaler::push_matmul_fused_op_rt_args(std::vector<uint32_t>& out_rt_args, bool use_in1_offset) {
-    TT_ASSERT(initialized_all_gather && initialized_fused_op, "MatmulFusedOpSignaler not initialized fully.");
+    TT_FATAL(initialized_all_gather && initialized_fused_op, "MatmulFusedOpSignaler not initialized fully.");
 
     out_rt_args.push_back(static_cast<uint32_t>(this->num_transfers));
     out_rt_args.push_back(static_cast<uint32_t>(this->ring_size));

@@ -28,10 +28,7 @@ void ReduceScatterMinimalAsync::validate_with_output_tensors(
         "Worker cores used by links are parallelizaed over rows");
 
     TT_FATAL(
-        input_tensor.memory_config().memory_layout() == TensorMemoryLayout::INTERLEAVED ||
-            input_tensor.memory_config().memory_layout() == TensorMemoryLayout::WIDTH_SHARDED ||
-            input_tensor.memory_config().memory_layout() == TensorMemoryLayout::BLOCK_SHARDED ||
-            input_tensor.memory_config().memory_layout() == TensorMemoryLayout::HEIGHT_SHARDED,
+        input_tensor.memory_config().memory_layout() == TensorMemoryLayout::INTERLEAVED,
         "Unsupported memory layout {}.",
         input_tensor.memory_config().memory_layout());
 

@@ -342,7 +342,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
     const auto& op_config = ttnn::ccl::CCLOpConfig(input_tensors, output_tensors, topology);
     auto [num_targets_forward, num_targets_backward, dynamic_alternate] =
         ccl::get_forward_backward_configuration(ring_size, ring_index, topology);
-    TT_ASSERT(!((topology == ccl::Topology::Linear) && fuse_op));
+    TT_FATAL(
+        !((topology == ccl::Topology::Linear) && fuse_op), "Fusing operations is not supported for linear topology");
     if (topology == ccl::Topology::Ring && ring_index % 2 == 0) {
         std::swap(num_targets_forward, num_targets_backward);
     }
@@ -591,8 +592,8 @@ tt::tt_metal::operation::ProgramWithCallbacks all_gather_async_minimal_interleav
         uint32_t input_tile_id_start = link * base_pages_per_worker + std::min(link, remainder);
         uint32_t input_tile_id_end = (link + 1) * base_pages_per_worker + std::min(link + 1, remainder);
 
-        TT_ASSERT(!(input_tensor_shape[3] % TILE_WIDTH));
-        TT_ASSERT(!(output_tensor_shape[3] % TILE_WIDTH));
+        TT_FATAL(!(input_tensor_shape[3] % TILE_WIDTH), "Input tensor width must be a multiple of TILE_WIDTH");
+        TT_FATAL(!(output_tensor_shape[3] % TILE_WIDTH), "Output tensor width must be a multiple of TILE_WIDTH");
         uint32_t TILE_WIDTH = 32;
         uint32_t input_tensor_Wt = input_tensor_shape[3] / TILE_WIDTH;
         uint32_t output_tensor_Wt = output_tensor_shape[3] / TILE_WIDTH;

@@ -181,7 +181,7 @@ void kernel_main() {
         out_ready_sem_noc_addr_in_pkt_backward,
         static_cast<uint16_t>(1),  // increment 1
         32});
-    // Write the mcast packet (backward)
+
     if (fabric_connection.has_backward_connection()) {
         fabric_connection.get_backward_connection().wait_for_empty_write_slot();
         pkt_hdr_bwd->to_chip_unicast(1);

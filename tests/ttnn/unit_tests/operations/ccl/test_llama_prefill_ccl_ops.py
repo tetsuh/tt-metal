@@ -211,7 +211,7 @@ def run_all_gather_impl(
     "enable_trace, num_iters",
     [
         (True, 1),
-        # (False, 1),
+        (False, 10),
     ],
 )
 @pytest.mark.parametrize(
@@ -279,7 +279,7 @@ def test_all_gather_async(
     "enable_trace, num_iters",
     [
         (True, 1),
-        # (False, 1),
+        (False, 10),
     ],
 )
 @pytest.mark.parametrize(
