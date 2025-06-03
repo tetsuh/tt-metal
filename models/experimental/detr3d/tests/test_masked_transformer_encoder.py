@@ -4,16 +4,16 @@
 
 import torch
 import pytest
-from models.experimental.DETR3D.reference.DETR3D_model import (
+from models.experimental.detr3d.reference.detr3d_model import (
     MaskedTransformerEncoder as ref_model,
     PointnetSAModuleVotes as ref_point_net_module_votes,
     TransformerEncoderLayer as ref_encoder_layer,
 )
-from models.experimental.DETR3D.source.detr3d.models.transformer import (
+from models.experimental.detr3d.source.detr3d.models.transformer import (
     MaskedTransformerEncoder as org_model,
     TransformerEncoderLayer as org_encoder_layer,
 )
-from models.experimental.DETR3D.source.detr3d.third_party.pointnet2.pointnet2_modules import (
+from models.experimental.detr3d.source.detr3d.third_party.pointnet2.pointnet2_modules import (
     PointnetSAModuleVotes as org_point_net_module_votes,
 )
 from tests.ttnn.utils_for_testing import assert_with_pcc

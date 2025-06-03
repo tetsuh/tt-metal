@@ -4,8 +4,8 @@
 
 import torch
 import pytest
-from models.experimental.DETR3D.reference.DETR3D_model import PositionEmbeddingCoordsSine as ref_model
-from models.experimental.DETR3D.source.detr3d.models.position_embedding import PositionEmbeddingCoordsSine as org_model
+from models.experimental.detr3d.reference.detr3d_model import PositionEmbeddingCoordsSine as ref_model
+from models.experimental.detr3d.source.detr3d.models.position_embedding import PositionEmbeddingCoordsSine as org_model
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
 

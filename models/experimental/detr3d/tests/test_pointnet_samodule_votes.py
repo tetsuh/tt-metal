@@ -4,8 +4,8 @@
 
 import torch
 import pytest
-from models.experimental.DETR3D.reference.DETR3D_model import PointnetSAModuleVotes as ref_model
-from models.experimental.DETR3D.source.detr3d.third_party.pointnet2.pointnet2_modules import (
+from models.experimental.detr3d.reference.detr3d_model import PointnetSAModuleVotes as ref_model
+from models.experimental.detr3d.source.detr3d.third_party.pointnet2.pointnet2_modules import (
     PointnetSAModuleVotes as org_model,
 )
 from tests.ttnn.utils_for_testing import assert_with_pcc

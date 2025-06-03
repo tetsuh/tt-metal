@@ -4,8 +4,8 @@
 
 import torch
 import pytest
-from models.experimental.DETR3D.source.detr3d.models.transformer import TransformerEncoderLayer as org_model
-from models.experimental.DETR3D.reference.DETR3D_model import TransformerEncoderLayer as ref_model
+from models.experimental.detr3d.source.detr3d.models.transformer import TransformerEncoderLayer as org_model
+from models.experimental.detr3d.reference.detr3d_model import TransformerEncoderLayer as ref_model
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
 

@@ -43,11 +43,11 @@ class Detr3dArgs:
 
     # Dataset config
     dataset_name = "sunrgbd"
-    dataset_root_dir = "/home/ubuntu/venkatesh_latest/tt-metal/models/experimental/DETR3D/sunrgbd_sample_set1"
+    dataset_root_dir = "/home/ubuntu/venkatesh_latest/tt-metal/models/experimental/detr3d/sunrgbd_sample_set1"
     meta_data_dir = None
     dataset_num_workers = 4
     batchsize_per_gpu = 8
 
     # Test / inference
     test_only = True
-    test_ckpt = "/home/ubuntu/venkatesh_latest/tt-metal/models/experimental/DETR3D/sunrgbd_masked_ep720.pth"
+    test_ckpt = "/home/ubuntu/venkatesh_latest/tt-metal/models/experimental/detr3d/sunrgbd_masked_ep720.pth"

@@ -4,22 +4,22 @@
 
 import torch
 import pytest
-from models.experimental.DETR3D.reference.DETR3D_model import (
+from models.experimental.detr3d.reference.detr3d_model import (
     Model3DETR as ref_model,
     build_preencoder as ref_build_preencoder,
     build_encoder as ref_build_encoder,
     build_decoder as ref_build_decoder,
 )
-from models.experimental.DETR3D.source.detr3d.models.model_3detr import (
+from models.experimental.detr3d.source.detr3d.models.model_3detr import (
     Model3DETR as org_model,
     build_preencoder as org_build_preencoder,
     build_encoder as org_build_encoder,
     build_decoder as org_build_decoder,
 )
 from tests.ttnn.utils_for_testing import assert_with_pcc
-from models.experimental.DETR3D.reference.model_utils import SunrgbdDatasetConfig
+from models.experimental.detr3d.reference.model_utils import SunrgbdDatasetConfig
 
-from models.experimental.DETR3D.reference.model_config import Detr3dArgs
+from models.experimental.detr3d.reference.model_config import Detr3dArgs
 
 
 @pytest.mark.parametrize(

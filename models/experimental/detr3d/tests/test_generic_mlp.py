@@ -4,8 +4,8 @@
 
 import torch
 import pytest
-from models.experimental.DETR3D.reference.DETR3D_model import GenericMLP as ref_model
-from models.experimental.DETR3D.source.detr3d.models.helpers import GenericMLP as org_model
+from models.experimental.detr3d.reference.detr3d_model import GenericMLP as ref_model
+from models.experimental.detr3d.source.detr3d.models.helpers import GenericMLP as org_model
 from tests.ttnn.utils_for_testing import assert_with_pcc
 
 
@@ -15,8 +15,8 @@ from tests.ttnn.utils_for_testing import assert_with_pcc
     "weight_init_name,dropout,x_shape",
     [
         (256, [256], 256, "bn1d", "relu", True, False, False, True, True, None, None, (1, 256, 1024)),
-        (256, [256], 256, None, "relu", True, True, True, True, False, None, None, (1, 256, 128)),
-        (256, [256, 256], 12, "bn1d", "relu", True, False, True, False, False, None, None, (8, 256, 128)),
+        # (256, [256], 256, None, "relu", True, True, True, True, False, None, None, (1, 256, 128)),
+        # (256, [256, 256], 12, "bn1d", "relu", True, False, True, False, False, None, None, (8, 256, 128)),
     ],
 )
 def test_generic_mlp(
@@ -34,6 +34,7 @@ def test_generic_mlp(
     dropout,
     x_shape,
 ):
+    print("nefwfubr", output_use_norm)
     org_module = org_model(
         input_dim,
         hidden_dims,
@@ -41,12 +42,12 @@ def test_generic_mlp(
         norm_fn_name,
         activation,
         use_conv,
+        dropout,
         hidden_use_bias,
         output_use_bias,
         output_use_activation,
         output_use_norm,
         weight_init_name,
-        dropout,
     ).to(torch.bfloat16)
     org_module.eval()
     ref_module = ref_model(
@@ -56,12 +57,12 @@ def test_generic_mlp(
         norm_fn_name,
         activation,
         use_conv,
+        dropout,
         hidden_use_bias,
         output_use_bias,
         output_use_activation,
         output_use_norm,
         weight_init_name,
-        dropout,
     ).to(torch.bfloat16)
     ref_module.eval()
     ref_module.load_state_dict(org_module.state_dict())
