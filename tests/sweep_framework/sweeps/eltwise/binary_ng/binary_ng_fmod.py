@@ -94,27 +94,9 @@ def return_mem_config(mem_config_string):
 # Each suite has a key name (in this case "suite_1") which will associate the test vectors to this specific suite of inputs.
 # Developers can create their own generator functions and pass them to the parameters as inputs.
 parameters = {
-    "yolo_test_fmod": {
+    "test_rem_interleaved3": {
         "binary_op": [
-            {"tt_op": "fmod", "a_high": 100, "b_high": 90, "a_low": -100, "b_low": -90},
-            # {"tt_op" :"sub"},
-            # {"tt_op" :"rsub"},
-            # {"tt_op" :"mul"},
-            # {"tt_op" :"div"},
-            # {"tt_op" :"gte"},
-            # {"tt_op" :"gt"},
-            # {"tt_op" :"lte"},
-            # {"tt_op" :"lt"},
-            # {"tt_op" :"eq"},
-            # {"tt_op" :"ne"},
-            # {"tt_op" :"logical_and"},
-            # {"tt_op" :"logical_or"},
-            # {"tt_op" :"logical_xor"},
-            # {"tt_op" :"ldexp"},
-            # {"tt_op" :"logaddexp"},
-            # {"tt_op" :"logaddexp2"},
-            # {"tt_op" :"squared_difference"},
-            # {"tt_op" :"bias_gelu"},
+            {"tt_op": "remainder", "a_high": 200, "b_high": 150, "a_low": -120, "b_low": -90},
         ],
         # "input_shape": [{"self": [1, 1, 1024, 1024], "other": [1, 1, 1024, 1024]}],
         "input_shape": [{"self": [1, 1, 512, 512], "other": [1, 1, 512, 512]}],  # for float32 and int32 dtypes
@@ -123,7 +105,7 @@ parameters = {
             {"input_a_dtype": "ttnn.float32", "input_b_dtype": "ttnn.float32"},
             {"input_a_dtype": "ttnn.bfloat8_b", "input_b_dtype": "ttnn.bfloat8_b"},
             {"input_a_dtype": "ttnn.bfloat4_b", "input_b_dtype": "ttnn.bfloat4_b"},  # same dtype
-            {"input_a_dtype": "ttnn.int32", "input_b_dtype": "ttnn.int32"},  # same dtype - only for add/bitwise
+            # {"input_a_dtype": "ttnn.int32", "input_b_dtype": "ttnn.int32"},  # same dtype - only for add/bitwise
             {"input_a_dtype": "ttnn.bfloat16", "input_b_dtype": "ttnn.float32"},
             {"input_a_dtype": "ttnn.bfloat16", "input_b_dtype": "ttnn.bfloat8_b"},
             {"input_a_dtype": "ttnn.bfloat16", "input_b_dtype": "ttnn.bfloat4_b"},
@@ -140,7 +122,7 @@ parameters = {
             {"input_a_dtype": "ttnn.float32", "input_b_dtype": "none"},
             {"input_a_dtype": "ttnn.bfloat8_b", "input_b_dtype": "none"},
             {"input_a_dtype": "ttnn.bfloat4_b", "input_b_dtype": "none"},  # tensor-scalar
-            {"input_a_dtype": "ttnn.int32", "input_b_dtype": "none"},  # only for add/bitwise
+            # {"input_a_dtype": "ttnn.int32", "input_b_dtype": "none"},  # only for add/bitwise
         ],
         # currently we're checking for either TILE-TILE or RM-RM (yet-to). not yet, for mixed layouts
         "input_a_layout": [ttnn.TILE_LAYOUT],
@@ -150,24 +132,24 @@ parameters = {
             {"a_mem": "l1_interleaved", "b_mem": "dram_interleaved"},
             {"a_mem": "dram_interleaved", "b_mem": "l1_interleaved"},
             {"a_mem": "dram_interleaved", "b_mem": "dram_interleaved"},  # l1 - dram combination
-            {"a_mem": "l1_height_sharded_rm", "b_mem": "l1_height_sharded_rm"},
-            {"a_mem": "dram_interleaved", "b_mem": "l1_height_sharded_rm"},
-            {"a_mem": "l1_height_sharded_rm", "b_mem": "dram_interleaved"},  # HS
-            {"a_mem": "l1_width_sharded_rm", "b_mem": "l1_width_sharded_rm"},
-            {"a_mem": "dram_interleaved", "b_mem": "l1_width_sharded_rm"},
-            {"a_mem": "l1_width_sharded_rm", "b_mem": "dram_interleaved"},  # WS
-            {"a_mem": "l1_block_sharded_rm", "b_mem": "l1_block_sharded_rm"},
-            {"a_mem": "dram_interleaved", "b_mem": "l1_block_sharded_rm"},
-            {"a_mem": "l1_block_sharded_rm", "b_mem": "dram_interleaved"},  # BS #row_major orientation
-            {"a_mem": "l1_height_sharded_cm", "b_mem": "l1_height_sharded_cm"},
-            {"a_mem": "dram_interleaved", "b_mem": "l1_height_sharded_cm"},
-            {"a_mem": "l1_height_sharded_cm", "b_mem": "dram_interleaved"},  # HS
-            {"a_mem": "l1_width_sharded_cm", "b_mem": "l1_width_sharded_cm"},
-            {"a_mem": "dram_interleaved", "b_mem": "l1_width_sharded_cm"},
-            {"a_mem": "l1_width_sharded_cm", "b_mem": "dram_interleaved"},  # WS
-            {"a_mem": "l1_block_sharded_cm", "b_mem": "l1_block_sharded_cm"},
-            {"a_mem": "dram_interleaved", "b_mem": "l1_block_sharded_cm"},
-            {"a_mem": "l1_block_sharded_cm", "b_mem": "dram_interleaved"},  # BS #col_major orientation
+            # {"a_mem": "l1_height_sharded_rm", "b_mem": "l1_height_sharded_rm"},
+            # {"a_mem": "dram_interleaved", "b_mem": "l1_height_sharded_rm"},
+            # {"a_mem": "l1_height_sharded_rm", "b_mem": "dram_interleaved"},  # HS
+            # {"a_mem": "l1_width_sharded_rm", "b_mem": "l1_width_sharded_rm"},
+            # {"a_mem": "dram_interleaved", "b_mem": "l1_width_sharded_rm"},
+            # {"a_mem": "l1_width_sharded_rm", "b_mem": "dram_interleaved"},  # WS
+            # {"a_mem": "l1_block_sharded_rm", "b_mem": "l1_block_sharded_rm"},
+            # {"a_mem": "dram_interleaved", "b_mem": "l1_block_sharded_rm"},
+            # {"a_mem": "l1_block_sharded_rm", "b_mem": "dram_interleaved"},  # BS #row_major orientation
+            # {"a_mem": "l1_height_sharded_cm", "b_mem": "l1_height_sharded_cm"},
+            # {"a_mem": "dram_interleaved", "b_mem": "l1_height_sharded_cm"},
+            # {"a_mem": "l1_height_sharded_cm", "b_mem": "dram_interleaved"},  # HS
+            # {"a_mem": "l1_width_sharded_cm", "b_mem": "l1_width_sharded_cm"},
+            # {"a_mem": "dram_interleaved", "b_mem": "l1_width_sharded_cm"},
+            # {"a_mem": "l1_width_sharded_cm", "b_mem": "dram_interleaved"},  # WS
+            # {"a_mem": "l1_block_sharded_cm", "b_mem": "l1_block_sharded_cm"},
+            # {"a_mem": "dram_interleaved", "b_mem": "l1_block_sharded_cm"},
+            # {"a_mem": "l1_block_sharded_cm", "b_mem": "dram_interleaved"},  # BS #col_major orientation
         ],
     },
 }

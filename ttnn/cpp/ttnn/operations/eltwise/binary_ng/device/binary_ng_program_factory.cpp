@@ -86,12 +86,12 @@ std::optional<AllShardSpecs> get_shard_specs(const Tensor& a, const std::optiona
     bool b_sharded = b.has_value() && b->memory_config().is_sharded();
     bool c_sharded = c.memory_config().is_sharded();
 
-    tt::log_info(tt::LogOp, " ****** ng is_sharded A, B , Out {}, {}, {}", a_sharded, b_sharded, c_sharded);
+    //   tt::log_info(tt::LogOp, " ****** ng is_sharded A, B , Out {}, {}, {}", a_sharded, b_sharded, c_sharded);
 
     if (!a_sharded && !b_sharded && !c_sharded) {
-        tt::log_info(tt::LogOp, " ****** a {} {}", a.memory_config(), a.get_dtype());
+        //   tt::log_info(tt::LogOp, " ****** a {} {}", a.memory_config(), a.get_dtype());
         // tt::log_info(tt::LogOp, " ****** b {} {}", b->memory_config(), b->get_dtype());
-        tt::log_info(tt::LogOp, " ****** b {} {}", c.memory_config(), c.get_dtype());
+        //   tt::log_info(tt::LogOp, " ****** b {} {}", c.memory_config(), c.get_dtype());
         return std::nullopt;
     }
 
@@ -448,7 +448,7 @@ BinaryNgDeviceOperation::ProgramFactory::cached_program_t BinaryNgDeviceOperatio
 
     const auto shard_specs = CMAKE_UNIQUE_NAMESPACE::get_shard_specs(a, b, c);
     const bool has_sharding = shard_specs.has_value();
-    tt::log_info(tt::LogOp, " ****** has_sharding {}", has_sharding);
+    //   tt::log_info(tt::LogOp, " ****** has_sharding {}", has_sharding);
 
     auto tile_hw = c.tensor_spec().tile().get_tile_hw();
     uint32_t a_num_tiles_per_shard = has_sharding ? shard_specs->a_shard_spec.numel() / tile_hw : 0;
@@ -471,9 +471,9 @@ BinaryNgDeviceOperation::ProgramFactory::cached_program_t BinaryNgDeviceOperatio
     const auto c_data_format = datatype_to_dataformat_converter(c_dtype);
 
     if (!has_sharding) {
-        tt::log_info(tt::LogOp, " ****** a {} ", a_dtype);
-        tt::log_info(tt::LogOp, " ****** b {}", b_dtype);
-        tt::log_info(tt::LogOp, " ****** c {}", c_dtype);
+        //   tt::log_info(tt::LogOp, " ****** a {} ", a_dtype);
+        //   tt::log_info(tt::LogOp, " ****** b {}", b_dtype);
+        //   tt::log_info(tt::LogOp, " ****** c {}", c_dtype);
     }
 
     uint32_t a_single_tile_size = tt_metal::detail::TileSize(a_data_format);
