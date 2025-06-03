@@ -216,42 +216,40 @@ constexpr uint32_t edm_local_sync_ptr_addr =
     wait_for_host_signal ? get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 30) : 0;
 constexpr uint32_t edm_status_ptr_addr = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 31);
 
-constexpr bool persistent_mode = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 32) != 0;
-
 // Per-channel counters
-constexpr bool enable_fabric_counters = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 33) != 0;
-constexpr size_t receiver_channel_0_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 34);
-constexpr size_t receiver_channel_1_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 35);
-constexpr size_t sender_channel_0_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 36);
-constexpr size_t sender_channel_1_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 37);
-constexpr size_t sender_channel_2_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 38);
-constexpr size_t sender_channel_3_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 39);
-constexpr size_t sender_channel_4_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 40);
+constexpr bool enable_fabric_counters = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 32) != 0;
+constexpr size_t receiver_channel_0_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 33);
+constexpr size_t receiver_channel_1_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 34);
+constexpr size_t sender_channel_0_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 35);
+constexpr size_t sender_channel_1_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 36);
+constexpr size_t sender_channel_2_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 37);
+constexpr size_t sender_channel_3_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 38);
+constexpr size_t sender_channel_4_counters_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 39);
 
-constexpr bool enable_packet_header_recording = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 41) != 0;
-constexpr size_t receiver_0_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 42);
+constexpr bool enable_packet_header_recording = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 40) != 0;
+constexpr size_t receiver_0_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 41);
 constexpr size_t receiver_0_completed_packet_header_cb_size_headers =
-    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 43);
-constexpr size_t receiver_1_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 44);
+    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 42);
+constexpr size_t receiver_1_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 43);
 constexpr size_t receiver_1_completed_packet_header_cb_size_headers =
-    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 45);
-constexpr size_t sender_0_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 46);
+    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 44);
+constexpr size_t sender_0_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 45);
 constexpr size_t sender_0_completed_packet_header_cb_size_headers =
-    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 47);
-constexpr size_t sender_1_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 48);
+    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 46);
+constexpr size_t sender_1_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 47);
 constexpr size_t sender_1_completed_packet_header_cb_size_headers =
-    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 49);
-constexpr size_t sender_2_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 50);
+    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 48);
+constexpr size_t sender_2_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 49);
 constexpr size_t sender_2_completed_packet_header_cb_size_headers =
-    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 51);
-constexpr size_t sender_3_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 52);
+    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 50);
+constexpr size_t sender_3_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 51);
 constexpr size_t sender_3_completed_packet_header_cb_size_headers =
-    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 53);
-constexpr size_t sender_4_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 54);
+    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 52);
+constexpr size_t sender_4_completed_packet_header_cb_address = get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 53);
 constexpr size_t sender_4_completed_packet_header_cb_size_headers =
-    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 55);
+    get_compile_time_arg_val(MAIN_CT_ARGS_START_IDX + 54);
 
-constexpr size_t sender_channel_serviced_args_idx = MAIN_CT_ARGS_START_IDX + 56;
+constexpr size_t sender_channel_serviced_args_idx = MAIN_CT_ARGS_START_IDX + 55;
 constexpr std::array<bool, MAX_NUM_SENDER_CHANNELS> is_sender_channel_serviced =
     fill_array_with_next_n_args<bool, sender_channel_serviced_args_idx, MAX_NUM_SENDER_CHANNELS>();
 constexpr size_t receiver_channel_serviced_args_idx =
