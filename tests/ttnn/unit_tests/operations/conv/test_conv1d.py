@@ -78,6 +78,7 @@ def run_conv(
         weights_dtype=weights_dtype,
         shard_layout=shard_layout,
         deallocate_activation=deallocate_activation,
+        enable_split_reader=True,
     )
     compute_config = ttnn.init_device_compute_kernel_config(
         device.arch(),
