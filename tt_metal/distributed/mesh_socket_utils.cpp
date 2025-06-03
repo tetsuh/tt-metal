@@ -321,7 +321,6 @@ DistributedSocketMD deserialize_distributed_socket_md(const std::vector<uint8_t>
     auto socket_config_fb = distributed_socket_md_fb->config();
 
     DistributedSocketMD socket_md;
-    ;
     SocketConfig socket_config;
 
     // Deserialize socket connections

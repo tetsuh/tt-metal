@@ -60,6 +60,7 @@ public:
         const std::shared_ptr<MeshDevice>& sender,
         const std::shared_ptr<MeshDevice>& receiver,
         const SocketConfig& config);
+    static uint32_t get_unique_global_id() { return global_id++; };
     // Access the data-buffer associated with the socket on the reciver mesh. Can only be queried for receiver sockets.
     std::shared_ptr<MeshBuffer> get_data_buffer() const;
     // Access the config buffer associated with this socket.
@@ -77,6 +78,7 @@ private:
     std::shared_ptr<MeshBuffer> data_buffer_;
     std::shared_ptr<MeshBuffer> config_buffer_;
     SocketConfig config_;
+    inline static uint32_t global_id = 0;
 };
 
 }  // namespace tt::tt_metal::distributed

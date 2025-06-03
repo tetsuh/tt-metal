@@ -77,30 +77,33 @@ public:
     }
 };
 
-void forward_socket_metadata(const tt::tt_metal::distributed::DistributedSocketMD& md, bool is_sender, MPI_Comm comm) {
+void forward_socket_metadata(
+    const tt::tt_metal::distributed::DistributedSocketMD& md, bool is_sender, uint32_t tag, MPI_Comm comm) {
     const auto& config = md.config;
     uint32_t peer_rank = is_sender ? config.receiver_rank : config.sender_rank;
     uint32_t curr_rank = is_sender ? config.sender_rank : config.receiver_rank;
-    std::cout << "Forward socket metadata from rank " << curr_rank << " to rank " << peer_rank << std::endl;
+    std::cout << "Forward socket metadata from rank " << curr_rank << " to rank " << peer_rank << " Tag: " << tag
+              << std::endl;
     auto socket_config_fbb = serialize_distributed_socket_md(md);
     uint8_t* buf = socket_config_fbb.GetBufferPointer();
     int size = socket_config_fbb.GetSize();
-    std::cout << "Socket FB send size: " << size << std::endl;
-    MPI_Send(&size, 1, MPI_INT, peer_rank, 0, comm);
-    MPI_Send(buf, size, MPI_BYTE, peer_rank, 1, comm);
+    // std::cout << "Socket FB send size: " << size << std::endl;
+    MPI_Send(&size, 1, MPI_INT, peer_rank, tag, comm);
+    MPI_Send(buf, size, MPI_BYTE, peer_rank, tag, comm);
 }
 
 tt::tt_metal::distributed::DistributedSocketMD get_socket_metadata(
-    const tt::tt_metal::distributed::DistributedSocketMD& md, bool is_sender, MPI_Comm comm) {
+    const tt::tt_metal::distributed::DistributedSocketMD& md, bool is_sender, uint32_t tag, MPI_Comm comm) {
     const auto& config = md.config;
     uint32_t peer_rank = is_sender ? config.receiver_rank : config.sender_rank;
     uint32_t curr_rank = is_sender ? config.sender_rank : config.receiver_rank;
-    std::cout << "Get socket metadata from rank " << curr_rank << " to rank " << peer_rank << std::endl;
+    std::cout << "Get socket metadata from rank " << curr_rank << " to rank " << peer_rank << " Tag: " << tag
+              << std::endl;
     int size;
-    MPI_Recv(&size, 1, MPI_INT, peer_rank, 0, comm, MPI_STATUS_IGNORE);
-    std::cout << "Socket FB recv size: " << size << std::endl;
+    MPI_Recv(&size, 1, MPI_INT, peer_rank, tag, comm, MPI_STATUS_IGNORE);
+    // std::cout << "Socket FB recv size: " << size << std::endl;
     std::vector<uint8_t> buffer(size);
-    MPI_Recv(buffer.data(), size, MPI_BYTE, peer_rank, 1, comm, MPI_STATUS_IGNORE);
+    MPI_Recv(buffer.data(), size, MPI_BYTE, peer_rank, tag, comm, MPI_STATUS_IGNORE);
 
     return deserialize_distributed_socket_md(buffer);
 }
@@ -110,8 +113,9 @@ void multi_host_handshake(const tt::tt_metal::distributed::DistributedSocketMD& 
     TT_FATAL(
         config.sender_rank != config.receiver_rank,
         "Cannot create a distributed socket with the same sender and receiver rank.");
-    forward_socket_metadata(md, is_sender, comm);
-    auto peer_socket_md = get_socket_metadata(md, is_sender, comm);
+    auto tag = MeshSocket::get_unique_global_id();
+    forward_socket_metadata(md, is_sender, tag, comm);
+    auto peer_socket_md = get_socket_metadata(md, is_sender, tag, comm);
     const auto& peer_config = peer_socket_md.config;
     TT_FATAL(
         peer_config.socket_connection_config.size() == config.socket_connection_config.size(),
@@ -182,6 +186,16 @@ TEST_F(MPITest, BasicCommunication) {
         .receiver_core = {MeshCoordinate(0, 0), recv_logical_coord},
     };
 
+    SocketConnection socket_connection2 = {
+        .sender_core = {MeshCoordinate(1, 1), sender_logical_coord},
+        .receiver_core = {MeshCoordinate(1, 1), recv_logical_coord},
+    };
+
+    SocketConnection socket_connection3 = {
+        .sender_core = {MeshCoordinate(2, 2), sender_logical_coord},
+        .receiver_core = {MeshCoordinate(2, 2), recv_logical_coord},
+    };
+
     SocketMemoryConfig socket_mem_config = {
         .socket_storage_type = BufferType::L1,
         .fifo_size = socket_fifo_size,
@@ -194,6 +208,13 @@ TEST_F(MPITest, BasicCommunication) {
         .receiver_rank = 1,
     };
 
+    tt::tt_metal::distributed::SocketConfig socket_config_2 = {
+        .socket_connection_config = {socket_connection2, socket_connection3},
+        .socket_mem_config = socket_mem_config,
+        .sender_rank = 0,
+        .receiver_rank = 1,
+    };
+
     if (rank == 0) {
         DistributedSocketMD socket_md = {
             .config = socket_config,
@@ -201,7 +222,15 @@ TEST_F(MPITest, BasicCommunication) {
             .peer_mesh_ids = {0},  // Dummy mesh ID for testing
             .peer_chip_ids = {0},  // Dummy chip ID for testing
         };
+        DistributedSocketMD socket_md_2 = {
+            .config = socket_config_2,
+            .peer_addr = 20,          // Dummy address for testing
+            .peer_mesh_ids = {0, 0},  // Dummy mesh ID for testing
+            .peer_chip_ids = {1, 2},  // Dummy chip ID for testing
+        };
+
         multi_host_handshake(socket_md, true, MPI_COMM_WORLD);
+        multi_host_handshake(socket_md_2, true, MPI_COMM_WORLD);
     } else {
         DistributedSocketMD socket_md = {
             .config = socket_config,
@@ -209,7 +238,14 @@ TEST_F(MPITest, BasicCommunication) {
             .peer_mesh_ids = {1},  // Dummy mesh ID for testing
             .peer_chip_ids = {0},  // Dummy chip ID for testing
         };
+        DistributedSocketMD socket_md_2 = {
+            .config = socket_config_2,
+            .peer_addr = 40,          // Dummy address for testing
+            .peer_mesh_ids = {1, 1},  // Dummy mesh ID for testing
+            .peer_chip_ids = {1, 2},  // Dummy chip ID for testing
+        };
         multi_host_handshake(socket_md, false, MPI_COMM_WORLD);
+        multi_host_handshake(socket_md_2, false, MPI_COMM_WORLD);
     }
 
     // if (rank == 0) {
