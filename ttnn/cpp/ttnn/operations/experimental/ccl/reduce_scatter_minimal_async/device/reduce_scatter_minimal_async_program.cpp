@@ -101,8 +101,6 @@ tt::tt_metal::operation::ProgramWithCallbacks reduce_scatter_minimal_async_helpe
         is_first_chip,
         is_last_chip);
 
-    std::cout << "RING RS!!!" << std::endl;
-
     bool fuse_op = fused_op_signaler.has_value();
 
     // Get OP Config, topology config

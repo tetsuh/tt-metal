@@ -31,7 +31,7 @@ class TT_CCL:
         self.is_6u = (
             ttnn.GetNumPCIeDevices() == 32 and ttnn.GetNumAvailableDevices() == 32
         )  # TODO: find better way to do this
-        self.use_ring_topology = self.is_6u and mode == "prefill"
+        self.use_ring_prefill = self.is_6u and mode == "prefill"
 
         # Double buffered on each axis
         self.gather_semaphore_handles = [[], []]
@@ -41,13 +41,13 @@ class TT_CCL:
             self.reduce_semaphore_handles = [[], []]
         for i in range(2):
             for _ in range(self.num_cbs):
-                if not self.use_ring_topology:
+                if not self.use_ring_prefill:
                     self.gather_semaphore_handles[i].append(
                         ttnn.create_global_semaphore(self.mesh_device, self.sub_device_crs, 0)
                     )
 
                 if mode == "prefill":
-                    if self.use_ring_topology:
+                    if self.use_ring_prefill:
                         self.gather_semaphore_handles[i].append(
                             [ttnn.create_global_semaphore(self.mesh_device, self.sub_device_crs, 0) for _ in range(2)]
                         )
@@ -398,7 +398,7 @@ class TT_CCL:
                 # "SAMPLING": [(1, 1, 32, 128 * 1024)]
             }
             for key, shape in buffers_dict.items():
-                tt_intermediate_buffer = ttnn.as_tensor(
+                tt_buffer = ttnn.as_tensor(
                     torch.zeros(shape[0]),
                     device=self.mesh_device,
                     layout=ttnn.TILE_LAYOUT,
@@ -408,8 +408,8 @@ class TT_CCL:
                     cache_file_name=self.weight_cache_path / ("pb_ag_" + key + str(seqlen)),
                 )
 
-                if self.use_ring_topology:
-                    tt_output_buffer = ttnn.as_tensor(
+                if self.use_ring_prefill:
+                    tt_intermediate_buffer = ttnn.as_tensor(
                         torch.zeros(shape[0]),
                         device=self.mesh_device,
                         layout=ttnn.TILE_LAYOUT,
@@ -421,10 +421,10 @@ class TT_CCL:
 
                     ag_persistent_buffers[key] = {
                         "intermediate": tt_intermediate_buffer,
-                        "output": tt_output_buffer,
+                        "output": tt_buffer,
                     }
                 else:
-                    ag_persistent_buffers[key] = tt_intermediate_buffer
+                    ag_persistent_buffers[key] = tt_buffer
 
             ag_persistent_buffers_all[seqlen] = ag_persistent_buffers
         return ag_persistent_buffers_all
@@ -547,7 +547,7 @@ class TT_CCL:
         buffer_key=None,
     ):
         if self.mode == "prefill":
-            if self.use_ring_topology:
+            if self.use_ring_prefill:
                 return self.ring_reduce_scatter(
                     input_tensor_mesh,
                     memory_config,
@@ -556,7 +556,7 @@ class TT_CCL:
                     num_links=num_links,
                     buffer_key=buffer_key,
                 )
-
+            print("REDUCE SCATTER +1")
             # reshape input to [1, 1, S, x]
             B = input_tensor_mesh.shape[1]
             input_tensor_mesh = ttnn.reshape(
@@ -632,11 +632,11 @@ class TT_CCL:
             persistent_output_buffer=persistent_buffers[2],
             dim=dim,
             multi_device_global_semaphore=self.reduce_semaphore_handles[cluster_axis][self.gather_idx[cluster_axis]],
-            num_links=num_links,
+            num_links=1,
             memory_config=memory_config,
             topology=ttnn.Topology.Ring,
             subdevice_id=self.worker_sub_device_id,
-            cluster_axis=cluster_axis,  # TODO: add as an argument
+            cluster_axis=cluster_axis,
         )
 
         # reshape input back
@@ -648,7 +648,7 @@ class TT_CCL:
 
     def line_all_gather(self, input_tensor_mesh, dim, cluster_axis, memory_config, num_links=1, buffer_key=None):
         if self.mode == "prefill":
-            if self.use_ring_topology:
+            if self.use_ring_prefill:
                 return self.ring_all_gather(
                     input_tensor_mesh,
                     dim,
@@ -657,7 +657,7 @@ class TT_CCL:
                     num_links=num_links,
                     buffer_key=buffer_key,
                 )
-
+            print("ALL GATHER +1")
             if buffer_key is None:
                 persistent_buffer = None
             else:
@@ -693,15 +693,31 @@ class TT_CCL:
 
     def ring_all_gather(self, input_tensor_mesh, dim, cluster_axis, memory_config, num_links=1, buffer_key=None):
         if buffer_key is None:
-            persistent_buffers = {"intermediate": None, "output": None}
-        else:
-            # reshape input to [1, 1, S, x]
-            B = input_tensor_mesh.shape[1]
-            input_tensor_mesh = ttnn.reshape(
-                input_tensor_mesh, (1, 1, B * input_tensor_mesh.shape[-2], input_tensor_mesh.shape[-1])
+            print("LINE IMPLEMENTATION")
+            ttnn_tensor_out = ttnn.experimental.all_gather_async(
+                input_tensor_mesh,
+                dim,
+                cluster_axis=cluster_axis,
+                mesh_device=self.mesh_device,
+                topology=ttnn.Topology.Linear,
+                multi_device_global_semaphore=self.gather_semaphore_handles[cluster_axis][
+                    self.gather_idx[cluster_axis]
+                ],
+                persistent_output_tensor=None,
+                num_links=num_links,
+                memory_config=memory_config,
+                subdevice_id=self.worker_sub_device_id,
             )
-            seqlen = input_tensor_mesh.shape[-2]
-            persistent_buffers = self.all_gather_buffers[seqlen].get(buffer_key, None)
+            self.gather_idx[cluster_axis] = (self.gather_idx[cluster_axis] + 1) % self.num_cbs
+            return ttnn_tensor_out
+        # else:
+        # reshape input to [1, 1, S, x]
+        B = input_tensor_mesh.shape[1]
+        input_tensor_mesh = ttnn.reshape(
+            input_tensor_mesh, (1, 1, B * input_tensor_mesh.shape[-2], input_tensor_mesh.shape[-1])
+        )
+        seqlen = input_tensor_mesh.shape[-2]
+        persistent_buffers = self.all_gather_buffers[seqlen].get(buffer_key, None)
 
         # ttnn.synchronize_device(self.mesh_device, sub_device_ids=[self.worker_sub_device_id])
         print("RING ALL GATHER: ", input_tensor_mesh.shape)
