@@ -63,7 +63,7 @@ inline void calculate_unary_max_int32(uint value) {
             v_if(pos_val > pos_s) { v = inp; }
             v_endif;
         }
-        v_elseif(v < inp) { v = inp; }
+        v_elseif(v > zero && inp < zero) v_elseif(v < inp) { v = inp; }
         v_endif;
         dst_reg[0] = v;
         dst_reg++;
