@@ -123,7 +123,9 @@ TEST_F(TensorDistributionT3000Test, Shard1DFewerShardsThanDevices) {
         Tensor::from_vector(test_data, get_tensor_spec(ttnn::Shape{1, num_devices - 1, 3, 1}, DataType::FLOAT32));
 
     auto mapper = shard_tensor_to_mesh_mapper(*mesh_device_, 1);
+    std::cout << "starting to distribute" << std::endl;
     Tensor sharded_tensor = distribute_tensor(input_tensor, *mapper, *mesh_device_);
+    std::cout << "here" << std::endl;
 
     std::vector<Tensor> device_tensors = get_device_tensors(sharded_tensor);
     EXPECT_EQ(device_tensors.size(), mesh_device_->num_devices() - 1);

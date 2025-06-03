@@ -5,6 +5,7 @@
 #include <fmt/format.h>
 #include <optional>
 
+#include "tt-metalium/logger.hpp"
 #include "tt-metalium/mesh_buffer.hpp"
 #include "tt-metalium/mesh_device.hpp"
 #include "tt-metalium/mesh_command_queue.hpp"
@@ -783,8 +784,12 @@ DeviceStorage to_device_mesh_buffer(
                     // multi device host tensors without the necessary metadata, and `aggregate_as_tensor` calls that
                     // similarly lack the metadata to properly distribute the shards across the mesh.
                     auto* mesh_device = mesh_buffer->device();
+
+                    TT_FATAL(
+                        storage.distributed_buffer().shape().mesh_size() <= mesh_device->shape().mesh_size(),
+                        "Distributed host buffer has more shards than the mesh device");
+
                     auto dst_distributed_host_buffer = DistributedHostBuffer::create(mesh_device->shape());
-                    auto src_coord_it = storage.distributed_buffer().shard_coords().begin();
 
                     const auto dst_range = [mesh_device, &host_tensor_attributes]() {
                         if (auto* shard2d_strategy =
@@ -797,13 +802,14 @@ DeviceStorage to_device_mesh_buffer(
                         }
                     }();
 
-                    for (const auto& dst_coord : dst_range) {
+                    auto src_coord_it = storage.distributed_buffer().shard_coords().begin();
+                    auto dst_coord_it = dst_range.begin();
+                    for (; src_coord_it != storage.distributed_buffer().shard_coords().end() &&
+                           dst_coord_it != dst_range.end();
+                         ++src_coord_it, ++dst_coord_it) {
                         auto shard = storage.distributed_buffer().get_shard(*src_coord_it);
                         if (shard.has_value()) {
-                            dst_distributed_host_buffer.emplace_shard(dst_coord, std::move(*shard));
-                            ++src_coord_it;
-                        } else {
-                            break;
+                            dst_distributed_host_buffer.emplace_shard(*dst_coord_it, std::move(*shard));
                         }
                     }
                     return shard_to_mesh_buffer(dst_distributed_host_buffer, mesh_buffer, cq_id);
