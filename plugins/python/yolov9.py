@@ -61,8 +61,18 @@ class Yolov9(GstBase.BaseTransform):
     )
 
     # Pad Templates
-    _sink_template = Gst.PadTemplate.new("sink", Gst.PadDirection.SINK, Gst.PadPresence.ALWAYS, Gst.Caps.new_any())
-    _src_template = Gst.PadTemplate.new("src", Gst.PadDirection.SRC, Gst.PadPresence.ALWAYS, Gst.Caps.new_any())
+    _sink_template = Gst.PadTemplate.new(
+        "sink",
+        Gst.PadDirection.SINK,
+        Gst.PadPresence.ALWAYS,
+        Gst.Caps.from_string("video/x-raw,format=BGRx,width=(int)640,height=(int)640,framerate=(fraction)0/1"),
+    )
+    _src_template = Gst.PadTemplate.new(
+        "src",
+        Gst.PadDirection.SRC,
+        Gst.PadPresence.ALWAYS,
+        Gst.Caps.from_string("video/x-raw,format=BGRx,width=(int)640,height=(int)640,framerate=(fraction)0/1"),
+    )
     __gsttemplates__ = (_src_template, _sink_template)  # Order can matter for some tools
     __gproperties__ = {
         "batch-size": (int, "Frequency", "Frequency of test signal", 1, 8, 1, GObject.ParamFlags.READWRITE)
@@ -163,7 +173,8 @@ class Yolov9(GstBase.BaseTransform):
             results = postprocess(out, torch_frame_data, frame_data, names=names)[0]
             print(results)
             outImage = save_yolo_predictions_by_model(results, model_name="tt_model", orig_image=frame_data)
-            print(outImage)
+            print(outImage.shape)
+            outImage = cv2.cvtColor(outImage, cv2.COLOR_BGR2BGRA)
             # conf_thresh = 0.3
             # nms_thresh = 0.4
 
