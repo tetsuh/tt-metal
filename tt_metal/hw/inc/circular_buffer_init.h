@@ -45,13 +45,19 @@ FORCE_INLINE void setup_local_cb_read_write_interfaces(
             "and a7, a4, 1\n\t"
 
             //local_interface.tiles_acked_received_init = 0;
-            "sw zero, -8(a5)\n\t"
+            "sw zero, %[off_tiles_acked](a5)\n\t"
             ".if %[init_wr_tile_ptr]\n\t"
             "sw zero, %[off_fifo_tile_wr_ptr](a5)\n\t"
             ".endif\n\t"
 
             //circular_buffer_config_addr += UINT32_WORDS_PER_LOCAL_CIRCULAR_BUFFER_CONFIG;
             "addi a0, a0, %[circular_buffer_byte_size]\n\t"
+
+            ".if %[cb_addr_shift] != 0\n\t"
+            "srli a3, a3, %[cb_addr_shift]\n\t"
+            "srli a2, a2, %[cb_addr_shift]\n\t"
+            "srli a7, a7, %[cb_addr_shift]\n\t"
+            ".endif\n\t"
 
  //           local_interface.fifo_size = fifo_size;
             "sw a3, %[off_fifo_size](a5)\n\t"
@@ -117,7 +123,8 @@ FORCE_INLINE void setup_local_cb_read_write_interfaces(
             [circular_buffer_byte_size] "i" (UINT32_WORDS_PER_LOCAL_CIRCULAR_BUFFER_CONFIG * sizeof(uint32_t)),
             [read] "i" (read ? 1 : 0),
             [write] "i" (write ? 1 : 0),
-            [init_wr_tile_ptr] "i" (init_wr_tile_ptr ? 1 : 0)
+            [init_wr_tile_ptr] "i" (init_wr_tile_ptr ? 1 : 0),
+            [cb_addr_shift] "i" (cb_addr_shift)
             : "a2", "a3", "a6", "a7", "memory");
 }
 
